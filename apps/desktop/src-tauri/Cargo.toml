@@ -1,0 +1,25 @@
+[package]
+name = "lovelace-desktop"
+version = "0.1.0"
+description = "Lovelace: local-first project management for agent-heavy development"
+authors = ["Lovelace"]
+edition = "2021"
+
+[lib]
+name = "lovelace_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+notify = "6"
+
+[profile.release]
+strip = true
+lto = true

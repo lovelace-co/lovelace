@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lovelace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  /* ─────────────────────────────────────────────
+     Lovelace · calm / airy / swift
+     Weaving = the continuous (layout, motion, the thread)
+     Punchcard = the discrete (state, progress, the click)
+     ───────────────────────────────────────────── */
+
+  @property --orbit {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+
+  :root, [data-theme="dark"] {
+    --bg-0: #14181D;                            /* sidebar */
+    --bg-1: #171C22;                            /* canvas */
+    --band: rgba(214, 230, 242, 0.018);         /* weft band — column separation by tone */
+    --raise: rgba(214, 230, 242, 0.03);
+    --raise-2: rgba(214, 230, 242, 0.055);
+
+    --ink: #DFE5EB;
+    --slate: #79838F;
+    --mist: #4C555F;
+
+    --current: #22D3EE;
+    --current-soft: #67E8F9;
+    --wash: rgba(34, 211, 238, 0.06);
+
+    --hole-rim: rgba(214, 230, 242, 0.14);      /* unpunched hole */
+    --hole-fill: #79838F;                       /* punched hole */
+    --hole-shadow: rgba(0, 0, 0, 0.45);
+
+    --pill-epic-bg: rgba(125, 170, 215, 0.10);
+    --pill-epic-fg: #9DC2DF;
+    --pill-high-bg: rgba(248, 113, 113, 0.09);
+    --pill-high-fg: #DE9C9C;
+    --pill-med-bg:  rgba(251, 191, 36, 0.08);
+    --pill-med-fg:  #D2B584;
+    --pill-low-bg:  rgba(116, 200, 150, 0.07);
+    --pill-low-fg:  #97C3A6;
+  }
+
+  [data-theme="light"] {
+    --bg-0: #EDF1F6;
+    --bg-1: #F7F9FC;
+    --band: rgba(72, 101, 140, 0.035);
+    --raise: rgba(72, 101, 140, 0.05);
+    --raise-2: rgba(72, 101, 140, 0.085);
+
+    --ink: #2A313B;
+    --slate: #6E7987;
+    --mist: #9AA4B0;
+
+    --current: #0BA5C9;
+    --current-soft: #22D3EE;
+    --wash: rgba(11, 165, 201, 0.07);
+
+    --hole-rim: rgba(72, 101, 140, 0.22);
+    --hole-fill: #8C97A4;
+    --hole-shadow: rgba(72, 101, 140, 0.25);
+
+    --pill-epic-bg: rgba(60, 110, 160, 0.09);
+    --pill-epic-fg: #4A7396;
+    --pill-high-bg: rgba(190, 70, 70, 0.08);
+    --pill-high-fg: #A95F5F;
+    --pill-med-bg:  rgba(180, 130, 30, 0.09);
+    --pill-med-fg:  #94732F;
+    --pill-low-bg:  rgba(50, 130, 85, 0.08);
+    --pill-low-fg:  #4D7E61;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  html { background: var(--bg-1); }
+
+  body {
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-1);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    transition: background 300ms ease, color 300ms ease;
+  }
+
+  .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .app { display: grid; grid-template-columns: 240px 1fr; height: 100vh; }
+
+  /* ───────── Sidebar — separated by tone, faintly woven ───────── */
+
+  .sidebar {
+    background: var(--bg-0);
+    display: flex;
+    flex-direction: column;
+    padding: 38px 28px 32px;
+    transition: background 300ms ease;
+  }
+
+  .project-name { font-weight: 700; font-size: 18px; letter-spacing: -0.015em; }
+  .project-path {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--mist);
+    margin-top: 4px;
+    padding-bottom: 64px;
+  }
+
+  .nav-item {
+    display: block;
+    padding: 8px 0;
+    color: var(--slate);
+    cursor: pointer;
+    font-size: 14px;
+    transition: color 140ms ease;
+  }
+  .nav-item:hover, .nav-item.active { color: var(--ink); }
+
+  .nav-gap { height: 60px; }
+
+  .nav-label {
+    font-size: 12px;
+    color: var(--mist);
+    padding-bottom: 24px;
+    letter-spacing: 0.03em;
+  }
+
+  /* Epic progress as punched cards: one hole per task, punched = done */
+  .epic-row { padding: 10px 0 16px; cursor: pointer; }
+  .epic-row .top {
+    display: flex;
+    align-items: baseline;
+    font-size: 14px;
+    color: var(--slate);
+    transition: color 140ms ease;
+    padding-bottom: 10px;
+  }
+  .epic-row:hover .top { color: var(--ink); }
+  .epic-row .frac {
+    margin-left: auto;
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--mist);
+  }
+
+  .punchrow { display: flex; gap: 5px; }
+  .hole {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    border: 1px solid var(--hole-rim);
+    transition: border-color 300ms ease;
+  }
+  .hole.punched {
+    border-color: transparent;
+    background: radial-gradient(circle at 35% 30%, var(--hole-fill) 0%, var(--hole-shadow) 90%);
+  }
+  .hole.reading {                       /* where the machine head sits now */
+    border-color: var(--current);
+  }
+
+  .sidebar-footer { margin-top: auto; }
+  .agent-status {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--slate);
+    line-height: 1.8;
+  }
+  .agent-status .key { color: var(--mist); }
+  .agent-status .live-val { color: var(--current); }
+
+  /* ───────── Main ───────── */
+
+  .main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg-1);
+    transition: background 300ms ease;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: baseline;
+    padding: 56px 56px 30px;
+  }
+  .view-title { font-size: 28px; font-weight: 700; letter-spacing: -0.022em; }
+  .topbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: baseline;
+    gap: 26px;
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--mist);
+  }
+  .topbar-right .action { color: var(--slate); cursor: pointer; transition: color 140ms ease; }
+  .topbar-right .action:hover { color: var(--current); }
+
+  /* ───────── Board — columns as warp bands, no borders ─────────
+     Alternate columns sit on a slightly different tone, like
+     threads passing over and under. Separation without a line. */
+
+  .board {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(248px, 1fr));
+    gap: 24px;
+    padding: 26px 56px 44px;
+    overflow-x: auto;
+    align-items: stretch;
+  }
+
+  .col {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border-radius: 16px;
+    padding: 32px 16px 20px;
+  }
+  .col:nth-child(even) { background: var(--band); }
+
+  .col-head {
+    display: flex;
+    align-items: baseline;
+    padding: 0 16px 32px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.012em;
+  }
+  .col-head .count {
+    margin-left: auto;
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--mist);
+  }
+
+  .col-cards { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+
+  /* ───────── Cards — the tickets ───────── */
+
+  .card {
+    background: var(--raise);
+    border-radius: 12px;
+    padding: 15px 18px;
+    cursor: pointer;
+    position: relative;
+    transition: background 180ms ease;
+  }
+  .card:hover { background: var(--wash); }
+
+  /* The punch: clicking a card presses it like a card through the machine —
+     a quick mechanical depress in discrete steps, and a hole appears at
+     the click point, then heals. */
+  .card.pressing {
+    transform: translateY(1px) scale(0.994);
+    transition: transform 80ms steps(2, jump-end);
+  }
+  .punch-mark {
+    position: absolute;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    border: 1px solid var(--current);
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0;
+    pointer-events: none;
+    animation: punch 420ms steps(4, jump-end) forwards;
+  }
+  @keyframes punch {
+    0%   { opacity: 0;   transform: translate(-50%, -50%) scale(0.3); }
+    25%  { opacity: 0.9; transform: translate(-50%, -50%) scale(1); }
+    60%  { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0;   transform: translate(-50%, -50%) scale(1.15); }
+  }
+
+  /* Status dot — top left, flat and solid, one hue per column */
+  .card-head { display: flex; align-items: flex-start; gap: 10px; }
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 7px;
+  }
+  .dot.backlog  { background: #6B7686; }
+  .dot.progress { background: var(--current); }
+  .dot.review   { background: #8F87D8; }
+  .dot.done     { background: #6CA98A; }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 450;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+
+  /* One-line metadata: pills left, identifier right */
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding-left: 17px;
+    min-width: 0;
+  }
+  .pill {
+    font-size: 12px;
+    line-height: 1;
+    padding: 4px 11px;
+    border-radius: 99px;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pill.epic { background: var(--pill-epic-bg); color: var(--pill-epic-fg); }
+  .pill.high { background: var(--pill-high-bg); color: var(--pill-high-fg); }
+  .pill.med  { background: var(--pill-med-bg);  color: var(--pill-med-fg); }
+  .pill.low  { background: var(--pill-low-bg);  color: var(--pill-low-fg); }
+
+  .card .id {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--mist);
+    margin-left: auto;
+    padding-left: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .card .id.live { color: var(--current); opacity: 1; }
+  .card:hover .id, .card.selected .id { opacity: 1; }
+
+  .card.selected { background: var(--wash); }
+  .card.selected .id { color: var(--slate); }
+
+  /* Done: punched through — the dot carries it, the title recedes */
+  .card.done .card-title { color: var(--slate); }
+
+  /* ───────── The thread — live agent work ─────────
+     Not a glow. A single thread of current circling the ticket's
+     edge, slowly, while the agent weaves. */
+
+  .card.live { background: var(--raise-2); }
+  .card.live::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    padding: 1.25px;
+    background: conic-gradient(
+      from var(--orbit),
+      transparent 0turn 0.80turn,
+      rgba(34, 211, 238, 0.0) 0.80turn,
+      var(--current) 0.92turn,
+      var(--current-soft) 0.96turn,
+      transparent 1turn
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    animation: orbit 7s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes orbit { to { --orbit: -1turn; } }
+
+  .add-line {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--mist);
+    padding: 13px 18px;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: background 150ms ease, color 150ms ease;
+  }
+  .add-line:hover { background: var(--wash); color: var(--slate); }
+
+  .card:focus-visible, .nav-item:focus-visible, .epic-row:focus-visible {
+    outline: 1.5px solid var(--current);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 800px) {
+    html, body { height: auto; overflow: auto; }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: auto;
+      min-height: 100vh;
+    }
+
+    /* Sidebar becomes a compact header */
+    .sidebar { padding: 24px 24px 18px; }
+    .project-path { padding-bottom: 22px; }
+    .nav-item { display: inline-block; margin-right: 22px; padding: 4px 0; }
+    .nav-gap, .nav-label, .epic-row { display: none; }
+    .sidebar-footer { margin-top: 14px; }
+    .agent-status br { display: none; }
+    .agent-status span + .key { margin-left: 14px; }
+
+    .topbar {
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 34px 24px 18px;
+    }
+    .view-title { font-size: 24px; }
+    .topbar-right { margin-left: 0; width: 100%; }
+
+    /* Board becomes one column per swipe, snapped */
+    .board {
+      display: flex;
+      gap: 14px;
+      padding: 14px 24px 36px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      align-items: flex-start;
+    }
+    .col {
+      flex: 0 0 84%;
+      scroll-snap-align: start;
+      padding: 20px 14px 16px;
+    }
+    .col:nth-child(even) { background: var(--band); }
+    .col-head { font-size: 16px; padding-bottom: 24px; }
+    .col-cards { overflow-y: visible; }
+
+    /* Touch targets */
+    .card { padding: 16px 18px; }
+    .card .id { opacity: 1; }   /* no hover on touch — meta always quietly present */
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card.live::after { animation: none; background: conic-gradient(from 0deg, rgba(34,211,238,0.25) 0turn 1turn); }
+    .punch-mark { animation-duration: 1ms; }
+    * { transition: none !important; }
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: var(--band); border-radius: 99px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div>
+      <div class="project-name">Lovelace</div>
+      <div class="project-path">~/dev/lovelace/.lovelace</div>
+    </div>
+
+    <div class="nav-item active" tabindex="0">Board</div>
+    <div class="nav-item" tabindex="0">Tasks</div>
+    <div class="nav-item" tabindex="0">Activity</div>
+
+    <div class="nav-gap"></div>
+
+    <div class="nav-label">Epics</div>
+
+    <div class="epic-row" tabindex="0">
+      <div class="top">MCP server <span class="frac num">9/14</span></div>
+      <div class="punchrow">
+        <span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole reading"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span>
+      </div>
+    </div>
+
+    <div class="epic-row" tabindex="0">
+      <div class="top">Schema <span class="frac num">11/11</span></div>
+      <div class="punchrow">
+        <span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span><span class="hole punched"></span>
+      </div>
+    </div>
+
+    <div class="epic-row" tabindex="0">
+      <div class="top">Tauri shell <span class="frac num">2/9</span></div>
+      <div class="punchrow">
+        <span class="hole punched"></span><span class="hole punched"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span>
+      </div>
+    </div>
+
+    <div class="epic-row" tabindex="0">
+      <div class="top">Agent log <span class="frac num">0/7</span></div>
+      <div class="punchrow">
+        <span class="hole"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span><span class="hole"></span>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="agent-status">
+        <span class="key">agent:</span> claude<br>
+        <span class="key">task:</span> lov-31<br>
+        <span class="key">state:</span> <span class="live-val">weaving · 4m</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="view-title">Phase 1 · Thesis test</div>
+      <div class="topbar-right">
+        <span>synced · main</span>
+        <span class="action" id="themeToggle">light</span>
+        <span class="action">+ new task</span>
+      </div>
+    </div>
+
+    <div class="board">
+
+      <div class="col">
+        <div class="col-head">Backlog <span class="count num">18</span></div>
+        <div class="col-cards">
+          <div class="card" tabindex="0">
+            <div class="card-head"><span class="dot backlog"></span>
+              <div class="card-title">Define conflict policy for concurrent agent writes</div></div>
+            <div class="meta"><span class="pill epic">Git sync</span><span class="pill high">High</span><span class="id">lov-38</span></div>
+          </div>
+          <div class="card" tabindex="0">
+            <div class="card-head"><span class="dot backlog"></span>
+              <div class="card-title">Session log viewer — collapse tool calls by default</div></div>
+            <div class="meta"><span class="pill epic">Agent log</span><span class="pill low">Low</span><span class="id">lov-41</span></div>
+          </div>
+          <div class="card" tabindex="0">
+            <div class="card-head"><span class="dot backlog"></span>
+              <div class="card-title">Frontmatter validation errors surface in UI</div></div>
+            <div class="meta"><span class="pill epic">Schema</span><span class="pill med">Medium</span><span class="id">lov-44</span></div>
+          </div>
+          <div class="add-line">+</div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="col-head">In progress <span class="count num">3</span></div>
+        <div class="col-cards">
+          <div class="card live" tabindex="0">
+            <div class="card-head"><span class="dot progress"></span>
+              <div class="card-title">Implement update_task tool with frontmatter patching</div></div>
+            <div class="meta"><span class="pill epic">MCP server</span><span class="pill high">High</span><span class="id live">lov-31 · 4m</span></div>
+          </div>
+          <div class="card" tabindex="0">
+            <div class="card-head"><span class="dot progress"></span>
+              <div class="card-title">Kanban column virtualisation for large boards</div></div>
+            <div class="meta"><span class="pill epic">Tauri shell</span><span class="pill med">Medium</span><span class="id">lov-29</span></div>
+          </div>
+          <div class="card" tabindex="0">
+            <div class="card-head"><span class="dot progress"></span>
+              <div class="card-title">File watcher — debounce external edits from agents</div></div>
+            <div class="meta"><span class="pill epic">Tauri shell</span><span class="pill med">Medium</span><span class="id">lov-33</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="col-head">In review <span class="count num">4</span></div>
+        <div class="col-cards">
+          <div class="card selected" tabindex="0">
+            <div class="card-head"><span class="dot review"></span>
+              <div class="card-title">list_tasks tool — filter by epic, status, assignee</div></div>
+            <div class="meta"><span class="pill epic">MCP server</span><span class="pill med">Medium</span><span class="id">lov-27 · pr #41</span></div>
+          </div>
+          <div class="card" tabindex="0">
+            <div class="card-head"><span class="dot review"></span>
+              <div class="card-title">Epic progress derived from task files</div></div>
+            <div class="meta"><span class="pill epic">Schema</span><span class="pill low">Low</span><span class="id">lov-25</span></div>
+          </div>
+          <div class="card" tabindex="0">
+            <div class="card-head"><span class="dot review"></span>
+              <div class="card-title">CLAUDE.md generator reflects current epic briefs</div></div>
+            <div class="meta"><span class="pill epic">MCP server</span><span class="pill med">Medium</span><span class="id">lov-30</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="col-head">Done <span class="count num">22</span></div>
+        <div class="col-cards">
+          <div class="card done" tabindex="0">
+            <div class="card-head"><span class="dot done"></span>
+              <div class="card-title">create_task tool writes valid frontmatter</div></div>
+            <div class="meta"><span class="pill epic">MCP server</span></div>
+          </div>
+          <div class="card done" tabindex="0">
+            <div class="card-head"><span class="dot done"></span>
+              <div class="card-title">.lovelace/ directory layout</div></div>
+            <div class="meta"><span class="pill epic">Schema</span></div>
+          </div>
+          <div class="card done" tabindex="0">
+            <div class="card-head"><span class="dot done"></span>
+              <div class="card-title">Task ID allocation safe under parallel agents</div></div>
+            <div class="meta"><span class="pill epic">Schema</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  // The punch — click presses the card and punches a brief hole at the point of contact
+  document.querySelectorAll('.card, .add-line').forEach(el => {
+    el.addEventListener('pointerdown', e => {
+      el.classList.add('pressing');
+      const mark = document.createElement('span');
+      mark.className = 'punch-mark';
+      const r = el.getBoundingClientRect();
+      mark.style.left = (e.clientX - r.left) + 'px';
+      mark.style.top  = (e.clientY - r.top) + 'px';
+      el.appendChild(mark);
+      mark.addEventListener('animationend', () => mark.remove());
+    });
+    el.addEventListener('pointerup',    () => el.classList.remove('pressing'));
+    el.addEventListener('pointerleave', () => el.classList.remove('pressing'));
+  });
+
+  // Theme toggle
+  const toggle = document.getElementById('themeToggle');
+  toggle.addEventListener('click', () => {
+    const root = document.documentElement;
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    toggle.textContent = next === 'dark' ? 'light' : 'dark';
+  });
+</script>
+</body>
+</html>

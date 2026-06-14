@@ -1,0 +1,50 @@
+types:
+  - name: epic
+    id_prefix: E
+  - name: task
+    id_prefix: T
+  - name: bug
+    id_prefix: T
+
+statuses:
+  - name: backlog
+  - name: todo
+  - name: in_progress
+    active: true
+  - name: in_review
+    active: true
+  - name: done
+    complete: true
+  - name: cancelled
+    complete: true
+
+transitions:
+  - from: backlog
+    to: [todo, cancelled]
+  - from: todo
+    to: [in_progress, backlog, cancelled]
+  - from: in_progress
+    to: [in_review, todo, cancelled]
+  - from: in_review
+    to: [done, in_progress, cancelled]
+
+priorities: [urgent, high, medium, low]
+
+fields:
+  - name: title
+    type: string
+    required: true
+  - name: parent
+    type: reference
+    refers_to: [epic]
+  - name: depends_on
+    type: list
+    item_type: reference
+  - name: assignee
+    type: reference
+    refers_to: [actor]
+  - name: priority
+    type: enum
+    values_from: priorities
+
+on_transition: []

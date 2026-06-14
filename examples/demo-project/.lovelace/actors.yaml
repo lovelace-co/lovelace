@@ -1,0 +1,7 @@
+actors:
+  - id: ada
+    name: Ada Lovelace
+    kind: human
+  - id: claude
+    name: Claude Code
+    kind: agent

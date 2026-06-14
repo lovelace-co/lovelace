@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default capability for the main window and Cmd+N windows","local":true,"windows":["main","win-*"],"permissions":["core:default","dialog:default","core:window:allow-set-theme","core:window:allow-set-background-color"]}}

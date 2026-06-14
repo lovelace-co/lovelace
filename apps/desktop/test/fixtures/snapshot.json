@@ -1,0 +1,482 @@
+{
+  "root": "examples/demo-project",
+  "manifest": {
+    "spec_version": "1.0.0",
+    "project_id": "demo4f2a",
+    "name": "Orbit Weather Service",
+    "created": "2026-05-28",
+    "paths": {
+      "tickets": "tickets",
+      "briefs": "briefs",
+      "comments": "comments",
+      "sessions": "sessions",
+      "templates": "templates",
+      "index": "index",
+      "state": "state"
+    }
+  },
+  "workflow": {
+    "types": [
+      {
+        "name": "epic",
+        "id_prefix": "E"
+      },
+      {
+        "name": "task",
+        "id_prefix": "T"
+      },
+      {
+        "name": "bug",
+        "id_prefix": "T"
+      }
+    ],
+    "statuses": [
+      {
+        "name": "backlog"
+      },
+      {
+        "name": "todo"
+      },
+      {
+        "name": "in_progress",
+        "active": true
+      },
+      {
+        "name": "in_review",
+        "active": true
+      },
+      {
+        "name": "staging",
+        "active": true
+      },
+      {
+        "name": "done",
+        "complete": true
+      },
+      {
+        "name": "cancelled",
+        "complete": true
+      }
+    ],
+    "transitions": [
+      {
+        "from": "backlog",
+        "to": [
+          "todo",
+          "cancelled"
+        ]
+      },
+      {
+        "from": "todo",
+        "to": [
+          "in_progress",
+          "backlog",
+          "cancelled"
+        ]
+      },
+      {
+        "from": "in_progress",
+        "to": [
+          "in_review",
+          "todo",
+          "cancelled"
+        ]
+      },
+      {
+        "from": "in_review",
+        "to": [
+          "staging",
+          "in_progress",
+          "cancelled"
+        ]
+      },
+      {
+        "from": "staging",
+        "to": [
+          "done",
+          "in_review"
+        ]
+      }
+    ],
+    "priorities": [
+      "urgent",
+      "high",
+      "medium",
+      "low"
+    ],
+    "fields": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "parent",
+        "type": "reference",
+        "refers_to": [
+          "epic"
+        ]
+      },
+      {
+        "name": "depends_on",
+        "type": "list",
+        "item_type": "reference"
+      },
+      {
+        "name": "assignee",
+        "type": "reference",
+        "refers_to": [
+          "actor"
+        ]
+      },
+      {
+        "name": "priority",
+        "type": "enum",
+        "values_from": "priorities"
+      },
+      {
+        "name": "estimate",
+        "type": "number",
+        "applies_to": [
+          "task"
+        ]
+      },
+      {
+        "name": "environment",
+        "type": "enum",
+        "values": [
+          "local",
+          "dev",
+          "staging",
+          "production"
+        ],
+        "required": true,
+        "applies_to": [
+          "bug"
+        ]
+      }
+    ],
+    "on_transition": [
+      {
+        "when": {
+          "to": "staging",
+          "type": "task"
+        },
+        "agent": "Deploy the current branch to the staging environment using scripts/deploy-staging.sh and comment the result on the ticket.",
+        "confirm": true
+      },
+      {
+        "when": {
+          "to": "done"
+        },
+        "run": "./scripts/archive-artifacts.sh"
+      }
+    ]
+  },
+  "actors": [
+    {
+      "id": "ada",
+      "name": "Ada Lovelace",
+      "kind": "human"
+    },
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "kind": "agent"
+    }
+  ],
+  "index": {
+    "spec_version": "1.0.0",
+    "project": {
+      "id": "demo4f2a",
+      "name": "Orbit Weather Service"
+    },
+    "tickets": [
+      {
+        "id": "E-0001",
+        "type": "epic",
+        "status": "in_progress",
+        "created": "2026-05-28T09:00:00Z",
+        "updated": "2026-06-08T16:20:00Z",
+        "title": "Public API v1",
+        "fields": {
+          "priority": "high",
+          "title": "Public API v1"
+        },
+        "path": ".lovelace/tickets/E-0001.md"
+      },
+      {
+        "id": "T-0001",
+        "type": "task",
+        "status": "done",
+        "created": "2026-05-28T09:10:00Z",
+        "updated": "2026-06-03T15:45:00Z",
+        "title": "Atomic cache writes",
+        "fields": {
+          "assignee": "ada",
+          "estimate": 2,
+          "parent": "E-0001",
+          "priority": "high",
+          "title": "Atomic cache writes"
+        },
+        "path": ".lovelace/tickets/T-0001.md"
+      },
+      {
+        "id": "T-0002",
+        "type": "task",
+        "status": "in_progress",
+        "created": "2026-05-29T10:00:00Z",
+        "updated": "2026-06-09T11:30:00Z",
+        "title": "Forecast endpoint",
+        "fields": {
+          "assignee": "claude",
+          "depends_on": [
+            "T-0001"
+          ],
+          "estimate": 3,
+          "parent": "E-0001",
+          "priority": "high",
+          "title": "Forecast endpoint"
+        },
+        "path": ".lovelace/tickets/T-0002.md"
+      },
+      {
+        "id": "T-0003",
+        "type": "task",
+        "status": "todo",
+        "created": "2026-05-30T08:45:00Z",
+        "updated": "2026-05-30T08:45:00Z",
+        "title": "Location search endpoint",
+        "fields": {
+          "estimate": 2,
+          "parent": "E-0001",
+          "priority": "medium",
+          "title": "Location search endpoint"
+        },
+        "path": ".lovelace/tickets/T-0003.md"
+      },
+      {
+        "id": "T-0004",
+        "type": "bug",
+        "status": "in_review",
+        "created": "2026-06-05T13:20:00Z",
+        "updated": "2026-06-09T09:05:00Z",
+        "title": "Wind gusts reported as negative values",
+        "fields": {
+          "assignee": "claude",
+          "environment": "staging",
+          "priority": "urgent",
+          "title": "Wind gusts reported as negative values"
+        },
+        "path": ".lovelace/tickets/T-0004.md"
+      }
+    ],
+    "briefs": [
+      {
+        "id": "ADR-0001",
+        "summary": "Forecasts are cached as flat JSON files rather than in a database, accepting slower queries for zero operational surface.",
+        "updated": "2026-05-30T10:00:00Z",
+        "path": ".lovelace/briefs/architecture/decisions/ADR-0001.md"
+      },
+      {
+        "id": "decisions-overview",
+        "summary": "Architecture decision records for Orbit, one file per decision, never edited after acceptance.",
+        "updated": "2026-05-30T10:00:00Z",
+        "path": ".lovelace/briefs/architecture/decisions/OVERVIEW.md"
+      },
+      {
+        "id": "architecture-overview",
+        "summary": "Orbit is a single Node service with a fetcher, a cache and an HTTP layer; decisions live in decisions/.",
+        "updated": "2026-06-02T11:00:00Z",
+        "path": ".lovelace/briefs/architecture/OVERVIEW.md"
+      },
+      {
+        "id": "conventions-overview",
+        "summary": "Code style and commit conventions for Orbit.",
+        "updated": "2026-04-20T14:00:00Z",
+        "review_by": "2026-06-01",
+        "path": ".lovelace/briefs/conventions/OVERVIEW.md"
+      },
+      {
+        "id": "domain-overview",
+        "summary": "Forecast, observation and location terminology used across Orbit.",
+        "updated": "2026-06-01T09:30:00Z",
+        "path": ".lovelace/briefs/domain/OVERVIEW.md"
+      },
+      {
+        "id": "context",
+        "summary": "Orbit is a small weather forecast API; read this file, then the architecture overview, before any work.",
+        "updated": "2026-06-08T09:00:00Z",
+        "path": ".lovelace/CONTEXT.md"
+      }
+    ],
+    "sessions": [
+      {
+        "id": "S-0001",
+        "ticket": "T-0001",
+        "actor": "claude",
+        "started": "2026-06-03T14:00:00Z",
+        "ended": "2026-06-03T15:45:00Z",
+        "commits": [
+          "9c41f2a",
+          "b8d03e7"
+        ],
+        "outcome": "completed",
+        "path": ".lovelace/sessions/S-0001.md"
+      },
+      {
+        "id": "S-0002",
+        "ticket": "T-0002",
+        "actor": "claude",
+        "started": "2026-06-09T09:30:00Z",
+        "ended": "2026-06-09T11:30:00Z",
+        "commits": [
+          "4e7aa10"
+        ],
+        "outcome": "partial",
+        "path": ".lovelace/sessions/S-0002.md"
+      }
+    ],
+    "comments": [
+      {
+        "ticket": "T-0002",
+        "actor": "ada",
+        "created": "2026-06-08T14:30:00Z",
+        "path": ".lovelace/comments/T-0002/2026-06-08T1430-ada.md"
+      },
+      {
+        "ticket": "T-0002",
+        "actor": "claude",
+        "created": "2026-06-09T10:15:00Z",
+        "path": ".lovelace/comments/T-0002/2026-06-09T1015-claude.md"
+      }
+    ]
+  },
+  "fieldCatalogue": {
+    "epic": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "parent",
+        "type": "reference",
+        "refers_to": [
+          "epic"
+        ]
+      },
+      {
+        "name": "depends_on",
+        "type": "list",
+        "item_type": "reference"
+      },
+      {
+        "name": "assignee",
+        "type": "reference",
+        "refers_to": [
+          "actor"
+        ]
+      },
+      {
+        "name": "priority",
+        "type": "enum",
+        "values_from": "priorities"
+      }
+    ],
+    "task": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "parent",
+        "type": "reference",
+        "refers_to": [
+          "epic"
+        ]
+      },
+      {
+        "name": "depends_on",
+        "type": "list",
+        "item_type": "reference"
+      },
+      {
+        "name": "assignee",
+        "type": "reference",
+        "refers_to": [
+          "actor"
+        ]
+      },
+      {
+        "name": "priority",
+        "type": "enum",
+        "values_from": "priorities"
+      },
+      {
+        "name": "estimate",
+        "type": "number",
+        "applies_to": [
+          "task"
+        ]
+      }
+    ],
+    "bug": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "parent",
+        "type": "reference",
+        "refers_to": [
+          "epic"
+        ]
+      },
+      {
+        "name": "depends_on",
+        "type": "list",
+        "item_type": "reference"
+      },
+      {
+        "name": "assignee",
+        "type": "reference",
+        "refers_to": [
+          "actor"
+        ]
+      },
+      {
+        "name": "priority",
+        "type": "enum",
+        "values_from": "priorities"
+      },
+      {
+        "name": "environment",
+        "type": "enum",
+        "values": [
+          "local",
+          "dev",
+          "staging",
+          "production"
+        ],
+        "required": true,
+        "applies_to": [
+          "bug"
+        ]
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "file": ".lovelace/briefs/conventions/OVERVIEW.md",
+      "rule": "briefs/stale",
+      "message": "past its review_by date (2026-06-01)",
+      "line": 6
+    }
+  ],
+  "digest": "Lovelace digest for Orbit Weather Service\n\nIn progress:\n  E-0001 [in_progress] Public API v1\n  T-0002 [in_progress] @claude Forecast endpoint\n  T-0004 [in_review] @claude Wind gusts reported as negative values\n\nRecent sessions:\n  S-0002 on T-0002: partial\n    open: Should the 503 test freeze the refresh timer, or should `isCold()` take an injectable clock?\n  S-0001 on T-0001: completed\n\nWarnings (1):\n  .lovelace/briefs/conventions/OVERVIEW.md:6 past its review_by date (2026-06-01)\n",
+  "activeTicket": null
+}

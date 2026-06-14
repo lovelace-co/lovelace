@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-bin/
+*.tsbuildinfo
+.lovelace/index/index.json
+.lovelace/index/actions.log
+.lovelace/state/
+apps/desktop/src-tauri/target/
+coverage/
+.DS_Store
+
+.tauri-updater.key

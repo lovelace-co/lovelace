@@ -1,0 +1,7 @@
+actors:
+  - id: me
+    name: Lambros Photios
+    kind: human
+  - id: claude
+    name: Claude Code
+    kind: agent

@@ -1,0 +1,143 @@
+/* Lovelace design tokens: calm / airy / swift.
+   Weaving is the continuous (motion, the thread, tonal bands);
+   punchcards are the discrete (clicks, progress holes).
+   No borders anywhere: separation is tone and whitespace.
+   One electric signal (--current), never used as a fill.
+   Source of truth: lovelace-ui-v4.html; system: BRIEF.md. */
+
+@property --orbit {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+:root,
+[data-theme='dark'] {
+  --bg-0: #14181d; /* sidebar / deepest surface */
+  --bg-1: #171c22; /* main canvas */
+  --band: rgba(214, 230, 242, 0.018); /* weft band */
+  --well: #13161b; /* recessed tray, a step below the canvas */
+  --raise: rgba(214, 230, 242, 0.03); /* card resting */
+  --raise-2: rgba(214, 230, 242, 0.055); /* live card */
+
+  --ink: #dfe5eb;
+  --slate: #79838f;
+  --mist: #4c555f;
+
+  --current: #22d3ee;
+  --current-soft: #67e8f9;
+  --wash: rgba(34, 211, 238, 0.06);
+  --wash-2: rgba(34, 211, 238, 0.12);
+
+  --hole-rim: rgba(214, 230, 242, 0.14);
+  --hole-fill: #79838f;
+  --hole-shadow: rgba(0, 0, 0, 0.45);
+
+  --pill-epic-bg: rgba(125, 170, 215, 0.1);
+  --pill-epic-fg: #9dc2df;
+  --pill-high-bg: rgba(248, 113, 113, 0.09);
+  --pill-high-fg: #de9c9c;
+  --pill-med-bg: rgba(251, 191, 36, 0.08);
+  --pill-med-fg: #d2b584;
+  --pill-low-bg: rgba(116, 200, 150, 0.07);
+  --pill-low-fg: #97c3a6;
+
+  /* Status hues: out of the urgency pills' hue families */
+  --dot-pre: #6b7686; /* before work starts */
+  --dot-review: #8f87d8; /* between work and done */
+  --dot-done: #6ca98a; /* terminal */
+
+  /* Semantic washes for problems/outcomes, kept desaturated */
+  --bad-fg: #de9c9c;
+  --bad-bg: rgba(248, 113, 113, 0.09);
+  --warn-fg: #d2b584;
+  --warn-bg: rgba(251, 191, 36, 0.08);
+  --good-fg: #97c3a6;
+  --good-bg: rgba(116, 200, 150, 0.07);
+
+  --backdrop: rgba(8, 10, 13, 0.6);
+
+  /* Floating panels invert: light paper over the dark room. */
+  --pop-bg: #e9edf3;
+  --pop-ink: #1f262e;
+  --pop-soft: #5d6873;
+  --pop-wash: rgba(11, 165, 201, 0.12);
+  --pop-current: #0ba5c9;
+}
+
+[data-theme='light'] {
+  --bg-0: #edf1f6;
+  --bg-1: #f7f9fc;
+  --band: rgba(72, 101, 140, 0.035);
+  --well: #eceff5;
+  --raise: rgba(72, 101, 140, 0.05);
+  --raise-2: rgba(72, 101, 140, 0.085);
+
+  --ink: #2a313b;
+  --slate: #6e7987;
+  --mist: #9aa4b0;
+
+  --current: #0ba5c9;
+  --current-soft: #22d3ee;
+  --wash: rgba(11, 165, 201, 0.07);
+  --wash-2: rgba(11, 165, 201, 0.14);
+
+  --hole-rim: rgba(72, 101, 140, 0.22);
+  --hole-fill: #8c97a4;
+  --hole-shadow: rgba(72, 101, 140, 0.25);
+
+  --pill-epic-bg: rgba(60, 110, 160, 0.09);
+  --pill-epic-fg: #4a7396;
+  --pill-high-bg: rgba(190, 70, 70, 0.08);
+  --pill-high-fg: #a95f5f;
+  --pill-med-bg: rgba(180, 130, 30, 0.09);
+  --pill-med-fg: #94732f;
+  --pill-low-bg: rgba(50, 130, 85, 0.08);
+  --pill-low-fg: #4d7e61;
+
+  --dot-pre: #6b7686;
+  --dot-review: #8f87d8;
+  --dot-done: #6ca98a;
+
+  --bad-fg: #a95f5f;
+  --bad-bg: rgba(190, 70, 70, 0.08);
+  --warn-fg: #94732f;
+  --warn-bg: rgba(180, 130, 30, 0.09);
+  --good-fg: #4d7e61;
+  --good-bg: rgba(50, 130, 85, 0.08);
+
+  --backdrop: rgba(42, 49, 59, 0.35);
+
+  /* Floating panels invert: dark slate over the light room. */
+  --pop-bg: #232a33;
+  --pop-ink: #e7ecf2;
+  --pop-soft: #97a1ad;
+  --pop-wash: rgba(34, 211, 238, 0.14);
+  --pop-current: #22d3ee;
+}
+
+:root {
+  /* Type: exactly four sizes, 28 -> 12 */
+  --font-sans: 'Geist Sans', 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+  --size-title: 28px;
+  --size-anchor: 18px;
+  --size-body: 14px;
+  --size-util: 12px;
+
+  /* Shape */
+  --radius-card: 6px;
+  --radius-region: 8px;
+  --radius-pill: 99px;
+
+  /* Layout: the page rail. Content under a view header aligns to the
+     header's own edges. Edit --rail-x to move every header and page body
+     together; --rail-top and --rail-bottom set the standard body insets. */
+  --rail-x: 56px;
+  --rail-top: 0.4rem;
+  --rail-bottom: 44px;
+}

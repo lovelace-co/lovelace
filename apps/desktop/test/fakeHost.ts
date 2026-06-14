@@ -1,0 +1,140 @@
+import type { HostClient } from '../src/lib/host';
+import type { AutomationRule, SearchHit, Snapshot } from '../src/lib/types';
+import fixture from './fixtures/snapshot.json';
+
+/**
+ * A HostClient backed by the demo project's snapshot fixture. Mutations
+ * record their arguments and return the same snapshot, which is enough for
+ * deterministic component tests.
+ */
+export class FakeHost implements HostClient {
+  snapshotData: Snapshot = fixture as unknown as Snapshot;
+  calls: Array<{ method: string; args: unknown[] }> = [];
+  files = new Map<string, string>();
+  transitionRules: AutomationRule[] = [];
+  log = '';
+
+  private record(method: string, args: unknown[]) {
+    this.calls.push({ method, args });
+  }
+
+  async detect(root: string): Promise<boolean> {
+    this.record('detect', [root]);
+    return true;
+  }
+
+  async init(root: string, name: string, userName?: string, workflow?: unknown): Promise<Snapshot> {
+    this.record('init', [root, name, userName, workflow]);
+    return this.snapshotData;
+  }
+
+  async defaultWorkflow() {
+    this.record('defaultWorkflow', []);
+    return this.snapshotData.workflow;
+  }
+
+  async installClaude(root: string, gitHook: boolean): Promise<{ written: string[]; manual: string[] }> {
+    this.record('installClaude', [root, gitHook]);
+    return { written: ['CLAUDE.md'], manual: [] };
+  }
+
+  async snapshot(root: string): Promise<Snapshot> {
+    this.record('snapshot', [root]);
+    return this.snapshotData;
+  }
+
+  async createTicket(
+    root: string,
+    type: string,
+    fields: Record<string, unknown>,
+    status?: string,
+  ): Promise<Snapshot> {
+    this.record('createTicket', [root, type, fields, status]);
+    return this.snapshotData;
+  }
+
+  async updateTicket(
+    root: string,
+    id: string,
+    fields: Record<string, unknown>,
+    options?: { actor?: string; force?: boolean },
+  ): Promise<Snapshot> {
+    this.record('updateTicket', [root, id, fields, options]);
+    return this.snapshotData;
+  }
+
+  async testTransition(root: string, id: string, to: string): Promise<AutomationRule[]> {
+    this.record('testTransition', [root, id, to]);
+    return this.transitionRules;
+  }
+
+  async deleteTicket(root: string, id: string): Promise<Snapshot> {
+    this.record('deleteTicket', [root, id]);
+    return this.snapshotData;
+  }
+
+  async setAutomations(root: string, rules: AutomationRule[]): Promise<Snapshot> {
+    this.record('setAutomations', [root, rules]);
+    return this.snapshotData;
+  }
+
+  async setColumnOrder(root: string, status: string, ids: string[]): Promise<Snapshot> {
+    this.record('setColumnOrder', [root, status, ids]);
+    return this.snapshotData;
+  }
+
+  async actionLog(): Promise<string> {
+    return this.log;
+  }
+
+  async readFile(_root: string, path: string): Promise<string> {
+    this.record('readFile', [path]);
+    return this.files.get(path) ?? '---\nid: x\n---\n\n## Description\n\nFixture body.\n';
+  }
+
+  async writeBrief(
+    root: string,
+    path: string,
+    changes: { body?: string; summary?: string; review_by?: string | null },
+  ): Promise<Snapshot> {
+    this.record('writeBrief', [root, path, changes]);
+    return this.snapshotData;
+  }
+
+  async addComment(root: string, ticket: string, actor: string, body: string): Promise<Snapshot> {
+    this.record('addComment', [root, ticket, actor, body]);
+    return this.snapshotData;
+  }
+
+  async writeTicketBody(root: string, id: string, body: string): Promise<Snapshot> {
+    this.record('writeTicketBody', [root, id, body]);
+    return this.snapshotData;
+  }
+
+  async createBrief(
+    root: string,
+    dir: string,
+    name: string,
+    summary: string,
+    createOverview: boolean,
+  ): Promise<Snapshot> {
+    this.record('createBrief', [root, dir, name, summary, createOverview]);
+    return this.snapshotData;
+  }
+
+  async commitsForTicket(_root: string, _id: string): Promise<Array<{ sha: string; subject: string }>> {
+    return [{ sha: '4e7aa10', subject: 'feat: forecast endpoint (T-0002)' }];
+  }
+
+  async search(_root: string, _query: string): Promise<SearchHit[]> {
+    return [];
+  }
+
+  async pickDirectory(): Promise<string | null> {
+    return null;
+  }
+
+  async watch(): Promise<() => void> {
+    return () => undefined;
+  }
+}

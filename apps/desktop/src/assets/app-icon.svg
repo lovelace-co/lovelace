@@ -1,0 +1,12 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <linearGradient id="tile" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1c222a"/>
+      <stop offset="1" stop-color="#12161b"/>
+    </linearGradient>
+  </defs>
+  <!-- macOS-style rounded tile: 824 square, 100 margin, ~0.225 corner radius -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
+  <!-- mark kept at its native 186:138 aspect (meet), centred -->
+  <image xlink:href="symbol.svg" href="symbol.svg" x="248" y="316" width="528" height="392" preserveAspectRatio="xMidYMid meet"/>
+</svg>

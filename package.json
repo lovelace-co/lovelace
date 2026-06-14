@@ -1,0 +1,17 @@
+{
+  "name": "lovelace-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "sidecars": "./apps/desktop/scripts/prepare-sidecars.sh",
+    "app:build": "pnpm --filter @lovelace/desktop exec tauri build",
+    "app:dev": "LOVELACE_HOST_JS=\"$(pwd)/packages/mcp/dist/host.js\" pnpm --filter @lovelace/desktop exec tauri dev",
+    "watch:packages": "pnpm --parallel --filter @lovelace/core --filter @lovelace/mcp exec tsc -p tsconfig.json --watch --preserveWatchOutput"
+  },
+  "packageManager": "pnpm@10.12.1"
+}
