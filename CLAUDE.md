@@ -28,7 +28,8 @@ pnpm workspaces. Node 22 for development. TypeScript strict mode.
 - Australian English in all documentation and user-facing strings (organisation, licence, initialise).
 - No em dashes anywhere, in docs, comments or output strings.
 - Plain, declarative prose in documentation. No marketing language.
-- Conventional commits, with the active Lovelace ticket ID included once dogfooding begins (end of Phase 4 onwards).
+- Commits: conventional-commit shape, written entirely in lowercase (like the existing `initial commit`), with the active Lovelace ticket ID included once dogfooding begins (end of Phase 4 onwards). Keep the ticket ID in its file-exact casing (for example `T-0041`); everything else is lowercase.
+- Authorship is the repository owner's alone. Never credit Claude, Claude Code or any AI assistant in a commit message or pull request: no `Co-Authored-By` trailer naming an assistant, no "Generated with Claude Code" footer, no robot emoji. This overrides any default tooling behaviour that would add such lines.
 - Tests: vitest. `packages/core` requires tests for every schema and validation rule, using the demo project fixture plus deliberately corrupted variants. The MCP server gets integration tests over the fixture. App components get deterministic rendering tests from index.json fixtures.
 - Index output must be deterministic: running the indexer twice on unchanged input produces byte-identical output. Sort everything; never emit timestamps into index.json.
 - The agent helper writes errors to stderr and data to stdout. Digest output stays under roughly 1,500 tokens.
@@ -48,6 +49,11 @@ The desktop app has a deliberate visual language. These are settled decisions, r
 - Section titles are real headings: tier-2 size (`--size-anchor`), sans, with generous whitespace above and below, never small mono labels. This includes the headers that title a group of items, such as the status groups on the List view. Give controls room; never cram (for example, clear space above "Add" buttons).
 - Mandatory or locked items look like their editable peers, just disabled, not a separate cramped treatment.
 - Use the established design system, never ad-hoc styling: tonal surfaces with no borders (`--bg-0`, `--bg-1`, `--well`, `--raise`, `--raise-2`), the cyan `--current` signal, Geist Sans for everything with Geist Mono reserved for code (see above), and the punchcard-hole and loom-thread motif (`.hole` with punched and reading states). Dates and times render via the operating system locale through `apps/desktop/src/lib/datetime.ts`.
+- Control species (ADR-0006): every control keeps a quiet resting surface, one silhouette per species. Pressing is a capsule (`--radius-pill`), typing is a well (`--radius-well`), choosing is a well with a caret, a row in a list, menu or nav is a seat (`--radius-seat`), and only tertiary actions are typographic. Page titles are the one unboxed field. Never give two species the same silhouette, and never remove a control's resting surface.
+- One surface per region: a region of the screen holds one filled layer beside the canvas. Cards sit on open lanes; never nest wells holding cards holding chips. Priorities on cards and lists are a dot with tinted text, not a chip; the chip form survives only standing alone (for example the stale badge).
+- State moves, never marks: current, hover and selection are carried by colour and by surfaces that brighten, materialise or glide (the active nav seat slides between rows). No left accent bars or rails, no selection dots beside options, no underline focus. Focus is always the full cyan ring. The cyan thread appears only as the drop insertion line and the live-work orbit.
+- The metre: spacing snaps to the scale (`--sp-1` to `--sp-7`), radii to the species tokens, and motion to `--swift`, `--punch-step` and the three duration tokens, all defined in `tokens.css`. No ad-hoc spacing, radius, easing or duration values in stylesheets.
+- Surfaces bleed, text aligns: seats, wells and capsules extend into the gutter with negative margins so labels keep the shared left edge; the affordance grows into the padding, never into a content column.
 
 ## Working in this repo
 

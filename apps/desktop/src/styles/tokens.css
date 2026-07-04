@@ -32,6 +32,7 @@
   --current-soft: #67e8f9;
   --wash: rgba(34, 211, 238, 0.06);
   --wash-2: rgba(34, 211, 238, 0.12);
+  --selection: rgba(34, 211, 238, 0.35);
 
   --hole-rim: rgba(214, 230, 242, 0.14);
   --hole-fill: #79838f;
@@ -85,6 +86,7 @@
   --current-soft: #22d3ee;
   --wash: rgba(11, 165, 201, 0.07);
   --wash-2: rgba(11, 165, 201, 0.14);
+  --selection: rgba(11, 165, 201, 0.3);
 
   --hole-rim: rgba(72, 101, 140, 0.22);
   --hole-fill: #8c97a4;
@@ -133,6 +135,29 @@
   --radius-card: 6px;
   --radius-region: 8px;
   --radius-pill: 99px;
+
+  /* Air (ADR-0006): one radius per control species. Pressing is a capsule
+     (--radius-pill); the older card/region radii retire as views migrate. */
+  --radius-seat: 8px; /* a row in a list, menu or nav */
+  --radius-well: 9px; /* fields and choosers */
+  --radius-surface: 10px; /* content cards */
+  --radius-float: 16px; /* floating panels */
+
+  /* Air: the spacing scale. Every gap, inset and margin snaps to a step. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 14px;
+  --sp-4: 22px;
+  --sp-5: 36px;
+  --sp-6: 58px;
+  --sp-7: 94px;
+
+  /* Air: motion. Two easings, three durations; nothing else. */
+  --swift: cubic-bezier(0.2, 0.9, 0.25, 1); /* materialise, brighten, glide */
+  --punch-step: steps(2, jump-end); /* every press */
+  --dur-press: 80ms;
+  --dur-colour: 150ms;
+  --dur-glide: 220ms;
 
   /* Layout: the page rail. Content under a view header aligns to the
      header's own edges. Edit --rail-x to move every header and page body
