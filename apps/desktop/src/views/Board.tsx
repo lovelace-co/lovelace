@@ -277,9 +277,9 @@ export function Board({
                         <div className="ticket-card-title">{ticket.title}</div>
                       </div>
                       <div className="ticket-card-meta">
-                        {epicTitle !== null && <span className="pill epic">{epicTitle}</span>}
+                        {epicTitle !== null && <span className="prio epic">{epicTitle}</span>}
                         {!isDone && priority !== null && family !== null && (
-                          <span className={`pill ${family}`}>{titleCase(priority)}</span>
+                          <span className={`prio ${family}`}>{titleCase(priority)}</span>
                         )}
                         <span className={`id${live ? ' live' : ''}`}>
                           {ticket.id}

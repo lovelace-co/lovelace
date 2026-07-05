@@ -8,11 +8,13 @@ import {
   CHECK_LIST,
   TRANSFORMERS,
   type ElementTransformer,
+  type TextMatchTransformer,
   type Transformer,
 } from '@lexical/markdown';
 import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { parseBlocks, type Block } from './blocks';
 import { $createVerbatimNode, $isVerbatimNode, VerbatimNode } from './VerbatimNode';
+import { $createWikiLinkNode, $isWikiLinkNode, WikiLinkNode } from './WikiLinkNode';
 
 /**
  * Markdown <-> Lexical, with two guarantees layered on top of
@@ -34,6 +36,7 @@ export const EDITOR_NODES = [
   CodeNode,
   LinkNode,
   VerbatimNode,
+  WikiLinkNode,
 ];
 
 const SENTINEL = '⁣LOVELACE-VERBATIM-';
@@ -51,8 +54,26 @@ function verbatimTransformer(sources: string[]): ElementTransformer {
   };
 }
 
+/**
+ * A wiki-link `[[id]]`: stored as the stable id, rendered as an inline node.
+ * `importRegExp` catches links when a file is loaded; `regExp` (end-anchored,
+ * fired on the closing bracket) converts one typed in place. Export returns the
+ * exact `[[id]]` so the source token never drifts.
+ */
+const WIKILINK: TextMatchTransformer = {
+  dependencies: [WikiLinkNode],
+  export: (node) => ($isWikiLinkNode(node) ? `[[${node.getId()}]]` : null),
+  importRegExp: /\[\[([^\]\n]+)\]\]/,
+  regExp: /\[\[([^\]\n]+)\]\]$/,
+  replace: (textNode, match) => {
+    textNode.replace($createWikiLinkNode((match[1] ?? '').trim()));
+  },
+  trigger: ']',
+  type: 'text-match',
+};
+
 /** CHECK_LIST must outrank the bullet transformer or `- [ ]` reads as a bullet. */
-const BASE_TRANSFORMERS: Transformer[] = [CHECK_LIST, ...TRANSFORMERS];
+const BASE_TRANSFORMERS: Transformer[] = [CHECK_LIST, WIKILINK, ...TRANSFORMERS];
 
 export function buildTransformers(sources: string[]): Transformer[] {
   return [verbatimTransformer(sources), ...BASE_TRANSFORMERS];

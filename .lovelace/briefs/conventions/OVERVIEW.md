@@ -2,7 +2,8 @@
 id: conventions-overview
 type: brief
 summary: Code style and commit conventions.
-updated: 2026-06-10T12:20:19Z
+updated: 2026-07-04T20:12:59Z
+review_by: 2026-07-23
 ---
 
 # Conventions

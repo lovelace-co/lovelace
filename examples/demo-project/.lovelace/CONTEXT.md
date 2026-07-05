@@ -12,9 +12,9 @@ Orbit is a demonstration project: a small HTTP API that serves weather forecasts
 ## Reading order
 
 1. This file.
-2. `briefs/architecture/OVERVIEW.md` for how the service is decomposed.
-3. `briefs/domain/OVERVIEW.md` for forecast terminology.
-4. `briefs/conventions/OVERVIEW.md` for code style.
+2. [[architecture-overview]] for how the service is decomposed.
+3. [[domain-overview]] for forecast terminology.
+4. [[conventions-overview]] for code style.
 5. The active ticket, its parent and its dependencies.
 
 ## Rules of engagement for agents

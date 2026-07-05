@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { DatePicker } from './DatePicker';
 import { Dropdown } from './Dropdown';
+import { HoleCheck } from './HoleCheck';
 import { CloseIcon } from './icons';
 import { titleCase } from '../lib/format';
 import type { FieldDef, ProjectIndex, Workflow } from '../lib/types';
@@ -42,8 +44,7 @@ export function FieldInput({ def, value, workflow, index, actors, onChange }: Fi
   switch (def.type) {
     case 'boolean':
       return (
-        <input
-          type="checkbox"
+        <HoleCheck
           aria-label={def.name}
           checked={value === true}
           onChange={(e) => onChange(e.target.checked)}
@@ -61,12 +62,11 @@ export function FieldInput({ def, value, workflow, index, actors, onChange }: Fi
       );
     case 'date':
       return (
-        <input
-          className="form-input mono"
-          type="date"
+        <DatePicker
           aria-label={def.name}
-          value={typeof value === 'string' ? value.slice(0, 10) : ''}
-          onChange={(e) => onChange(e.target.value || null)}
+          width="100%"
+          value={typeof value === 'string' ? value.slice(0, 10) : null}
+          onChange={(v) => onChange(v)}
         />
       );
     case 'enum': {

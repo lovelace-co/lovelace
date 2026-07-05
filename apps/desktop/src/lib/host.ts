@@ -1,4 +1,4 @@
-import type { AutomationRule, SearchHit, Snapshot, Workflow } from './types';
+import type { Actor, AutomationRule, GraphLayout, SearchHit, Snapshot, Workflow, WorkflowEdit } from './types';
 
 export class HostError extends Error {
   constructor(
@@ -36,9 +36,24 @@ export interface HostClient {
   ): Promise<Snapshot>;
   deleteTicket(root: string, id: string): Promise<Snapshot>;
   setColumnOrder(root: string, status: string, ids: string[]): Promise<Snapshot>;
+  /** Persist manual graph node positions (machine-local; not indexed). */
+  setGraphLayout(root: string, layout: GraphLayout): Promise<Snapshot>;
   testTransition(root: string, id: string, to: string): Promise<AutomationRule[]>;
   /** Replace the project's on_transition automation rules (validated by core). */
   setAutomations(root: string, rules: AutomationRule[]): Promise<Snapshot>;
+  /**
+   * Persist a workflow-editor save: statuses, types, transitions, priorities
+   * and fields, with renames that cascade to existing tickets (validated by
+   * core, which blocks removals that would strand tickets).
+   */
+  writeWorkflow(root: string, edit: WorkflowEdit): Promise<Snapshot>;
+  /** Edit the manifest's user-editable fields (the project name). */
+  writeManifest(root: string, changes: { name: string }): Promise<Snapshot>;
+  /**
+   * Replace the project's actors (validated by core: one human, unique ids,
+   * and no removal of an actor still referenced by a ticket, session or comment).
+   */
+  writeActors(root: string, actors: Actor[]): Promise<Snapshot>;
   /** The automation run history (actions.log). */
   actionLog(root: string): Promise<string>;
   readFile(root: string, path: string): Promise<string>;
@@ -56,6 +71,8 @@ export interface HostClient {
     summary: string,
     createOverview: boolean,
   ): Promise<Snapshot>;
+  /** Rename a brief file (its directory and frontmatter stay put). */
+  renameBrief(root: string, path: string, name: string): Promise<Snapshot>;
   commitsForTicket(root: string, id: string): Promise<Array<{ sha: string; subject: string }>>;
   search(root: string, query: string): Promise<SearchHit[]>;
   pickDirectory(): Promise<string | null>;
@@ -154,6 +171,10 @@ export class TauriHost implements HostClient {
     return tauriRequest({ op: 'set_column_order', root, status, ids }) as Promise<Snapshot>;
   }
 
+  setGraphLayout(root: string, layout: GraphLayout): Promise<Snapshot> {
+    return tauriRequest({ op: 'set_graph_layout', root, layout }) as Promise<Snapshot>;
+  }
+
   async testTransition(root: string, id: string, to: string): Promise<AutomationRule[]> {
     const data = (await tauriRequest({ op: 'test_transition', root, id, to })) as {
       rules: AutomationRule[];
@@ -163,6 +184,18 @@ export class TauriHost implements HostClient {
 
   setAutomations(root: string, rules: AutomationRule[]): Promise<Snapshot> {
     return tauriRequest({ op: 'set_automations', root, rules }) as Promise<Snapshot>;
+  }
+
+  writeWorkflow(root: string, edit: WorkflowEdit): Promise<Snapshot> {
+    return tauriRequest({ op: 'write_workflow', root, edit }) as Promise<Snapshot>;
+  }
+
+  writeManifest(root: string, changes: { name: string }): Promise<Snapshot> {
+    return tauriRequest({ op: 'write_manifest', root, changes }) as Promise<Snapshot>;
+  }
+
+  writeActors(root: string, actors: Actor[]): Promise<Snapshot> {
+    return tauriRequest({ op: 'write_actors', root, actors }) as Promise<Snapshot>;
   }
 
   async actionLog(root: string): Promise<string> {
@@ -199,6 +232,10 @@ export class TauriHost implements HostClient {
     createOverview: boolean,
   ): Promise<Snapshot> {
     return tauriRequest({ op: 'create_brief', root, dir, name, summary, createOverview }) as Promise<Snapshot>;
+  }
+
+  renameBrief(root: string, path: string, name: string): Promise<Snapshot> {
+    return tauriRequest({ op: 'rename_brief', root, path, name }) as Promise<Snapshot>;
   }
 
   async commitsForTicket(root: string, id: string): Promise<Array<{ sha: string; subject: string }>> {

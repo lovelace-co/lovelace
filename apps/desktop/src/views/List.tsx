@@ -110,9 +110,9 @@ export function List({
         <span className="priority-dot" style={{ background: hue }} title={statusLabel(workflow.statuses.find((s) => s.name === ticket.status) ?? { name: ticket.status })} />
         <span className="list-row-title">{ticket.title}</span>
         <span className="list-row-meta">
-          {epicTitle !== null && <span className="pill epic">{epicTitle}</span>}
+          {epicTitle !== null && <span className="prio epic">{epicTitle}</span>}
           {!isDone && priority !== null && family !== null && (
-            <span className={`pill ${family}`}>{titleCase(priority)}</span>
+            <span className={`prio ${family}`}>{titleCase(priority)}</span>
           )}
           {assignee !== null && <span className="list-assignee">@{assignee}</span>}
           <span className="list-updated num">{formatDateShort(ticket.updated)}</span>

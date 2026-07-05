@@ -1,12 +1,27 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 dist-bin/
 *.tsbuildinfo
+coverage/
+apps/desktop/src-tauri/target/
+
+# Lovelace derived state (regenerable from the files)
 .lovelace/index/index.json
 .lovelace/index/actions.log
 .lovelace/state/
-apps/desktop/src-tauri/target/
-coverage/
-.DS_Store
 
+# Logs
+*.log
+
+# Local environment and secrets
+.env
+.env.local
+.env.*.local
 .tauri-updater.key
+
+# Operating system files
+.DS_Store
+Thumbs.db

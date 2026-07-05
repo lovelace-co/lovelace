@@ -19,6 +19,8 @@ export {
 export { loadProject, ProjectError } from './project.js';
 export { validateProject, hasErrors, formatIssues } from './validate.js';
 export { buildIndex, stringifyIndex, buildBoard, writeIndex, fieldCatalogue } from './index-gen.js';
+export { buildLinks } from './links.js';
+export type { LinkEdge } from './links.js';
 export { buildDigest } from './digest.js';
 export { nextId, scanHighestId } from './ids.js';
 export {
@@ -26,6 +28,9 @@ export {
   updateTicket,
   deleteTicket,
   writeAutomations,
+  writeWorkflow,
+  writeManifest,
+  writeActors,
   logSession,
   addComment,
   setActiveTicket,
@@ -38,8 +43,12 @@ export type {
   LogSessionInput,
   DeleteResult,
   MutationContext,
+  WorkflowEdit,
+  WorkflowRenames,
 } from './mutate.js';
 export { readBoardOrder, setColumnOrder, pruneFromBoardOrder } from './order.js';
+export { readGraphLayout, writeGraphLayout } from './graph-layout.js';
+export type { GraphLayout, NodePosition } from './graph-layout.js';
 export { matchRules } from './automation.js';
 export { search } from './search.js';
 export { initProject } from './init.js';

@@ -20,6 +20,7 @@ import {
   SparklesIcon,
   CommandLineIcon,
   PencilSquareIcon,
+  CalendarIcon as HeroCalendarIcon,
 } from '@heroicons/react/24/outline';
 
 /* Heroicons (outline) under the app's semantic names. Each wrapper bakes in a
@@ -92,3 +93,29 @@ export const AgentIcon = make(SparklesIcon, 14);
 
 /** Run action: a shell command pulled like a lever. */
 export const CommandIcon = make(CommandLineIcon, 14);
+
+/** Date: the datepicker trigger. */
+export const CalendarIcon = make(HeroCalendarIcon, 15);
+
+/** Graph: connected documents, drawn as three linked nodes. */
+export function GraphIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      width={17}
+      height={17}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
+      <path d="M6.5 7.3 11 15.5M17 8.7 12.3 16" />
+      <circle cx="5" cy="6" r="2.3" />
+      <circle cx="18" cy="7.5" r="2.3" />
+      <circle cx="11.5" cy="17.5" r="2.3" />
+    </svg>
+  );
+}

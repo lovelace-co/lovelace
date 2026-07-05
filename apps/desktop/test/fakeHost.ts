@@ -1,5 +1,5 @@
 import type { HostClient } from '../src/lib/host';
-import type { AutomationRule, SearchHit, Snapshot } from '../src/lib/types';
+import type { AutomationRule, SearchHit, Snapshot, WorkflowEdit } from '../src/lib/types';
 import fixture from './fixtures/snapshot.json';
 
 /**
@@ -78,8 +78,28 @@ export class FakeHost implements HostClient {
     return this.snapshotData;
   }
 
+  async writeWorkflow(root: string, edit: WorkflowEdit): Promise<Snapshot> {
+    this.record('writeWorkflow', [root, edit]);
+    return this.snapshotData;
+  }
+
+  async writeManifest(root: string, changes: { name: string }): Promise<Snapshot> {
+    this.record('writeManifest', [root, changes]);
+    return this.snapshotData;
+  }
+
+  async writeActors(root: string, actors: unknown): Promise<Snapshot> {
+    this.record('writeActors', [root, actors]);
+    return this.snapshotData;
+  }
+
   async setColumnOrder(root: string, status: string, ids: string[]): Promise<Snapshot> {
     this.record('setColumnOrder', [root, status, ids]);
+    return this.snapshotData;
+  }
+
+  async setGraphLayout(root: string, layout: Record<string, { x: number; y: number }>): Promise<Snapshot> {
+    this.record('setGraphLayout', [root, layout]);
     return this.snapshotData;
   }
 
@@ -119,6 +139,11 @@ export class FakeHost implements HostClient {
     createOverview: boolean,
   ): Promise<Snapshot> {
     this.record('createBrief', [root, dir, name, summary, createOverview]);
+    return this.snapshotData;
+  }
+
+  async renameBrief(root: string, path: string, name: string): Promise<Snapshot> {
+    this.record('renameBrief', [root, path, name]);
     return this.snapshotData;
   }
 

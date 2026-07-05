@@ -1,10 +1,12 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { $createParagraphNode, $createTextNode, $getRoot, type LexicalEditor } from 'lexical';
 import { BlockEditor } from '../src/editor/BlockEditor';
 import { editBlock, parseBlocks, serialiseBlocks } from '../src/editor/blocks';
+import { normalFormOf } from '../src/editor/convert';
+import type { LinkTarget } from '../src/lib/links';
 
 const FIXTURE = resolve(__dirname, '../../../examples/demo-project/.lovelace');
 
@@ -135,5 +137,54 @@ describe('BlockEditor component (Lexical)', () => {
     expect(next).toContain('* odd  bullet');
     expect(next).toContain('Old text.');
     expect(next).toContain('Appended line.');
+  });
+});
+
+describe('wiki-links in the editor', () => {
+  const target: LinkTarget = {
+    kind: 'brief',
+    id: 'architecture-overview',
+    label: 'Architecture Overview',
+    path: '.lovelace/briefs/architecture/OVERVIEW.md',
+  };
+  const resolve = (id: string) => (id === target.id ? target : null);
+
+  it('round-trips [[id]] through Lexical unchanged (import then export)', () => {
+    // Exercises the text-match transformer both ways via the headless editor.
+    expect(normalFormOf('See [[architecture-overview]] for the design.')).toBe(
+      'See [[architecture-overview]] for the design.',
+    );
+  });
+
+  it('renders a resolved link as its current title and navigates on click', () => {
+    const onOpenLink = vi.fn();
+    render(
+      <BlockEditor
+        source={'See [[architecture-overview]] now.\n'}
+        onChange={vi.fn()}
+        wikiCandidates={[]}
+        resolveLink={resolve}
+        onOpenLink={onOpenLink}
+      />,
+    );
+    const chip = screen.getByRole('button', { name: 'Architecture Overview' });
+    expect(chip.className).toContain('wikilink');
+    expect(document.body.textContent).not.toContain('[[architecture-overview]]');
+    fireEvent.click(chip);
+    expect(onOpenLink).toHaveBeenCalledWith(expect.objectContaining({ id: target.id, kind: 'brief' }));
+  });
+
+  it('renders an unresolved link verbatim and inert', () => {
+    render(
+      <BlockEditor
+        source={'See [[ghost]] now.\n'}
+        onChange={vi.fn()}
+        wikiCandidates={[]}
+        resolveLink={() => null}
+        onOpenLink={vi.fn()}
+      />,
+    );
+    const broken = document.querySelector('.wikilink.broken');
+    expect(broken?.textContent).toContain('[[ghost]]');
   });
 });

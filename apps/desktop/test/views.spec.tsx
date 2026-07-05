@@ -102,13 +102,69 @@ describe('Automations view', () => {
 });
 
 describe('Workflow view', () => {
-  it('renders the status transition map', () => {
-    render(<Workflow snapshot={base} />);
+  function renderWorkflow() {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<Workflow snapshot={base} onSave={onSave} />);
+    return { onSave };
+  }
+
+  it('opens on the Statuses tab with editable, seeded rows and no Save bar', () => {
+    renderWorkflow();
     expect(screen.getByRole('heading', { name: 'Workflow' })).toBeTruthy();
-    expect(screen.getByText('Statuses and transitions')).toBeTruthy();
-    // Each status is a row; terminal statuses show no outgoing moves.
-    expect(screen.getAllByText('Backlog').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('terminal').length).toBeGreaterThan(0);
+    for (const label of ['Statuses', 'Transitions', 'Types', 'Priorities', 'Fields']) {
+      expect(screen.getByRole('tab', { name: label })).toBeTruthy();
+    }
+    expect(screen.getByRole('tab', { name: 'Statuses' }).getAttribute('aria-selected')).toBe('true');
+    // Rows are seeded, editable inputs, not static text.
+    expect((screen.getByLabelText('status 0 machine') as HTMLInputElement).value).toBe('backlog');
+    // Nothing has changed, so there is no Save bar yet.
+    expect(screen.queryByText('Save changes')).toBeNull();
+  });
+
+  it('sends a rename map when a status machine name is changed', async () => {
+    const { onSave } = renderWorkflow();
+    fireEvent.change(screen.getByLabelText('status 0 machine'), { target: { value: 'inbox' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const edit = onSave.mock.calls[0]![0];
+    expect(edit.renames.statuses).toMatchObject({ backlog: 'inbox' });
+    expect(edit.statuses[0].name).toBe('inbox');
+    // Transitions follow the rename, so nothing dangles.
+    expect(edit.transitions.every((t: { from: string; to: string[] }) => t.from !== 'backlog')).toBe(true);
+  });
+
+  it('toggling a transition target on the Transitions tab updates the saved graph', async () => {
+    const { onSave } = renderWorkflow();
+    fireEvent.click(screen.getByRole('tab', { name: 'Transitions' }));
+    const chip = screen.getByLabelText('backlog to todo');
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(chip);
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const edit = onSave.mock.calls[0]![0];
+    const backlog = edit.transitions.find((t: { from: string }) => t.from === 'backlog');
+    expect(backlog?.to ?? []).not.toContain('todo');
+  });
+
+  it('adds a custom field on the Fields tab and includes it in the save', async () => {
+    const { onSave } = renderWorkflow();
+    fireEvent.click(screen.getByRole('tab', { name: 'Fields' }));
+    fireEvent.click(screen.getByText('Add field'));
+    const before = base.workflow.fields.length;
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0]![0].fields.length).toBe(before + 1);
+  });
+
+  it('keeps edits when switching tabs, and the Save bar spans them', () => {
+    renderWorkflow();
+    // Edit on Statuses, then move to Transitions; the change must persist.
+    fireEvent.change(screen.getByLabelText('status 0 label'), { target: { value: 'Inbox' } });
+    expect(screen.getByText('Save changes')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Transitions' }));
+    expect(screen.getByText('Save changes')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Statuses' }));
+    expect((screen.getByLabelText('status 0 label') as HTMLInputElement).value).toBe('Inbox');
   });
 });
 
@@ -146,7 +202,7 @@ describe('ProjectView sidebar', () => {
     // The board is the default destination.
     await waitFor(() => expect(screen.getByText('Forecast endpoint')).toBeTruthy());
     // The regrouped, renamed nav is present.
-    for (const label of ['Board', 'List', 'Documentation', 'Sessions', 'Workflow', 'Automations', 'Search']) {
+    for (const label of ['Board', 'List', 'Documentation', 'Graph', 'Sessions', 'Workflow', 'Automations', 'Search']) {
       expect(screen.getByRole('button', { name: new RegExp(`^${label}`) })).toBeTruthy();
     }
     // Workflow routes to the state machine; Automations to just the rules.
@@ -154,6 +210,10 @@ describe('ProjectView sidebar', () => {
     expect(screen.getByRole('heading', { name: 'Workflow' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /^Automations/ }));
     expect(screen.getByText('On transition')).toBeTruthy();
+    // Graph routes to the documentation link graph.
+    fireEvent.click(screen.getByRole('button', { name: /^Graph/ }));
+    expect(screen.getByRole('heading', { name: 'Graph' })).toBeTruthy();
+    expect(document.querySelector('.graph-canvas')).not.toBeNull();
   });
 
   it('opens the search palette from the sidebar', async () => {

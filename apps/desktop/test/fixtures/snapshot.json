@@ -350,6 +350,14 @@
         "created": "2026-06-09T10:15:00Z",
         "path": ".lovelace/comments/T-0002/2026-06-09T1015-claude.md"
       }
+    ],
+    "links": [
+      { "source": "architecture-overview", "target": "ADR-0001" },
+      { "source": "context", "target": "architecture-overview" },
+      { "source": "context", "target": "conventions-overview" },
+      { "source": "context", "target": "domain-overview" },
+      { "source": "decisions-overview", "target": "ADR-0001" },
+      { "source": "T-0002", "target": "architecture-overview" }
     ]
   },
   "fieldCatalogue": {

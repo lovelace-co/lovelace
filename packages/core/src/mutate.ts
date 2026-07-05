@@ -1,15 +1,33 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { Document, parseDocument, isSeq, isMap } from 'yaml';
-import { pruneFromBoardOrder } from './order.js';
+import { pruneFromBoardOrder, renameBoardOrderColumns } from './order.js';
 import { isLegalTransition, defaultStatus, validateWorkflow, automationListSchema } from './config.js';
+import {
+  applyWorkflowFlow,
+  compactField,
+  compactStatus,
+  compactTransition,
+  compactType,
+} from './workflow-config.js';
 import { applyDefaults, fieldsForType, validateTicketFields } from './fields.js';
 import { parseFrontmatter } from './frontmatter.js';
 import { nextId } from './ids.js';
 import { matchRules } from './automation.js';
 import { loadProject } from './project.js';
 import { writeIndex } from './index-gen.js';
-import type { AutomationRule, Project, Ticket, ValidationIssue } from './types.js';
+import type {
+  Actor,
+  AutomationRule,
+  FieldDef,
+  Project,
+  StatusDef,
+  Ticket,
+  TransitionDef,
+  TypeDef,
+  ValidationIssue,
+  Workflow,
+} from './types.js';
 import { CORE_FIELDS, SESSION_OUTCOMES } from './types.js';
 
 export class MutationError extends Error {
@@ -287,6 +305,286 @@ export async function writeAutomations(
       }
     }
   }
+  writeFileSync(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
+  if (!ctx.skipReindex) reindex(root, ctx);
+  return next;
+}
+
+/** A rename maps an old machine name to its new one, per schema section. */
+export interface WorkflowRenames {
+  statuses?: Record<string, string>;
+  types?: Record<string, string>;
+  priorities?: Record<string, string>;
+}
+
+/**
+ * A workflow-editor save. Each section present replaces its counterpart;
+ * omitted sections are kept. `renames` carries the editor's in-place name
+ * changes so they cascade to existing data rather than stranding it.
+ */
+export interface WorkflowEdit {
+  types?: TypeDef[];
+  statuses?: StatusDef[];
+  transitions?: TransitionDef[];
+  priorities?: string[];
+  fields?: FieldDef[];
+  renames?: WorkflowRenames;
+}
+
+/** Remaps a name through a rename map, leaving unmapped names untouched. */
+function remap(map: Record<string, string>, name: string): string {
+  return name in map ? map[name]! : name;
+}
+
+/**
+ * Persists a workflow-editor save to workflow.yaml. Renames cascade to
+ * existing tickets, the board order and the automation rules, so nothing
+ * dangles. Removing a status or type that tickets still use, or a priority
+ * still in use, is blocked with a message naming the count, because those
+ * would strand tickets in an invalid state. Structure is validated with the
+ * same rules the validator enforces before anything is written. Each schema
+ * node is patched in place, so hand-authored comments elsewhere survive.
+ */
+export async function writeWorkflow(
+  root: string,
+  edit: WorkflowEdit,
+  ctx: MutationContext = {},
+): Promise<void> {
+  const project = loadProject(root);
+  const current = project.workflow;
+  const statusRenames = edit.renames?.statuses ?? {};
+  const typeRenames = edit.renames?.types ?? {};
+  const prioRenames = edit.renames?.priorities ?? {};
+
+  // Assemble the candidate: a provided section replaces, an omitted one is
+  // kept. Sections that can reference a renamed status or type are remapped so
+  // they stay consistent even when the caller sent the old names.
+  const statuses = edit.statuses ?? current.statuses;
+  const types = edit.types ?? current.types;
+  const priorities = edit.priorities ?? current.priorities;
+  const transitions = (edit.transitions ?? current.transitions).map((t) => ({
+    from: remap(statusRenames, t.from),
+    to: t.to.map((to) => remap(statusRenames, to)),
+  }));
+  const fields = (edit.fields ?? current.fields).map((f) => ({
+    ...f,
+    ...(f.applies_to ? { applies_to: f.applies_to.map((x) => remap(typeRenames, x)) } : {}),
+    ...(f.refers_to ? { refers_to: f.refers_to.map((x) => remap(typeRenames, x)) } : {}),
+  }));
+  const onTransition = current.on_transition.map((rule) => {
+    const when = { ...rule.when };
+    when.to = remap(statusRenames, when.to);
+    if (typeof when.from === 'string') when.from = remap(statusRenames, when.from);
+    if (typeof when.type === 'string') when.type = remap(typeRenames, when.type);
+    return { ...rule, when };
+  });
+
+  const candidate: Workflow = {
+    types,
+    statuses,
+    transitions,
+    priorities,
+    fields,
+    on_transition: onTransition,
+  };
+
+  // The enum fields whose values are the priorities list; a removed priority
+  // is "in use" if any ticket holds it in one of these.
+  const prioFields = fields
+    .filter((f) => f.type === 'enum' && f.values_from === 'priorities')
+    .map((f) => f.name);
+
+  // Block removals that would strand existing tickets. A section member is
+  // gone if it is absent from the new list and was not renamed away.
+  const statusNames = new Set(statuses.map((s) => s.name));
+  for (const s of current.statuses) {
+    if (statusNames.has(s.name) || s.name in statusRenames) continue;
+    const n = project.tickets.filter((t) => t.status === s.name).length;
+    if (n > 0) {
+      throw new MutationError(
+        `cannot remove status "${s.name}": ${n} ticket${n === 1 ? '' : 's'} still use it; move them first`,
+      );
+    }
+  }
+  const typeNames = new Set(types.map((t) => t.name));
+  for (const t of current.types) {
+    if (typeNames.has(t.name) || t.name in typeRenames) continue;
+    const n = project.tickets.filter((tk) => tk.type === t.name).length;
+    if (n > 0) {
+      throw new MutationError(
+        `cannot remove type "${t.name}": ${n} ticket${n === 1 ? '' : 's'} still use it`,
+      );
+    }
+  }
+  const prioSet = new Set(priorities);
+  for (const p of current.priorities) {
+    if (prioSet.has(p) || p in prioRenames) continue;
+    const n = project.tickets.filter((t) => prioFields.some((pf) => t.fields[pf] === p)).length;
+    if (n > 0) {
+      throw new MutationError(
+        `cannot remove priority "${p}": ${n} ticket${n === 1 ? '' : 's'} still use it`,
+      );
+    }
+  }
+
+  // Structural validation: the same errors the validator would report.
+  const issues = validateWorkflow(candidate, '.lovelace/workflow.yaml').filter(
+    (i) => i.severity === 'error',
+  );
+  if (issues.length > 0) {
+    throw new MutationError(issues.map((i) => i.message).join('; '), issues);
+  }
+
+  // Cascade renames into existing tickets: status, type and any priority value.
+  const renaming =
+    Object.keys(statusRenames).length +
+      Object.keys(typeRenames).length +
+      Object.keys(prioRenames).length >
+    0;
+  if (renaming) {
+    for (const ticket of project.tickets) {
+      const sets: Array<[string, string]> = [];
+      if (ticket.status in statusRenames) sets.push(['status', statusRenames[ticket.status]!]);
+      if (ticket.type in typeRenames) sets.push(['type', typeRenames[ticket.type]!]);
+      for (const pf of prioFields) {
+        const v = ticket.fields[pf];
+        if (typeof v === 'string' && v in prioRenames) sets.push([pf, prioRenames[v]!]);
+      }
+      if (sets.length === 0) continue;
+      const abs = join(root, ticket.path);
+      const parsed = parseFrontmatter(readFileSync(abs, 'utf8'));
+      const doc = parseDocument(parsed.raw);
+      for (const [key, value] of sets) doc.set(key, value);
+      doc.set('updated', isoNow(ctx));
+      writeFileSync(
+        abs,
+        `---\n${doc.toString({ lineWidth: 0, flowCollectionPadding: false })}---\n${parsed.body}`,
+      );
+    }
+    renameBoardOrderColumns(project.dir, statusRenames);
+  }
+
+  // Patch each schema node in place so comments and untouched sections survive.
+  const abs = join(project.dir, 'workflow.yaml');
+  const doc = parseDocument(readFileSync(abs, 'utf8'));
+  doc.set('types', candidate.types.map(compactType));
+  doc.set('statuses', candidate.statuses.map(compactStatus));
+  doc.set('transitions', candidate.transitions.map(compactTransition));
+  doc.set('priorities', [...candidate.priorities]);
+  doc.set('fields', candidate.fields.map(compactField));
+  // The automation rules are owned by the Automations editor, not this one, so
+  // leave the node untouched, only remapping the status and type names a rename
+  // changed. Editing the node in place preserves keys this editor does not
+  // model (for example a rule's `confirm` gate).
+  const automations = doc.get('on_transition', true);
+  if (!isSeq(automations)) {
+    doc.set('on_transition', candidate.on_transition);
+  } else if (Object.keys(statusRenames).length + Object.keys(typeRenames).length > 0) {
+    for (const item of automations.items) {
+      if (!isMap(item)) continue;
+      const when = item.get('when', true);
+      if (!isMap(when)) continue;
+      const to = when.get('to');
+      if (typeof to === 'string' && to in statusRenames) when.set('to', statusRenames[to]);
+      const from = when.get('from');
+      if (typeof from === 'string' && from in statusRenames) when.set('from', statusRenames[from]);
+      const type = when.get('type');
+      if (typeof type === 'string' && type in typeRenames) when.set('type', typeRenames[type]);
+    }
+  }
+  applyWorkflowFlow(doc);
+  writeFileSync(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
+
+  if (!ctx.skipReindex) reindex(root, ctx);
+}
+
+/**
+ * Renames the project (or edits other editable manifest fields). Only `name`
+ * is user-editable; `project_id`, `created`, `spec_version` and `paths` are
+ * managed by the tooling. Patches the name node in place so any comments and
+ * other keys in manifest.yaml survive.
+ */
+export async function writeManifest(
+  root: string,
+  changes: { name?: string },
+  ctx: MutationContext = {},
+): Promise<void> {
+  const project = loadProject(root);
+  const abs = join(project.dir, 'manifest.yaml');
+  const doc = parseDocument(readFileSync(abs, 'utf8'));
+  if (changes.name !== undefined) {
+    const name = String(changes.name).trim();
+    if (name === '') throw new MutationError('project name cannot be empty');
+    doc.set('name', name);
+  }
+  writeFileSync(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
+  if (!ctx.skipReindex) reindex(root, ctx);
+}
+
+/** Counts how many tickets, sessions and comments point at an actor id. */
+function countActorRefs(project: Project, id: string): number {
+  let n = 0;
+  for (const t of project.tickets) if (t.fields.assignee === id) n += 1;
+  for (const s of project.sessions) if (s.actor === id) n += 1;
+  for (const c of project.comments) if (c.actor === id) n += 1;
+  return n;
+}
+
+/**
+ * Replaces the project's actors (actors.yaml). Enforces the spec's rules
+ * (exactly one human, unique lowercase ids, a name per actor) and blocks
+ * removing an actor still referenced by a ticket assignee, a session or a
+ * comment, since that would break link integrity. Renaming an actor's id is
+ * not supported here: it would need to cascade into every reference, so the
+ * editor keeps ids stable and only adds, renames the display name, or removes
+ * an unreferenced actor.
+ */
+export async function writeActors(
+  root: string,
+  actors: unknown,
+  ctx: MutationContext = {},
+): Promise<Actor[]> {
+  const project = loadProject(root);
+  if (!Array.isArray(actors)) throw new MutationError('actors must be a list');
+
+  const next: Actor[] = [];
+  const ids = new Set<string>();
+  for (const raw of actors) {
+    const a = (raw ?? {}) as Partial<Actor>;
+    const id = typeof a.id === 'string' ? a.id.trim() : '';
+    const name = typeof a.name === 'string' ? a.name.trim() : '';
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
+      throw new MutationError(`actor id "${String(a.id ?? '')}" must be lowercase letters, digits and hyphens`);
+    }
+    if (name === '') throw new MutationError(`actor "${id}" needs a name`);
+    if (a.kind !== 'human' && a.kind !== 'agent') {
+      throw new MutationError(`actor "${id}" kind must be human or agent`);
+    }
+    if (ids.has(id)) throw new MutationError(`duplicate actor id "${id}"`);
+    ids.add(id);
+    next.push({ id, name, kind: a.kind });
+  }
+
+  if (next.filter((a) => a.kind === 'human').length !== 1) {
+    throw new MutationError('exactly one actor must have kind: human');
+  }
+
+  for (const a of project.actors) {
+    if (ids.has(a.id)) continue;
+    const refs = countActorRefs(project, a.id);
+    if (refs > 0) {
+      throw new MutationError(
+        `cannot remove actor "${a.id}": still referenced ${refs} time${refs === 1 ? '' : 's'} by tickets, sessions or comments; reassign them first`,
+      );
+    }
+  }
+
+  const abs = join(project.dir, 'actors.yaml');
+  const doc = parseDocument(readFileSync(abs, 'utf8'));
+  doc.set(
+    'actors',
+    next.map((a) => ({ id: a.id, name: a.name, kind: a.kind })),
+  );
   writeFileSync(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
   if (!ctx.skipReindex) reindex(root, ctx);
   return next;

@@ -66,3 +66,47 @@ describe('host ops: init configuration', () => {
     expect(statuses.map((s) => s.name)).toEqual(['inbox', 'shipped']);
   });
 });
+
+describe('host ops: rename_brief', () => {
+  it('renames a brief file in place and reindexes', async () => {
+    const root = fixture();
+    const res = await handle({ op: 'create_brief', root, dir: '.lovelace/briefs/domain', name: 'pricing' });
+    expect((res.created as string[])[0]).toBe('.lovelace/briefs/domain/pricing.md');
+    const renamed = await handle({
+      op: 'rename_brief',
+      root,
+      path: '.lovelace/briefs/domain/pricing.md',
+      name: 'pricing-model',
+    });
+    expect(renamed.renamed).toBe('.lovelace/briefs/domain/pricing-model.md');
+    expect(existsSync(join(root, '.lovelace/briefs/domain/pricing.md'))).toBe(false);
+    expect(existsSync(join(root, '.lovelace/briefs/domain/pricing-model.md'))).toBe(true);
+    const briefs = (renamed.index as { briefs: Array<{ path: string }> }).briefs;
+    expect(briefs.some((b) => b.path === '.lovelace/briefs/domain/pricing-model.md')).toBe(true);
+  });
+
+  it('refuses fixed names, bad names and collisions', async () => {
+    const root = fixture();
+    await expect(
+      handle({ op: 'rename_brief', root, path: '.lovelace/CONTEXT.md', name: 'other' }),
+    ).rejects.toThrow(/only renames files under briefs/);
+    await expect(
+      handle({ op: 'rename_brief', root, path: '.lovelace/briefs/domain/OVERVIEW.md', name: 'other' }),
+    ).rejects.toThrow(/fixed name/);
+    await expect(
+      handle({
+        op: 'rename_brief',
+        root,
+        path: '.lovelace/briefs/architecture/decisions/ADR-0001.md',
+        name: 'other',
+      }),
+    ).rejects.toThrow(/ADR filenames/);
+    await handle({ op: 'create_brief', root, dir: '.lovelace/briefs/domain', name: 'pricing' });
+    await expect(
+      handle({ op: 'rename_brief', root, path: '.lovelace/briefs/domain/pricing.md', name: 'bad name!' }),
+    ).rejects.toThrow(/letters, digits and hyphens/);
+    await expect(
+      handle({ op: 'rename_brief', root, path: '.lovelace/briefs/domain/pricing.md', name: 'OVERVIEW' }),
+    ).rejects.toThrow(/already exists/);
+  });
+});

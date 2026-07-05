@@ -2,12 +2,15 @@
 id: context
 type: brief
 summary: Lovelace is a local-first project management desktop app; this repository builds it and tracks its own work in .lovelace.
-updated: 2026-06-10T12:00:00Z
+updated: 2026-07-04T20:12:52Z
+review_by: 2026-07-16
 ---
 
 # Lovelace
 
 This repository builds Lovelace itself: a local-first project management desktop app for agent-heavy software development. Read `BRIEF.md` for what we are building and `SPEC.md` for the file format. From Phase 4 onward this repository dogfoods itself: work is tracked as tickets here.
+
+[[E-0001]] 
 
 ## Reading order
 

@@ -6,6 +6,7 @@ import {
   DigestIcon,
   DocsIcon,
   FolderIcon,
+  GraphIcon,
   InfoIcon,
   ListIcon,
   SearchIcon,
@@ -18,16 +19,18 @@ import { NewTicketModal } from '../components/NewTicketModal';
 import { SearchPalette } from '../components/SearchPalette';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { rememberRecent, useProject } from '../state/store';
+import { buildLinkResolver, wikiCandidates, type LinkResolver, type OpenLink } from '../lib/links';
 import type { IndexTicket, SearchHit, Snapshot } from '../lib/types';
 import { Automations } from './Automations';
 import { Board } from './Board';
 import { Briefs } from './Briefs';
+import { Graph } from './Graph';
 import { List } from './List';
 import { Sessions } from './Sessions';
 import { Workflow } from './Workflow';
 import { TicketDetail } from './TicketDetail';
 
-type NavKey = 'board' | 'list' | 'docs' | 'workflow' | 'sessions' | 'automations' | 'issues';
+type NavKey = 'board' | 'list' | 'docs' | 'graph' | 'workflow' | 'sessions' | 'automations' | 'issues';
 
 interface ProjectViewProps {
   root: string;
@@ -102,6 +105,13 @@ export function ProjectView({ root }: ProjectViewProps) {
     [snapshot],
   );
 
+  // Wiki-link plumbing, shared by every editor and read-only body in the app.
+  const resolveLink = useMemo<LinkResolver>(
+    () => (snapshot ? buildLinkResolver(snapshot) : () => null),
+    [snapshot],
+  );
+  const linkCandidates = useMemo(() => (snapshot ? wikiCandidates(snapshot) : []), [snapshot]);
+
   /** A status move shown immediately, confirmed (or rolled back) by core. */
   const moveOptimistically = (id: string, to: string) => (current: Snapshot): Snapshot => ({
     ...current,
@@ -141,6 +151,16 @@ export function ProjectView({ root }: ProjectViewProps) {
   const goto = (key: NavKey) => {
     setNav(key);
     setOpenTicket(null);
+  };
+
+  /** Follow a clicked wiki-link: a ticket opens its detail, a brief opens in Documentation. */
+  const openLink: OpenLink = (target) => {
+    if (target.kind === 'ticket') {
+      setOpenTicket(target.id);
+    } else {
+      setDocsFocus(target.path);
+      goto('docs');
+    }
   };
 
   const pickSearchHit = (hit: SearchHit) => {
@@ -228,6 +248,7 @@ export function ProjectView({ root }: ProjectViewProps) {
         <div className="nav-group">
           <div className="nav-section-head">Knowledge</div>
           {navButton('docs', <DocsIcon />, 'Documentation')}
+          {navButton('graph', <GraphIcon />, 'Graph')}
         </div>
 
         <div className="nav-sep" />
@@ -304,6 +325,9 @@ export function ProjectView({ root }: ProjectViewProps) {
             onBack={() => setOpenTicket(null)}
             onOpenTicket={setOpenTicket}
             onUpdate={guardedUpdate}
+            wikiCandidates={linkCandidates}
+            resolveLink={resolveLink}
+            onOpenLink={openLink}
             onComment={async (ticket, body) => {
               await apply((h) => h.addComment(root, ticket, humanActor, body));
             }}
@@ -342,6 +366,9 @@ export function ProjectView({ root }: ProjectViewProps) {
           <Briefs
             snapshot={snapshot}
             focusPath={docsFocus}
+            wikiCandidates={linkCandidates}
+            resolveLink={resolveLink}
+            onOpenLink={openLink}
             onSaveBody={async (path, body) => {
               await apply((h) => h.writeBrief(root, path, { body }));
             }}
@@ -351,11 +378,35 @@ export function ProjectView({ root }: ProjectViewProps) {
             onCreateBrief={async (dir, name, summary, createOverview) => {
               await apply((h) => h.createBrief(root, dir, name, summary, createOverview));
             }}
+            onRenameBrief={async (path, name) => {
+              await apply((h) => h.renameBrief(root, path, name));
+            }}
+          />
+        ) : nav === 'graph' ? (
+          <Graph
+            snapshot={snapshot}
+            onOpenBrief={(path) => {
+              setDocsFocus(path);
+              goto('docs');
+            }}
+            onSaveLayout={(layout) => {
+              void apply((h) => h.setGraphLayout(root, layout));
+            }}
           />
         ) : nav === 'sessions' ? (
-          <Sessions snapshot={snapshot} onOpenTicket={setOpenTicket} />
+          <Sessions
+            snapshot={snapshot}
+            onOpenTicket={setOpenTicket}
+            resolveLink={resolveLink}
+            onOpenLink={openLink}
+          />
         ) : nav === 'workflow' ? (
-          <Workflow snapshot={snapshot} />
+          <Workflow
+            snapshot={snapshot}
+            onSave={async (edit) => {
+              await apply((h) => h.writeWorkflow(root, edit));
+            }}
+          />
         ) : nav === 'automations' ? (
           <Automations
             snapshot={snapshot}
@@ -372,7 +423,7 @@ export function ProjectView({ root }: ProjectViewProps) {
               </span>
             </header>
             <div className="view-body">
-              <div className="glass-card">
+              <div className="panel">
                 {snapshot.issues.length === 0 && (
                   <EmptyState note="Everything validates" hint="No errors or warnings across the project." />
                 )}

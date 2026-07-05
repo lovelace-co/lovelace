@@ -88,7 +88,7 @@ Brief files other than ADRs are identified by their repository-relative path, an
 
 ## 4. Spec versioning
 
-This specification is versioned with semver. The current version is `1.3.0`.
+This specification is versioned with semver. The current version is `1.5.0`.
 
 - The manifest declares the spec version the project conforms to.
 - Tooling must read `manifest.yaml` before parsing anything else and must refuse to operate on a major version it does not know, with a clear error naming both versions.
@@ -97,6 +97,8 @@ This specification is versioned with semver. The current version is `1.3.0`.
 
 Changes by version:
 
+- `1.5.0`: adds the optional, machine-local `state/graph-layout.json` holding manual documentation-graph node positions (see 13). Gitignored and never required for correctness; absent positions fall back to the automatic layout.
+- `1.4.0`: adds optional wiki-links (`[[id]]`) in entity bodies and a derived `links` array in the index (see 7.1 and 11). Backward compatible: bodies without wiki-links are unaffected, and a project declaring an earlier version gains the index `links` section when reindexed by current tooling.
 - `1.3.0`: removes the cycle entity, the `C-` identifier prefix and the default `cycle` field. The `cycles/` directory is no longer part of the layout, and `cycle` is no longer a valid `refers_to` target. Projects declaring an earlier version that still carry cycle data will see validation errors against the removed constructs.
 - `1.2.0`: renames the status flags `wip`/`terminal` to `active`/`complete`, and adds optional human-readable `label` (statuses, types, fields) and `plural` (types). Display names are derived by Title-Casing the machine `name` when absent.
 - `1.1.0`: adds the optional, backward-compatible `board-order.yaml` (see 2.1). Projects declaring `1.0.0` remain valid.
@@ -218,6 +220,7 @@ Each field definition has:
 - `id` must match the filename (for ID-named files).
 - `created` and `updated` are ISO 8601 datetimes in UTC.
 - Frontmatter keys not defined by this spec or by `workflow.yaml` produce a warning.
+- Bodies are free Markdown and may contain wiki-links written `[[id]]`, where `id` is a ticket id or a brief id. The stored token is the stable id, so changing a target's displayed title never breaks the link; tools resolve the id to a title for display and to the index link graph (see 11). A token that does not resolve is shown verbatim and omitted from the graph.
 
 ### 7.2 Ticket
 
@@ -329,6 +332,8 @@ Exactly one actor must have `kind: human` in v1 (the solo developer). `assignee`
 
 `index/index.json` contains every entity's frontmatter plus its `summary` (for briefs) or `title` (for tickets), keyed by kind, sorted by ID (briefs by path). It is generated, gitignored and fully derivable. It must be deterministic: indexing unchanged input twice produces byte-identical output. It contains no timestamps of its own.
 
+The index also carries a `links` array: the wiki-link graph derived from ticket and brief bodies. Each entry is `{ source, target }`, both entity ids (a ticket id or a brief id). Entries are de-duplicated and sorted by `source` then `target`; unresolved tokens and self-links are excluded. Like the rest of the index it is fully derivable and deterministic.
+
 `index/BOARD.md` is a generated, committed Markdown board: tickets grouped by status in `workflow.yaml` column order, each row showing ID, title, type and assignee.
 
 ## 12. Transition automations
@@ -356,8 +361,9 @@ Gitignored, machine-local, never required for correctness:
 - `state/active_ticket` contains the active ticket ID, one line.
 - `state/counters/<prefix>` contains the last assigned number for that ID prefix.
 - `state/agent_instructions.json` contains automation instructions queued for the next agent session.
+- `state/graph-layout.json` contains manual node positions for the documentation graph: `{ "version": 1, "nodes": { "<id>": { "x": <number>, "y": <number> } } }`. A node without a saved position falls back to the automatic layout.
 
-Deleting `state/` loses only the active-ticket pointer and any queued automation instructions; counters are rebuilt by scanning existing IDs.
+Deleting `state/` loses only the active-ticket pointer, any queued automation instructions and the graph arrangement; counters are rebuilt by scanning existing IDs.
 
 ## 14. Validation summary
 

@@ -13,4 +13,4 @@ Orbit has three parts:
 - **Cache.** A flat directory of JSON files, one per location, replaced atomically.
 - **HTTP layer.** Read-only endpoints that serve from the cache and never call upstream inline.
 
-Decisions with lasting consequences are recorded in `decisions/` as ADRs.
+Decisions with lasting consequences are recorded in `decisions/` as ADRs, such as [[ADR-0001]].

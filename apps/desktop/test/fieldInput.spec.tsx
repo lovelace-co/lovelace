@@ -44,11 +44,15 @@ describe('FieldInput renders from the schema, not hard-coded fields', () => {
     expect(within(listbox).getByText('Urgent')).toBeTruthy();
   });
 
-  it('date becomes a date picker', () => {
-    renderField({ name: 'due', type: 'date' }, '2026-07-01');
-    const input = screen.getByLabelText('due') as HTMLInputElement;
-    expect(input.type).toBe('date');
-    expect(input.value).toBe('2026-07-01');
+  it('date becomes the app datepicker showing the locale-formatted date', () => {
+    const onChange = renderField({ name: 'due', type: 'date' }, '2026-07-01');
+    const trigger = screen.getByLabelText('due');
+    expect(trigger.textContent).toContain('July');
+    expect(trigger.textContent).toContain('2026');
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'due' });
+    fireEvent.click(within(dialog).getByText('15'));
+    expect(onChange).toHaveBeenCalledWith('2026-07-15');
   });
 
   it('number becomes a numeric input emitting numbers', () => {

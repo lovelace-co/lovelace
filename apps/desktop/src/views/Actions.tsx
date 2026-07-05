@@ -51,7 +51,7 @@ export function Actions({ snapshot, embedded = false }: ActionsProps) {
         className={embedded ? undefined : 'view-body'}
         style={{ ...(embedded ? { padding: '0.4rem 0 0' } : {}), display: 'grid', gap: '1rem' }}
       >
-        <section className="glass-card" style={{ padding: '0.8rem 0.9rem' }}>
+        <section className="panel" style={{ padding: '0.8rem 18px' }}>
           <h2 className="label" style={{ margin: '0 0 0.5rem' }}>
             Dry run
           </h2>
@@ -82,8 +82,8 @@ export function Actions({ snapshot, embedded = false }: ActionsProps) {
           {dryResult !== null && <pre className="digest-pre" style={{ padding: '0.6rem 0 0' }}>{dryResult}</pre>}
         </section>
 
-        <section className="glass-card">
-          <h2 className="label" style={{ padding: '0.8rem 0.9rem 0.2rem', margin: 0 }}>
+        <section className="panel">
+          <h2 className="label" style={{ padding: '0.8rem 18px 0.2rem', margin: 0 }}>
             History
           </h2>
           {log.trim() === '' ? (

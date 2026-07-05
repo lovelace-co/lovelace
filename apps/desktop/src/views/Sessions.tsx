@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
 import { Markdown } from '../lib/markdown';
 import { formatDateTimeShort } from '../lib/datetime';
+import type { LinkResolver, OpenLink } from '../lib/links';
 import { useHost } from '../state/store';
 import type { Snapshot } from '../lib/types';
 
 interface SessionsProps {
   snapshot: Snapshot;
   onOpenTicket: (id: string) => void;
+  resolveLink?: LinkResolver;
+  onOpenLink?: OpenLink;
 }
 
 function bodyOf(content: string): string {
@@ -16,7 +19,7 @@ function bodyOf(content: string): string {
 }
 
 /** Reverse-chronological session records with tickets, outcomes and commits. */
-export function Sessions({ snapshot, onOpenTicket }: SessionsProps) {
+export function Sessions({ snapshot, onOpenTicket, resolveLink, onOpenLink }: SessionsProps) {
   const host = useHost();
   const sessions = [...snapshot.index.sessions].sort((a, b) => b.id.localeCompare(a.id));
   const [open, setOpen] = useState<string | null>(null);
@@ -40,7 +43,7 @@ export function Sessions({ snapshot, onOpenTicket }: SessionsProps) {
         <span className="label">{sessions.length} records</span>
       </header>
       <div className="view-body">
-        <div className="glass-card">
+        <div className="panel">
           {sessions.length === 0 && (
             <EmptyState note="No sessions yet" hint="Agent sessions write a record here as they finish." />
           )}
@@ -74,7 +77,11 @@ export function Sessions({ snapshot, onOpenTicket }: SessionsProps) {
               </div>
               {open === session.id && (
                 <div style={{ padding: '0.4rem 0.2rem 0.2rem' }}>
-                  {body === null ? <p className="label">loading...</p> : <Markdown source={body} />}
+                  {body === null ? (
+                    <p className="label">loading...</p>
+                  ) : (
+                    <Markdown source={body} resolveLink={resolveLink} onOpenLink={onOpenLink} />
+                  )}
                 </div>
               )}
             </div>

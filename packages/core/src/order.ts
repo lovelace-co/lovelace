@@ -63,6 +63,26 @@ function writeBoardOrder(lovelaceDir: string, order: Record<string, string[]>): 
   writeFileSync(orderPath(lovelaceDir), doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
 }
 
+/**
+ * Renames column keys when statuses are renamed, so a column's manual order
+ * follows its status instead of being silently dropped. `renames` maps old
+ * status name to new; entries whose old key is absent are ignored.
+ */
+export function renameBoardOrderColumns(lovelaceDir: string, renames: Record<string, string>): void {
+  const entries = Object.entries(renames).filter(([from, to]) => from !== to);
+  if (entries.length === 0) return;
+  const order = readBoardOrder(lovelaceDir);
+  let changed = false;
+  for (const [from, to] of entries) {
+    if (from in order) {
+      order[to] = order[from]!;
+      delete order[from];
+      changed = true;
+    }
+  }
+  if (changed) writeBoardOrder(lovelaceDir, order);
+}
+
 /** Removes ticket ids from every column (used when tickets are deleted or moved). */
 export function pruneFromBoardOrder(lovelaceDir: string, ids: string[]): void {
   if (ids.length === 0) return;

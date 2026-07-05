@@ -34,8 +34,10 @@ body {
   transition: background 300ms ease, color 300ms ease;
 }
 
+/* Selection is one of the signal's few sanctioned uses: strong enough to
+   read at a glance, translucent so the text keeps its own colour. */
 ::selection {
-  background: var(--wash);
+  background: var(--selection);
 }
 
 button {
@@ -101,7 +103,9 @@ a {
   padding-left: 10px;
 }
 
-/* ---------- actions: quiet text, the signal on intent ---------- */
+/* ---------- actions: capsules to press, the signal on intent ----------
+   The species rule (ADR-0006): round ends say press, and nothing else in
+   the app is this shape. Today's tones stay; every press punches down. */
 
 .btn {
   display: inline-flex;
@@ -109,10 +113,16 @@ a {
   gap: 8px;
   font-size: 13px;
   font-weight: 500;
-  padding: 9px 14px;
-  border-radius: var(--radius-card);
-  transition: background 140ms ease, color 140ms ease;
+  height: 32px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-pill);
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift),
+    transform var(--dur-press) var(--punch-step);
   white-space: nowrap;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn-primary {
@@ -134,15 +144,34 @@ a {
   color: var(--ink);
 }
 
+/* Tertiary: typographic at rest; the capsule materialises on approach. */
 .btn-ghost {
+  position: relative;
+  isolation: isolate;
   background: transparent;
   color: var(--slate);
-  padding: 7px 10px;
+  padding: 0 10px;
+}
+
+.btn-ghost::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--radius-pill);
+  background: var(--raise);
+  opacity: 0;
+  transform: scale(0.94);
+  transition: opacity var(--dur-colour) var(--swift), transform var(--dur-colour) var(--swift);
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background: var(--raise);
   color: var(--ink);
+}
+
+.btn-ghost:hover:not(:disabled)::before {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .btn:disabled {
@@ -154,8 +183,7 @@ a {
 
 .btn-icon {
   padding: 0;
-  width: 34px;
-  height: 34px;
+  width: 32px;
   justify-content: center;
 }
 
@@ -169,13 +197,16 @@ a {
   white-space: nowrap;
 }
 
-/* ---------- pills ---------- */
+/* ---------- priorities and type tags: a dot, not a chip ----------
+   Metadata beside other metadata is tinted text with a leading dot; the
+   chip form survives only standing alone (for example the stale badge). */
 
-.pill {
+.prio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--size-util);
-  line-height: 1;
-  padding: 4px 11px;
-  border-radius: var(--radius-card);
+  font-weight: 500;
   white-space: nowrap;
   flex-shrink: 1;
   min-width: 0;
@@ -183,12 +214,24 @@ a {
   text-overflow: ellipsis;
 }
 
-.pill.epic { background: var(--pill-epic-bg); color: var(--pill-epic-fg); }
-.pill.high { background: var(--pill-high-bg); color: var(--pill-high-fg); }
-.pill.med { background: var(--pill-med-bg); color: var(--pill-med-fg); }
-.pill.low { background: var(--pill-low-bg); color: var(--pill-low-fg); }
+.prio::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
 
-/* ---------- forms: tone, not lines ---------- */
+.prio.epic { color: var(--pill-epic-fg); }
+.prio.high { color: var(--pill-high-fg); }
+.prio.med { color: var(--pill-med-fg); }
+.prio.low { color: var(--pill-low-fg); }
+
+/* ---------- forms: wells to type into, tone, not lines ----------
+   The well is the typing species: soft 9px corners, clearly not a capsule.
+   It brightens when the cursor arrives; focus keeps the full cyan ring. */
 
 .form-input,
 .form-select,
@@ -199,9 +242,9 @@ a {
   color: var(--ink);
   background: var(--raise);
   border: 0;
-  border-radius: var(--radius-card);
-  padding: 8px 12px;
-  transition: background 140ms ease;
+  border-radius: var(--radius-well);
+  padding: 10px var(--sp-3);
+  transition: background var(--dur-colour) var(--swift);
 }
 
 .form-input:hover:not(:disabled):not([readonly]),
@@ -215,7 +258,7 @@ a {
 .form-textarea:focus {
   outline: 1.5px solid var(--current);
   outline-offset: 0;
-  background: var(--raise);
+  background: var(--raise-2);
 }
 
 .form-input::placeholder,
@@ -250,6 +293,68 @@ a {
 
 input[type='checkbox'] {
   accent-color: var(--current);
+}
+
+/* ---------- the hole checkbox: checking punches the card ----------
+   A rimmed hole whose centre punches in when checked. The input is real
+   (label, focus, keyboard); the hole is its visible face. */
+
+.hole-check {
+  position: relative;
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.hole-check input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.hole-check input:disabled {
+  cursor: not-allowed;
+}
+
+.hole-check .hole-mark {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--hole-rim);
+  transition: box-shadow var(--dur-colour) var(--swift);
+}
+
+.hole-check .hole-mark::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: var(--current);
+  transform: scale(0);
+  transition: transform var(--dur-colour) var(--swift);
+}
+
+.hole-check:hover input:not(:disabled) + .hole-mark {
+  box-shadow: inset 0 0 0 1.5px var(--slate);
+}
+
+.hole-check input:checked + .hole-mark::after {
+  transform: scale(1);
+}
+
+.hole-check input:focus-visible + .hole-mark {
+  outline: 1.5px solid var(--current);
+  outline-offset: 2px;
+}
+
+.hole-check input:disabled + .hole-mark {
+  opacity: 0.55;
 }
 
 .field-row {
@@ -928,16 +1033,16 @@ input[type='checkbox'] {
 
 /* ---------- panels: tone steps, radius, never lines ---------- */
 
-.glass-card {
+.panel {
   background: var(--raise);
   border-radius: var(--radius-region);
 }
 
-.glass-card-hover {
+.panel-hover {
   transition: background 180ms ease;
 }
 
-.glass-card-hover:hover {
+.panel-hover:hover {
   background: var(--wash);
 }
 
@@ -1244,13 +1349,13 @@ input[type='checkbox'] {
   color: var(--slate);
   white-space: pre-wrap;
   margin: 0;
-  padding: 22px 26px;
+  padding: 22px 18px;
 }
 
 .issue-row {
   display: flex;
   gap: 14px;
-  padding: 9px 26px;
+  padding: 9px 18px;
   font-size: var(--size-util);
   color: var(--slate);
 }
@@ -1671,7 +1776,7 @@ input[type='checkbox'] {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 14px 26px;
+  padding: 14px 18px;
   border-radius: var(--radius-card);
 }
 
@@ -1953,7 +2058,7 @@ input[type='checkbox'] {
   align-items: flex-start;
   text-align: left;
   gap: 11px;
-  padding: 22px 26px;
+  padding: 22px 18px;
 }
 
 .empty-note {
@@ -2340,6 +2445,37 @@ input[type='checkbox'] {
   margin: 10px 0;
 }
 
+/* ---------- wiki-links: inline cross-references ---------- */
+
+/* The host span the decorator mounts into stays inline in the text flow. */
+.wikilink-host {
+  display: inline;
+}
+
+/* A resolved link: a quiet cyan-tinted chip carrying the one signal. Used both
+   by the editor decorator (a button) and the read-only renderer. */
+.wikilink {
+  font: inherit;
+  color: var(--current);
+  background: var(--wash);
+  border: 0;
+  border-radius: 4px;
+  padding: 0 6px;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.wikilink:hover:not(.broken) {
+  background: var(--wash-2);
+}
+
+/* An unresolved token reads as raw source, warm and inert. */
+.wikilink.broken {
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  cursor: default;
+}
+
 /* ---------- the slash menu and drag handle ---------- */
 
 .slash-menu {
@@ -2375,6 +2511,51 @@ input[type='checkbox'] {
   font-family: var(--font-mono);
   font-size: var(--size-util);
   color: var(--pop-soft);
+}
+
+/* The `[[` link menu: a wider popover whose rows stack a title over a hint. */
+.wiki-menu {
+  min-width: 280px;
+}
+
+.wiki-item {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 3px;
+}
+
+.wiki-item-main {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+}
+
+.wiki-item-kind {
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pop-soft);
+}
+
+.wiki-item-kind.ticket {
+  color: var(--pop-current);
+}
+
+.wiki-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiki-item-hint {
+  font-size: var(--size-util);
+  color: var(--pop-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .drag-handle {
@@ -2438,15 +2619,16 @@ input[type='checkbox'] {
   flex: 1;
 }
 
+/* Choosing is a well with a caret: the well species, never a capsule. */
 .dropdown-trigger {
   font-size: 13px;
   font-weight: 500;
   color: var(--slate);
   background: var(--raise);
-  border-radius: var(--radius-card);
-  padding: 9px 14px;
+  border-radius: var(--radius-well);
+  padding: 10px var(--sp-3);
   max-width: 100%;
-  transition: background 140ms ease, color 140ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .dropdown-trigger:hover:not(:disabled) {
@@ -2565,6 +2747,175 @@ input[type='checkbox'] {
   flex-shrink: 0;
 }
 
+/* ---------- the datepicker ---------- */
+
+/* The date trigger is a chooser: the well species, matching the dropdown. */
+.datepicker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--raise);
+  border-radius: var(--radius-well);
+  padding: 10px var(--sp-3);
+  white-space: nowrap;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
+}
+
+.datepicker-trigger svg {
+  color: var(--mist);
+  flex-shrink: 0;
+}
+
+.datepicker-trigger.empty {
+  color: var(--mist);
+}
+
+.datepicker-trigger:hover:not(:disabled) {
+  background: var(--raise-2);
+  color: var(--ink);
+}
+
+.datepicker-trigger.open {
+  background: var(--wash);
+  color: var(--current);
+}
+
+.datepicker-trigger.open svg {
+  color: var(--current);
+}
+
+.datepicker-trigger:disabled {
+  background: var(--band);
+  color: var(--mist);
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* The calendar floats on the inverted panel palette, kept airy: roomy
+   padding, a generous head, round day cells with space around them. */
+.datepicker-panel {
+  position: fixed;
+  z-index: 70;
+  background: var(--pop-bg);
+  color: var(--pop-ink);
+  border-radius: var(--radius-region);
+  padding: 22px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
+  user-select: none;
+}
+
+.datepicker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px 16px;
+}
+
+.datepicker-month {
+  font-size: var(--size-body);
+  font-weight: 600;
+}
+
+.datepicker-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.datepicker-nav button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-card);
+  color: var(--pop-soft);
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.datepicker-nav button:hover {
+  background: var(--pop-wash);
+  color: var(--pop-ink);
+}
+
+.datepicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 40px);
+  justify-items: center;
+  row-gap: 3px;
+}
+
+.datepicker-weekday {
+  font-size: var(--size-util);
+  color: var(--pop-soft);
+  padding-bottom: 10px;
+}
+
+.datepicker-day {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--pop-ink);
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.datepicker-day:hover {
+  background: var(--pop-wash);
+}
+
+.datepicker-day.selected {
+  background: var(--pop-wash);
+  color: var(--pop-current);
+  font-weight: 600;
+}
+
+/* Today: a punched hole beneath the number, never a fill. */
+.datepicker-day.today::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--pop-current);
+}
+
+.datepicker-foot {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 4px 0;
+}
+
+.datepicker-action {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pop-soft);
+  padding: 6px 10px;
+  border-radius: var(--radius-card);
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.datepicker-action:hover:not(:disabled) {
+  background: var(--pop-wash);
+  color: var(--pop-ink);
+}
+
+.datepicker-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* Larger icons throughout. */
 .side-nav .nav-item svg {
   width: 17px;
@@ -2581,21 +2932,111 @@ input[type='checkbox'] {
   height: 15px;
 }
 
-/* Briefs properties as a top strip above the editor. */
-.props-strip {
+/* ---------- documentation page ---------- */
+
+/* The document's title is its filename; the text shares the editor's
+   left edge (the panel's 18px inset), so the input's padding carries it. */
+.doc-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 14px;
-  padding: 0 0 16px;
+  padding: 2px 0 14px;
 }
 
-.props-strip .form-input {
+.doc-title {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--size-title);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
   background: transparent;
-  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-card);
+  padding: 6px 18px;
+  transition: background 140ms ease;
 }
 
-.props-strip .form-input:hover {
+.doc-title:hover:not(:disabled) {
   background: var(--raise);
+}
+
+.doc-title:focus {
+  outline: 1.5px solid var(--current);
+  outline-offset: 0;
+  background: var(--raise);
+}
+
+/* Locked names (CONTEXT, OVERVIEW, ADRs) look like their editable peers. */
+.doc-title:disabled {
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
+  opacity: 1;
+}
+
+.doc-head .id-chip {
+  padding-right: 18px;
+}
+
+/* No horizontal padding: the fields sit on the same left and right edges as
+   the body card above, so the summary box lines up under it. */
+.doc-details {
+  padding: 28px 0 0;
+}
+
+.doc-details-grid {
+  display: flex;
+  align-items: flex-start;
+  gap: 44px;
+}
+
+.doc-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* The summary takes the room; the review date holds a fixed column so its
+   hint wraps instead of inflating the field and squeezing the summary. */
+.doc-details-grid .doc-field:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.doc-field-review {
+  flex: 0 0 15rem;
+}
+
+/* The date trigger fills its column (width: 100% is passed in) but never
+   collapses narrower than this. */
+.doc-field-review .datepicker-trigger {
+  min-width: 11rem;
+}
+
+.doc-field-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--size-body);
+  font-weight: 500;
+  color: var(--slate);
+}
+
+.doc-field-hint {
+  margin: 0;
+  font-size: var(--size-util);
+  color: var(--mist);
+  line-height: 1.55;
+  max-width: 34rem;
+}
+
+.doc-summary {
+  min-height: 4.4rem;
+  resize: none;
+  font-size: var(--size-body);
+  line-height: 1.6;
 }
 
 /* ---------- destructive affordances ---------- */
@@ -3950,5 +4391,122 @@ input[type='checkbox'] {
 .cond-add {
   align-self: flex-start;
   color: var(--mist);
+}
+
+/* ---------- the documentation graph ---------- */
+
+/* A recessed canvas that fills the pane below the header. */
+.graph-stage {
+  position: relative;
+  flex: 1;
+  min-height: 24rem;
+  margin: 0 56px 44px;
+  border-radius: var(--radius-region);
+  background: var(--well);
+  overflow: hidden;
+  /* WebKit (Tauri's webview) needs the prefix, or dragging the canvas selects
+     the node labels and paints the whole surface with a selection highlight. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.graph-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.graph-canvas:active {
+  cursor: grabbing;
+}
+
+/* Edges: faint threads that light up cyan around a hovered node. */
+.graph-edge {
+  stroke: var(--slate);
+  stroke-width: 1.4;
+  opacity: 0.22;
+  transition: opacity 140ms ease, stroke 140ms ease;
+}
+
+.graph-edge.active {
+  stroke: var(--current);
+  opacity: 0.85;
+}
+
+.graph-edge.dim {
+  opacity: 0.07;
+}
+
+.graph-node {
+  cursor: pointer;
+}
+
+.graph-dot {
+  fill: var(--slate);
+  transition: fill 140ms ease, opacity 140ms ease;
+}
+
+.graph-node:hover .graph-dot,
+.graph-node.active .graph-dot {
+  fill: var(--current);
+}
+
+.graph-node.near .graph-dot {
+  fill: var(--current-soft);
+}
+
+.graph-node.dim {
+  opacity: 0.28;
+}
+
+.graph-label {
+  fill: var(--slate);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  /* A halo so labels stay legible over threads. */
+  paint-order: stroke;
+  stroke: var(--well);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.graph-node:hover .graph-label,
+.graph-node.active .graph-label {
+  fill: var(--ink);
+}
+
+/* Zoom and reset controls, floated in the corner. */
+.graph-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.graph-ctl {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--slate);
+  background: var(--raise);
+  border-radius: var(--radius-card);
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.graph-ctl:hover {
+  background: var(--wash);
+  color: var(--current);
 }
 

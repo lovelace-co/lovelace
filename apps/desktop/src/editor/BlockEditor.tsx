@@ -36,14 +36,23 @@ import {
 } from 'lexical';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from '../components/Dropdown';
+import type { LinkResolver, OpenLink, WikiCandidate } from '../lib/links';
 import { buildTransformers, EDITOR_NODES, prepareMarkdown, reconcile } from './convert';
 import { DragHandlePlugin } from './DragHandlePlugin';
 import { SlashMenuPlugin } from './SlashMenu';
+import { WikiLinkContext, type WikiLinkController } from './WikiLinkNode';
+import { WikiMenuPlugin } from './WikiMenu';
 
 interface BlockEditorProps {
   source: string;
   onChange: (next: string) => void;
   readOnly?: boolean;
+  /** Linkable entities for the `[[` menu. Omit to disable link insertion. */
+  wikiCandidates?: WikiCandidate[];
+  /** Resolves `[[id]]` to a current title/target for rendering a link chip. */
+  resolveLink?: LinkResolver;
+  /** Opens a clicked wiki-link. */
+  onOpenLink?: OpenLink;
   /** Test hook: receives the editor instance once mounted. */
   onReady?: (editor: LexicalEditor) => void;
 }
@@ -74,12 +83,24 @@ const THEME = {
  * toolbar, inline Notion editing, markdown shortcuts, and the byte-reuse
  * reconciler keeping unedited blocks byte-identical on save.
  */
-export function BlockEditor({ source, onChange, readOnly = false, onReady }: BlockEditorProps) {
+export function BlockEditor({
+  source,
+  onChange,
+  readOnly = false,
+  wikiCandidates,
+  resolveLink,
+  onOpenLink,
+  onReady,
+}: BlockEditorProps) {
   const prepared = useMemo(() => prepareMarkdown(source), [source]);
   const transformers = useMemo(() => buildTransformers(prepared.sources), [prepared.sources]);
   const lastEmitted = useRef<string | null>(null);
   const idle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [anchorElem, setAnchorElem] = useState<HTMLElement | null>(null);
+  const wikiController = useMemo<WikiLinkController>(
+    () => ({ resolve: resolveLink ?? (() => null), onOpen: onOpenLink ?? (() => undefined) }),
+    [resolveLink, onOpenLink],
+  );
 
   const initialConfig = {
     namespace: 'lovelace',
@@ -110,35 +131,38 @@ export function BlockEditor({ source, onChange, readOnly = false, onReady }: Blo
 
   return (
     <LexicalComposer initialConfig={initialConfig}>
-      <div className={`lexical-shell${readOnly ? ' read-only' : ''}`} data-testid="block-editor">
-        {!readOnly && <Toolbar />}
-        <RichTextPlugin
-          contentEditable={
-            <div className="lexical-scroller" ref={(el) => setAnchorElem(el)}>
-              <ContentEditable className="lexical-content" aria-label="document body" />
-            </div>
-          }
-          placeholder={<div className="lexical-placeholder">Type, or press / for blocks</div>}
-          ErrorBoundary={LexicalErrorBoundary}
-        />
-        {!readOnly && <SlashMenuPlugin />}
-        {!readOnly && <DragHandlePlugin anchorElem={anchorElem} />}
-        <HistoryPlugin />
-        <ListPlugin />
-        <CheckListPlugin />
-        <LinkPlugin />
-        <TabIndentationPlugin />
-        <MarkdownShortcutPlugin transformers={transformers} />
-        <OnChangePlugin
-          ignoreSelectionChange
-          onChange={(_state, editor) => {
-            if (readOnly) return;
-            if (idle.current) clearTimeout(idle.current);
-            idle.current = setTimeout(() => flush(editor), 600);
-          }}
-        />
-        <SyncPlugin source={source} prepared={prepared.markdown} transformers={transformers} lastEmitted={lastEmitted} flush={flush} onReady={onReady} />
-      </div>
+      <WikiLinkContext.Provider value={wikiController}>
+        <div className={`lexical-shell${readOnly ? ' read-only' : ''}`} data-testid="block-editor">
+          {!readOnly && <Toolbar />}
+          <RichTextPlugin
+            contentEditable={
+              <div className="lexical-scroller" ref={(el) => setAnchorElem(el)}>
+                <ContentEditable className="lexical-content" aria-label="document body" />
+              </div>
+            }
+            placeholder={<div className="lexical-placeholder">Type, or press / for blocks</div>}
+            ErrorBoundary={LexicalErrorBoundary}
+          />
+          {!readOnly && <SlashMenuPlugin />}
+          {!readOnly && wikiCandidates && <WikiMenuPlugin candidates={wikiCandidates} />}
+          {!readOnly && <DragHandlePlugin anchorElem={anchorElem} />}
+          <HistoryPlugin />
+          <ListPlugin />
+          <CheckListPlugin />
+          <LinkPlugin />
+          <TabIndentationPlugin />
+          <MarkdownShortcutPlugin transformers={transformers} />
+          <OnChangePlugin
+            ignoreSelectionChange
+            onChange={(_state, editor) => {
+              if (readOnly) return;
+              if (idle.current) clearTimeout(idle.current);
+              idle.current = setTimeout(() => flush(editor), 600);
+            }}
+          />
+          <SyncPlugin source={source} prepared={prepared.markdown} transformers={transformers} lastEmitted={lastEmitted} flush={flush} onReady={onReady} />
+        </div>
+      </WikiLinkContext.Provider>
     </LexicalComposer>
   );
 }

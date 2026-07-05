@@ -1,7 +1,8 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { loadProject, buildIndex, stringifyIndex, buildBoard, writeIndex } from '../src/index.js';
-import { tempFixture } from './helpers.js';
+import { loadProject, buildIndex, buildLinks, stringifyIndex, buildBoard, writeIndex } from '../src/index.js';
+import type { LinkEdge } from '../src/index.js';
+import { corrupt, tempFixture } from './helpers.js';
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -54,6 +55,40 @@ describe('index.json', () => {
     const index = buildIndex(loadProject(root)) as { tickets: Array<{ id: string; fields: Record<string, unknown> }> };
     const bug = index.tickets.find((t) => t.id === 'T-0004');
     expect(bug?.fields.environment).toBe('staging');
+  });
+});
+
+describe('link graph', () => {
+  it('derives resolved wiki-links from bodies, sorted and deterministic', () => {
+    const root = fixture();
+    const links = buildLinks(loadProject(root));
+    expect(links).toEqual([
+      { source: 'architecture-overview', target: 'ADR-0001' },
+      { source: 'context', target: 'architecture-overview' },
+      { source: 'context', target: 'conventions-overview' },
+      { source: 'context', target: 'domain-overview' },
+      { source: 'decisions-overview', target: 'ADR-0001' },
+      { source: 'T-0002', target: 'architecture-overview' },
+    ]);
+    // Stable across reloads.
+    expect(buildLinks(loadProject(root))).toEqual(links);
+  });
+
+  it('rides in the index under a links key', () => {
+    const root = fixture();
+    const index = buildIndex(loadProject(root)) as { links: LinkEdge[] };
+    expect(index.links).toContainEqual({ source: 'context', target: 'architecture-overview' });
+    // Links are the last key, keeping the index key order fixed.
+    expect(Object.keys(index).at(-1)).toBe('links');
+  });
+
+  it('drops unresolved tokens, self-links and duplicates', () => {
+    const root = fixture();
+    corrupt(root, '.lovelace/briefs/domain/OVERVIEW.md', (t) =>
+      `${t}\n\nSee [[no-such-brief]], [[domain-overview]] (self) and [[architecture-overview]] twice: [[architecture-overview]].\n`,
+    );
+    const links = buildLinks(loadProject(root)).filter((l) => l.source === 'domain-overview');
+    expect(links).toEqual([{ source: 'domain-overview', target: 'architecture-overview' }]);
   });
 });
 

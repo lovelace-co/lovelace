@@ -26,6 +26,27 @@ export interface Workflow {
   }>;
 }
 
+export type WorkflowType = Workflow['types'][number];
+export type WorkflowStatus = Workflow['statuses'][number];
+export type WorkflowTransition = Workflow['transitions'][number];
+
+/** Old-to-new machine name maps so a rename cascades to existing data. */
+export interface WorkflowRenames {
+  statuses?: Record<string, string>;
+  types?: Record<string, string>;
+  priorities?: Record<string, string>;
+}
+
+/** A workflow-editor save: each present section replaces its counterpart. */
+export interface WorkflowEdit {
+  types?: WorkflowType[];
+  statuses?: WorkflowStatus[];
+  transitions?: WorkflowTransition[];
+  priorities?: string[];
+  fields?: FieldDef[];
+  renames?: WorkflowRenames;
+}
+
 export interface Actor {
   id: string;
   name: string;
@@ -69,6 +90,15 @@ export interface IndexComment {
   path: string;
 }
 
+/** One derived wiki-link edge: `source` and `target` are entity ids. */
+export interface LinkEdge {
+  source: string;
+  target: string;
+}
+
+/** Persisted graph node positions, keyed by node id (machine-local view state). */
+export type GraphLayout = Record<string, { x: number; y: number }>;
+
 export interface ProjectIndex {
   spec_version: string;
   project: { id: string; name: string };
@@ -76,6 +106,8 @@ export interface ProjectIndex {
   briefs: IndexBrief[];
   sessions: IndexSession[];
   comments: IndexComment[];
+  /** The wiki-link graph derived from ticket and brief bodies. */
+  links: LinkEdge[];
 }
 
 export interface Issue {
@@ -110,6 +142,8 @@ export interface Snapshot {
   activeTicket: string | null;
   /** Manual board ordering per status column; absent columns fall back to index order. */
   boardOrder?: Record<string, string[]>;
+  /** Manual graph node positions; nodes absent here fall back to the force layout. */
+  graphLayout?: GraphLayout;
 }
 
 export interface SearchHit {

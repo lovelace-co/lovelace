@@ -1,5 +1,5 @@
 import { Document, isMap, isSeq } from 'yaml';
-import type { StatusDef, TransitionDef, Workflow } from './types.js';
+import type { FieldDef, StatusDef, TransitionDef, TypeDef, Workflow } from './types.js';
 
 /**
  * The default workflow as structured data. This is the single source of
@@ -52,7 +52,7 @@ export function permissiveTransitions(statuses: StatusDef[]): TransitionDef[] {
 }
 
 /** Drops empty optional keys so the serialised field is minimal. */
-function compactField(field: Workflow['fields'][number]): Record<string, unknown> {
+export function compactField(field: FieldDef): Record<string, unknown> {
   return {
     name: field.name,
     type: field.type,
@@ -67,33 +67,38 @@ function compactField(field: Workflow['fields'][number]): Record<string, unknown
   };
 }
 
-/**
- * Serialises a Workflow to workflow.yaml text. Object lists render in block
- * style; scalar arrays (priorities, transition targets, enum values, ref
- * targets) render in compact flow style to match the project's house style.
- * The output parses back through loadWorkflow and passes validateWorkflow.
- */
-export function serializeWorkflow(workflow: Workflow): string {
-  const obj = {
-    types: workflow.types.map((t) => ({
-      name: t.name,
-      id_prefix: t.id_prefix,
-      ...(t.label ? { label: t.label } : {}),
-      ...(t.plural ? { plural: t.plural } : {}),
-    })),
-    statuses: workflow.statuses.map((s) => ({
-      name: s.name,
-      ...(s.active ? { active: true } : {}),
-      ...(s.complete ? { complete: true } : {}),
-      ...(s.label ? { label: s.label } : {}),
-    })),
-    transitions: workflow.transitions.map((t) => ({ from: t.from, to: [...t.to] })),
-    priorities: [...workflow.priorities],
-    fields: workflow.fields.map(compactField),
-    on_transition: workflow.on_transition ?? [],
+/** Drops empty optional keys so the serialised type is minimal. */
+export function compactType(type: TypeDef): Record<string, unknown> {
+  return {
+    name: type.name,
+    id_prefix: type.id_prefix,
+    ...(type.label ? { label: type.label } : {}),
+    ...(type.plural ? { plural: type.plural } : {}),
   };
+}
 
-  const doc = new Document(obj);
+/** Drops empty optional keys so the serialised status is minimal. */
+export function compactStatus(status: StatusDef): Record<string, unknown> {
+  return {
+    name: status.name,
+    ...(status.active ? { active: true } : {}),
+    ...(status.complete ? { complete: true } : {}),
+    ...(status.label ? { label: status.label } : {}),
+  };
+}
+
+/** A transition with its target list copied so callers cannot alias it. */
+export function compactTransition(t: TransitionDef): { from: string; to: string[] } {
+  return { from: t.from, to: [...t.to] };
+}
+
+/**
+ * Renders the scalar arrays (priorities, transition targets, enum values, ref
+ * and applies_to targets) and each automation's `when` map in compact flow
+ * style, matching the project's house style. Applied to any Document whose
+ * shape is workflow.yaml, whether freshly built or patched in place.
+ */
+export function applyWorkflowFlow(doc: Document): void {
   const flow = (node: unknown) => {
     if (isSeq(node)) (node as { flow?: boolean }).flow = true;
   };
@@ -113,6 +118,33 @@ export function serializeWorkflow(workflow: Workflow): string {
       }
     }
   }
+  const automations = doc.get('on_transition', true);
+  if (isSeq(automations)) {
+    for (const item of automations.items) {
+      if (isMap(item)) {
+        const when = item.get('when', true);
+        if (isMap(when)) (when as { flow?: boolean }).flow = true;
+      }
+    }
+  }
+}
 
+/**
+ * Serialises a Workflow to workflow.yaml text. Object lists render in block
+ * style; scalar arrays render in compact flow style (see applyWorkflowFlow).
+ * The output parses back through loadWorkflow and passes validateWorkflow.
+ */
+export function serializeWorkflow(workflow: Workflow): string {
+  const obj = {
+    types: workflow.types.map(compactType),
+    statuses: workflow.statuses.map(compactStatus),
+    transitions: workflow.transitions.map(compactTransition),
+    priorities: [...workflow.priorities],
+    fields: workflow.fields.map(compactField),
+    on_transition: workflow.on_transition ?? [],
+  };
+
+  const doc = new Document(obj);
+  applyWorkflowFlow(doc);
   return doc.toString({ lineWidth: 0, flowCollectionPadding: false });
 }

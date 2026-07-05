@@ -7,6 +7,7 @@ import { formatDateTime, formatDateTimeShort } from '../lib/datetime';
 import { fieldLabel, statusLabel, titleCase, typeLabel } from '../lib/format';
 import { STATUS_HUE_CSS, statusHue } from '../lib/loom';
 import { Markdown } from '../lib/markdown';
+import type { LinkResolver, OpenLink, WikiCandidate } from '../lib/links';
 import { useHost } from '../state/store';
 import type { Snapshot } from '../lib/types';
 import { fieldsFor } from '../lib/types';
@@ -19,6 +20,10 @@ interface TicketDetailProps {
   onUpdate: (id: string, changes: Record<string, unknown>) => Promise<void>;
   onComment: (ticket: string, body: string) => Promise<void>;
   onSaveBody?: (id: string, body: string) => Promise<void>;
+  /** Wiki-link plumbing for the body editor, comment composer and read views. */
+  wikiCandidates?: WikiCandidate[];
+  resolveLink?: LinkResolver;
+  onOpenLink?: OpenLink;
 }
 
 function frontmatterAndBody(content: string): string {
@@ -26,7 +31,18 @@ function frontmatterAndBody(content: string): string {
   return parts.length >= 3 ? parts.slice(2).join('---').trim() : content;
 }
 
-export function TicketDetail({ snapshot, ticketId, onBack, onOpenTicket, onUpdate, onComment, onSaveBody }: TicketDetailProps) {
+export function TicketDetail({
+  snapshot,
+  ticketId,
+  onBack,
+  onOpenTicket,
+  onUpdate,
+  onComment,
+  onSaveBody,
+  wikiCandidates,
+  resolveLink,
+  onOpenLink,
+}: TicketDetailProps) {
   const host = useHost();
   const ticket = snapshot.index.tickets.find((t) => t.id === ticketId);
   const [body, setBody] = useState<string | null>(null);
@@ -254,7 +270,7 @@ export function TicketDetail({ snapshot, ticketId, onBack, onOpenTicket, onUpdat
       {error && <div className="banner">{error}</div>}
       <div className="detail-grid">
         <div>
-          <div className="glass-card" style={{ padding: '16px 18px 18px' }}>
+          <div className="panel" style={{ padding: '16px 18px 18px' }}>
             {body === null ? (
               <p className="label body-prose">loading...</p>
             ) : editingBody ? (
@@ -267,7 +283,13 @@ export function TicketDetail({ snapshot, ticketId, onBack, onOpenTicket, onUpdat
                   }
                 }}
               >
-                <BlockEditor source={bodyDraft} onChange={setBodyDraft} />
+                <BlockEditor
+                  source={bodyDraft}
+                  onChange={setBodyDraft}
+                  wikiCandidates={wikiCandidates}
+                  resolveLink={resolveLink}
+                  onOpenLink={onOpenLink}
+                />
                 <div className="comment-actions">
                   <button type="button" className="btn btn-danger" onClick={cancelEditBody}>
                     Cancel
@@ -288,7 +310,12 @@ export function TicketDetail({ snapshot, ticketId, onBack, onOpenTicket, onUpdat
                   <p className="subtle body-prose">No description yet.</p>
                 ) : (
                   <div className="body-prose">
-                    <Markdown source={body} onToggleTask={onSaveBody ? toggleTask : undefined} />
+                    <Markdown
+                      source={body}
+                      onToggleTask={onSaveBody ? toggleTask : undefined}
+                      resolveLink={resolveLink}
+                      onOpenLink={onOpenLink}
+                    />
                   </div>
                 )}
                 {onSaveBody && (
@@ -302,7 +329,7 @@ export function TicketDetail({ snapshot, ticketId, onBack, onOpenTicket, onUpdat
               </>
             )}
           </div>
-          <div className="glass-card activity-card" style={{ padding: '16px 18px 18px' }}>
+          <div className="panel activity-card" style={{ padding: '16px 18px 18px' }}>
             <h2 className="panel-heading activity-heading">Activity</h2>
             {timeline.length === 0 && (
               <EmptyState compact note="There are no comments yet. Click add a comment to create one." />
@@ -319,7 +346,7 @@ export function TicketDetail({ snapshot, ticketId, onBack, onOpenTicket, onUpdat
                       </div>
                       {entry.kind === 'comment' ? (
                         <div className="thread-body is-rich">
-                          <Markdown source={entry.what} />
+                          <Markdown source={entry.what} resolveLink={resolveLink} onOpenLink={onOpenLink} />
                         </div>
                       ) : (
                         <div className="thread-body">{entry.what}</div>
@@ -351,7 +378,14 @@ export function TicketDetail({ snapshot, ticketId, onBack, onOpenTicket, onUpdat
                     }
                   }}
                 >
-                  <BlockEditor key={composeKey} source={draft} onChange={setDraft} />
+                  <BlockEditor
+                    key={composeKey}
+                    source={draft}
+                    onChange={setDraft}
+                    wikiCandidates={wikiCandidates}
+                    resolveLink={resolveLink}
+                    onOpenLink={onOpenLink}
+                  />
                   <div className="comment-actions">
                     <button type="button" className="btn btn-danger" onClick={discardComment}>
                       Discard

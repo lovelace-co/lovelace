@@ -19,19 +19,24 @@ import {
   loadProject,
   logSession,
   readBoardOrder,
+  readGraphLayout,
   search,
   setActiveTicket,
   setColumnOrder,
+  writeGraphLayout,
   updateTicket,
   validateProject,
   writeAutomations,
+  writeWorkflow,
+  writeManifest,
+  writeActors,
   writeIndex,
   parseFrontmatter,
   MutationError,
   ProjectError,
 } from '@lovelace/core';
-import type { Workflow } from '@lovelace/core';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import type { Workflow, WorkflowEdit } from '@lovelace/core';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseDocument } from 'yaml';
 import {
@@ -81,6 +86,7 @@ function snapshot(root: string): Json {
     digest: buildDigest(project),
     activeTicket: getActiveTicket(root),
     boardOrder: readBoardOrder(project.dir),
+    graphLayout: readGraphLayout(project.dir, project.manifest.paths.state),
   };
 }
 
@@ -148,11 +154,27 @@ export async function handle(request: HostRequest): Promise<Json> {
       await setColumnOrder(root, String(request.status), (request.ids ?? []) as string[]);
       return snapshot(root);
     }
+    case 'set_graph_layout': {
+      writeGraphLayout(root, (request.layout ?? {}) as Record<string, { x: number; y: number }>);
+      return snapshot(root);
+    }
     case 'test_transition': {
       return { rules: testTransition(root, String(request.id), String(request.to)) };
     }
     case 'set_automations': {
       await writeAutomations(root, request.rules ?? []);
+      return snapshot(root);
+    }
+    case 'write_workflow': {
+      await writeWorkflow(root, (request.edit ?? {}) as WorkflowEdit);
+      return snapshot(root);
+    }
+    case 'write_manifest': {
+      await writeManifest(root, (request.changes ?? {}) as { name?: string });
+      return snapshot(root);
+    }
+    case 'write_actors': {
+      await writeActors(root, request.actors ?? []);
       return snapshot(root);
     }
     case 'action_log': {
@@ -263,6 +285,30 @@ export async function handle(request: HostRequest): Promise<Json> {
         created.push(`${dirRel}/OVERVIEW.md`);
       }
       return { created, ...snapshot(root) };
+    }
+    case 'rename_brief': {
+      const rel = String(request.path);
+      const project = loadProject(root);
+      const briefsPrefix = `.lovelace/${project.manifest.paths.briefs}/`;
+      if (!rel.startsWith(briefsPrefix) || rel.includes('..')) {
+        throw new Error('rename_brief only renames files under briefs');
+      }
+      const oldName = rel.split('/').pop() ?? '';
+      if (oldName === 'OVERVIEW.md') {
+        throw new Error('OVERVIEW.md is a fixed name; directories need one');
+      }
+      if (/^ADR-\d+\.md$/.test(oldName)) {
+        throw new Error('ADR filenames are their IDs and cannot change');
+      }
+      const name = String(request.name ?? '').replace(/\.md$/, '');
+      if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(name)) {
+        throw new Error('brief filenames are letters, digits and hyphens');
+      }
+      const next = `${rel.slice(0, rel.length - oldName.length)}${name}.md`;
+      if (next === rel) return snapshot(root);
+      if (existsSync(join(root, next))) throw new Error(`${next} already exists`);
+      renameSync(join(root, rel), join(root, next));
+      return { renamed: next, ...snapshot(root) };
     }
     case 'commits_for_ticket': {
       const id = String(request.id);

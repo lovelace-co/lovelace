@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fieldsForType } from './fields.js';
+import { buildLinks } from './links.js';
 import type { Project } from './types.js';
 
 function sortedRecord(input: Record<string, unknown>): Record<string, unknown> {
@@ -64,6 +65,7 @@ export function buildIndex(project: Project): Record<string, unknown> {
         created: c.created,
         path: c.path,
       })),
+    links: buildLinks(project),
   };
 }
 
