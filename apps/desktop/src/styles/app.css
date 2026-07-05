@@ -519,6 +519,7 @@ input[type='checkbox'] {
 }
 
 .side-nav {
+  position: relative;
   width: 240px;
   flex-shrink: 0;
   display: flex;
@@ -527,6 +528,16 @@ input[type='checkbox'] {
   background: var(--bg-0);
   overflow-y: auto;
   transition: background 300ms ease;
+}
+
+/* The seat under the active row; it glides between rows on navigation. */
+.nav-seat {
+  position: absolute;
+  z-index: 0;
+  border-radius: var(--radius-seat);
+  background: var(--raise-2);
+  pointer-events: none;
+  transition: top var(--dur-glide) var(--swift), height var(--dur-glide) var(--swift);
 }
 
 .side-nav .project-name {
@@ -584,16 +595,18 @@ input[type='checkbox'] {
 }
 
 .side-nav .nav-item {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   width: calc(100% + 20px);
   text-align: left;
   padding: 8px 10px;
   margin: 0 -10px 2px;
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-seat);
   color: var(--slate);
   font-size: var(--size-body);
-  transition: color 140ms ease, background 140ms ease;
+  transition: color var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift);
 }
 
 .side-nav .nav-item:hover {
@@ -601,9 +614,9 @@ input[type='checkbox'] {
   background: var(--raise);
 }
 
+/* The gliding seat carries the active fill; the row only brightens. */
 .side-nav .nav-item.active {
   color: var(--ink);
-  background: var(--raise-2);
 }
 
 .nav-label {
@@ -735,10 +748,9 @@ input[type='checkbox'] {
   color: var(--slate);
   cursor: pointer;
   border: 0;
-  /* Opaque control: the column tone composited over the canvas so the
-     columns scroll cleanly beneath the button. */
-  background: linear-gradient(var(--well), var(--well)), var(--bg-1);
-  transition: background 140ms ease, color 140ms ease;
+  /* Opaque control: the open lanes scroll cleanly beneath the button. */
+  background: var(--bg-1);
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .board-scroll-arrow.left {
@@ -759,6 +771,9 @@ input[type='checkbox'] {
   height: 18px;
 }
 
+/* One surface per region: the lane is open air, structured by its heading
+   and whitespace; the cards are the region's one filled layer. The wash
+   lights the whole lane only as a drop target. */
 .board-column {
   min-width: 0;
   /* A grid item defaults to min-height: auto; release it so the cards area
@@ -766,10 +781,10 @@ input[type='checkbox'] {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius-region);
+  border-radius: var(--radius-surface);
   padding: 32px 16px 20px;
-  background: var(--well);
-  transition: background 180ms ease;
+  background: transparent;
+  transition: background var(--dur-colour) var(--swift);
 }
 
 .board-column.drop-ok {
@@ -825,15 +840,20 @@ input[type='checkbox'] {
 
 .ticket-card {
   background: var(--raise);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-surface);
   padding: 15px 18px;
   cursor: pointer;
   position: relative;
-  transition: background 180ms ease;
+  transition: background var(--dur-colour) var(--swift);
 }
 
 .ticket-card:hover {
   background: var(--wash);
+}
+
+/* On approach the identifier warms to the signal. */
+.ticket-card:hover .ticket-card-meta .id {
+  color: var(--current);
 }
 
 .ticket-card.dragging {
@@ -1978,10 +1998,6 @@ input[type='checkbox'] {
 
 .thread-event {
   padding: 14px 0;
-}
-
-.thread-event + .thread-event {
-  border-top: 1px solid var(--border);
 }
 
 .thread-main {
@@ -3951,11 +3967,16 @@ input[type='checkbox'] {
   gap: 12px;
   width: 100%;
   text-align: left;
-  padding: 11px 14px;
-  border-radius: var(--radius-card);
+  padding: 11px var(--sp-3);
+  border-radius: var(--radius-seat);
   cursor: pointer;
   position: relative;
-  transition: background 140ms ease;
+  transition: background var(--dur-colour) var(--swift);
+}
+
+/* On approach the identifier warms to the signal, matching the board. */
+.list-row:hover .id {
+  color: var(--current);
 }
 
 .list-row:nth-child(even) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AutomationsIcon,
   BoardIcon,
@@ -49,6 +49,20 @@ export function ProjectView({ root }: ProjectViewProps) {
   const [infoOpen, setInfoOpen] = useState(false);
   const [pathCopied, setPathCopied] = useState(false);
   const [docsFocus, setDocsFocus] = useState<string | null>(null);
+
+  // The active nav row rests on a seat that glides between rows rather than
+  // teleporting (state moves, never marks). Measured, not hard-coded, so a
+  // count note or a new nav item never desynchronises it.
+  const navRefs = useRef(new Map<NavKey, HTMLButtonElement>());
+  const [navSeat, setNavSeat] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = openTicket ? undefined : navRefs.current.get(nav);
+    if (!el) {
+      setNavSeat(null);
+      return;
+    }
+    setNavSeat({ top: el.offsetTop, left: el.offsetLeft, width: el.offsetWidth, height: el.offsetHeight });
+  }, [nav, openTicket, snapshot]);
 
   useEffect(() => {
     if (snapshot) rememberRecent({ root, name: snapshot.manifest.name });
@@ -196,6 +210,10 @@ export function ProjectView({ root }: ProjectViewProps) {
 
   const navButton = (key: NavKey, icon: ReactNode, text: string, note?: number) => (
     <button
+      ref={(el) => {
+        if (el) navRefs.current.set(key, el);
+        else navRefs.current.delete(key);
+      }}
       className={`nav-item${nav === key && !openTicket ? ' active' : ''}`}
       onClick={() => goto(key)}
     >
@@ -214,6 +232,7 @@ export function ProjectView({ root }: ProjectViewProps) {
   return (
     <div className="workbench">
       <nav className="side-nav">
+        {navSeat && <span className="nav-seat" style={navSeat} aria-hidden />}
         <div className="nav-head">
           <div className="head-title">
             <h1 className="project-name">{snapshot.manifest.name}</h1>
