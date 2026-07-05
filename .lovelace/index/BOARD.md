@@ -14,13 +14,11 @@ _Empty._
 
 _Empty._
 
-## in_review (1)
+## in_review (0)
 
-| ID | Title | Type | Assignee |
-| --- | --- | --- | --- |
-| T-0069 | Hook-driven agent presence: turn boundaries replace the decay engine | task | claude |
+_Empty._
 
-## done (72)
+## done (73)
 
 | ID | Title | Type | Assignee |
 | --- | --- | --- | --- |
@@ -96,6 +94,7 @@ _Empty._
 | T-0066 | init + MCP assets: scaffold documentation/index.md, update read_document and CLAUDE/AGENTS text | task |  |
 | T-0067 | Documentation UI: documentation/ root, index.md pinned + read-first hint, unrestricted names | task |  |
 | T-0068 | Migrate this repo .lovelace/ to 2.0 and verify end to end | task |  |
+| T-0069 | Hook-driven agent presence: turn boundaries replace the decay engine | task | claude |
 
 ## cancelled (0)
 
