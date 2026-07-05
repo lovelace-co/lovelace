@@ -118,8 +118,8 @@ export function List({
           {assignee !== null && <span className="list-assignee">@{assignee}</span>}
           <span className="list-updated num">{formatDateShort(ticket.updated)}</span>
           <span className={`id${live ? ' live' : ''}`}>
+            {live && presence?.elapsedSeconds !== null ? `${formatElapsed(presence.elapsedSeconds)} · ` : ''}
             {ticket.id}
-            {live && presence?.elapsedSeconds !== null ? ` · ${formatElapsed(presence.elapsedSeconds)}` : ''}
           </span>
         </span>
       </div>

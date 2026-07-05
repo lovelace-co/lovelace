@@ -283,10 +283,10 @@ export function Board({
                           <span className={`prio ${family}`}>{titleCase(priority)}</span>
                         )}
                         <span className={`id${live ? ' live' : ''}`}>
-                          {ticket.id}
                           {live && presence?.elapsedSeconds !== null
-                            ? ` · ${formatElapsed(presence.elapsedSeconds)}`
+                            ? `${formatElapsed(presence.elapsedSeconds)} · `
                             : ''}
+                          {ticket.id}
                         </span>
                       </div>
                     </article>

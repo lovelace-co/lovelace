@@ -110,6 +110,11 @@ async fn core_request(request: String) -> Result<String, String> {
 
 fn is_ignored(path: &Path) -> bool {
     let p = path.to_string_lossy();
+    // The live-agent marker is machine-local state the app must react to;
+    // everything else under state/ and index/ is derived churn.
+    if p.ends_with(".lovelace/state/presence.json") {
+        return false;
+    }
     p.contains("/.lovelace/index/")
         || p.contains("/.lovelace/state/")
         || p.contains("/.lovelace/.")

@@ -52,10 +52,12 @@ export function watchProject(
   const watcher: FSWatcher = watch(dir, {
     ignoreInitial: true,
     ignored: (path: string) =>
-      path === indexDirPlain ||
-      path === stateDirPlain ||
-      path.startsWith(indexDir) ||
-      path.startsWith(stateDir),
+      // The live-agent marker is the one state/ file watchers react to.
+      path !== join(stateDirPlain, 'presence.json') &&
+      (path === indexDirPlain ||
+        path === stateDirPlain ||
+        path.startsWith(indexDir) ||
+        path.startsWith(stateDir)),
   });
   watcher.on('all', (_event, path) => {
     pending.add(path);
