@@ -335,14 +335,12 @@ export async function handle(request: HostRequest): Promise<Json> {
       if (buf.subarray(0, 8000).includes(0)) return { kind: 'binary', size };
       return { kind: 'text', content: buf.toString('utf8'), size };
     }
-    case 'write_brief': {
+    case 'write_document': {
       const rel = String(request.path);
       const project = loadProject(root);
-      const isBrief =
-        rel === '.lovelace/CONTEXT.md' ||
-        rel.startsWith(`.lovelace/${project.manifest.paths.briefs}/`);
-      if (!isBrief || rel.includes('..')) {
-        throw new Error('write_brief only writes briefs');
+      const isDocument = rel.startsWith(`.lovelace/${project.manifest.paths.documentation}/`);
+      if (!isDocument || rel.includes('..')) {
+        throw new Error('write_document only writes documentation files');
       }
       const abs = join(root, rel);
       const existing = parseFrontmatter(readFileSync(abs, 'utf8'));
@@ -371,85 +369,69 @@ export async function handle(request: HostRequest): Promise<Json> {
       writeFileSync(abs, `---\n${fm}---\n${body.startsWith('\n') ? body : `\n${body}`}`);
       return snapshot(root);
     }
-    case 'create_brief': {
+    case 'create_document': {
       const project = loadProject(root);
-      const dirRel = String(request.dir ?? `.lovelace/${project.manifest.paths.briefs}`);
+      const dirRel = String(request.dir ?? `.lovelace/${project.manifest.paths.documentation}`);
       if (!dirRel.startsWith('.lovelace/') || dirRel.includes('..')) {
-        throw new Error('create_brief only writes inside .lovelace');
+        throw new Error('create_document only writes inside .lovelace');
       }
       const name = String(request.name ?? '').replace(/\.md$/, '');
-      if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(name)) {
-        throw new Error('brief filenames are letters, digits and hyphens');
+      if (name === '' || name.includes('/') || name.includes('..')) {
+        throw new Error('document filenames cannot be empty or contain path separators');
       }
       const summary = String(request.summary ?? '(to be written)');
       const stamp = `${new Date().toISOString().slice(0, 19)}Z`;
       const dirAbs = join(root, dirRel);
-      const created: string[] = [];
       mkdirSync(dirAbs, { recursive: true });
-      const slug = name.toLowerCase();
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'doc';
       const file = join(dirAbs, `${name}.md`);
       if (existsSync(file)) throw new Error(`${dirRel}/${name}.md already exists`);
       writeFileSync(
         file,
-        `---\nid: ${slug}\ntype: brief\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
+        `---\nid: ${slug}\ntype: document\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
       );
-      created.push(`${dirRel}/${name}.md`);
-      // A new directory under briefs/ gets its OVERVIEW.md per the spec.
-      if (request.createOverview === true && !existsSync(join(dirAbs, 'OVERVIEW.md'))) {
-        const dirName = dirRel.split('/').pop() ?? 'overview';
-        writeFileSync(
-          join(dirAbs, 'OVERVIEW.md'),
-          `---\nid: ${dirName.toLowerCase()}-overview\ntype: brief\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${dirName}\n\n(to be written)\n`,
-        );
-        created.push(`${dirRel}/OVERVIEW.md`);
-      }
-      return { created, ...snapshot(root) };
+      return { created: [`${dirRel}/${name}.md`], ...snapshot(root) };
     }
     case 'create_folder': {
       const project = loadProject(root);
-      const briefsRoot = `.lovelace/${project.manifest.paths.briefs}`;
-      const parentRel = String(request.dir ?? briefsRoot);
+      const documentsRoot = `.lovelace/${project.manifest.paths.documentation}`;
+      const parentRel = String(request.dir ?? documentsRoot);
       if (
-        !(parentRel === briefsRoot || parentRel.startsWith(`${briefsRoot}/`)) ||
+        !(parentRel === documentsRoot || parentRel.startsWith(`${documentsRoot}/`)) ||
         parentRel.includes('..')
       ) {
-        throw new Error('create_folder only creates folders under briefs');
+        throw new Error('create_folder only creates folders under the documentation root');
       }
       const name = String(request.name ?? '');
-      if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(name)) {
-        throw new Error('folder names are letters, digits and hyphens');
+      if (name === '' || name.includes('/') || name.includes('..')) {
+        throw new Error('folder names cannot be empty or contain path separators');
       }
       const folderRel = `${parentRel}/${name}`;
       const dirAbs = join(root, folderRel);
       if (existsSync(dirAbs)) throw new Error(`${folderRel} already exists`);
       const summary = String(request.summary ?? '(to be written)');
       const stamp = `${new Date().toISOString().slice(0, 19)}Z`;
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'index';
       mkdirSync(dirAbs, { recursive: true });
-      // Every directory under briefs/ carries an OVERVIEW.md (see the spec), so
-      // creating a folder is really creating its overview, with a unique id.
+      // A folder needs at least one file to exist and be discoverable, so it gets
+      // a starter index.md (its entry point). This is a default, not a requirement.
       writeFileSync(
-        join(dirAbs, 'OVERVIEW.md'),
-        `---\nid: ${name.toLowerCase()}-overview\ntype: brief\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
+        join(dirAbs, 'index.md'),
+        `---\nid: ${slug}\ntype: document\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
       );
-      return { created: [`${folderRel}/OVERVIEW.md`], ...snapshot(root) };
+      return { created: [`${folderRel}/index.md`], ...snapshot(root) };
     }
-    case 'rename_brief': {
+    case 'rename_document': {
       const rel = String(request.path);
       const project = loadProject(root);
-      const briefsPrefix = `.lovelace/${project.manifest.paths.briefs}/`;
-      if (!rel.startsWith(briefsPrefix) || rel.includes('..')) {
-        throw new Error('rename_brief only renames files under briefs');
+      const documentsPrefix = `.lovelace/${project.manifest.paths.documentation}/`;
+      if (!rel.startsWith(documentsPrefix) || rel.includes('..')) {
+        throw new Error('rename_document only renames files under the documentation root');
       }
       const oldName = rel.split('/').pop() ?? '';
-      if (oldName === 'OVERVIEW.md') {
-        throw new Error('OVERVIEW.md is a fixed name; directories need one');
-      }
-      if (/^ADR-\d+\.md$/.test(oldName)) {
-        throw new Error('ADR filenames are their IDs and cannot change');
-      }
       const name = String(request.name ?? '').replace(/\.md$/, '');
-      if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(name)) {
-        throw new Error('brief filenames are letters, digits and hyphens');
+      if (name === '' || name.includes('/') || name.includes('..')) {
+        throw new Error('document filenames cannot be empty or contain path separators');
       }
       const next = `${rel.slice(0, rel.length - oldName.length)}${name}.md`;
       if (next === rel) return snapshot(root);

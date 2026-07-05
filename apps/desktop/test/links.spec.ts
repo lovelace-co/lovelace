@@ -12,8 +12,8 @@ describe('reference resolver', () => {
     expect(resolve('T-0002')).toMatchObject({ kind: 'ticket', id: 'T-0002', label: 'Forecast endpoint' });
   });
 
-  it('resolves a brief id to its title-cased name', () => {
-    expect(resolve('architecture-overview')).toMatchObject({ kind: 'brief', label: 'Architecture Overview' });
+  it('resolves a document id to its title-cased name', () => {
+    expect(resolve('architecture-overview')).toMatchObject({ kind: 'document', label: 'Architecture Overview' });
   });
 
   it('resolves a file: token to a file target labelled by basename', () => {
@@ -36,10 +36,10 @@ describe('reference resolver', () => {
 });
 
 describe('referenceCandidates', () => {
-  it('includes tickets, briefs and files (as file: tokens)', () => {
+  it('includes tickets, documents and files (as file: tokens)', () => {
     const cands = referenceCandidates(snap, ['src/a.ts', 'docs/README.md']);
     expect(cands.some((c) => c.kind === 'ticket')).toBe(true);
-    expect(cands.some((c) => c.kind === 'brief')).toBe(true);
+    expect(cands.some((c) => c.kind === 'document')).toBe(true);
     const file = cands.find((c) => c.kind === 'file');
     expect(file).toMatchObject({ token: 'file:src/a.ts', label: 'a.ts', hint: 'src/a.ts' });
   });

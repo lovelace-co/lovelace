@@ -3,33 +3,33 @@ import { describe, expect, it, vi } from 'vitest';
 import { Graph } from '../src/views/Graph';
 import type { GraphLayout, LinkEdge, Snapshot } from '../src/lib/types';
 
-interface MiniBrief {
+interface MiniDocument {
   id: string;
   summary: string;
   path: string;
 }
 
-function snap(briefs: MiniBrief[], links: LinkEdge[], graphLayout?: GraphLayout): Snapshot {
+function snap(documents: MiniDocument[], links: LinkEdge[], graphLayout?: GraphLayout): Snapshot {
   return {
-    index: { briefs, links, tickets: [], sessions: [], comments: [] },
+    index: { documents, links, tickets: [], sessions: [], comments: [] },
     ...(graphLayout ? { graphLayout } : {}),
   } as unknown as Snapshot;
 }
 
-const BRIEFS: MiniBrief[] = [
-  { id: 'context', summary: 'root', path: '.lovelace/CONTEXT.md' },
-  { id: 'architecture-overview', summary: 'arch', path: '.lovelace/briefs/architecture/OVERVIEW.md' },
-  { id: 'domain-overview', summary: 'domain', path: '.lovelace/briefs/domain/OVERVIEW.md' },
+const DOCUMENTS: MiniDocument[] = [
+  { id: 'context', summary: 'root', path: '.lovelace/documentation/index.md' },
+  { id: 'architecture-overview', summary: 'arch', path: '.lovelace/documentation/architecture/OVERVIEW.md' },
+  { id: 'domain-overview', summary: 'domain', path: '.lovelace/documentation/domain/OVERVIEW.md' },
 ];
 
 const noop = () => undefined;
 
 describe('Graph view', () => {
-  it('renders one node per brief and one edge per documentation link', () => {
+  it('renders one node per document and one edge per documentation link', () => {
     render(
       <Graph
-        snapshot={snap(BRIEFS, [{ source: 'context', target: 'architecture-overview' }])}
-        onOpenBrief={vi.fn()}
+        snapshot={snap(DOCUMENTS, [{ source: 'context', target: 'architecture-overview' }])}
+        onOpenDocument={vi.fn()}
         onSaveLayout={noop}
       />,
     );
@@ -42,11 +42,11 @@ describe('Graph view', () => {
   it('excludes links that point at a ticket (documentation only)', () => {
     render(
       <Graph
-        snapshot={snap(BRIEFS, [
+        snapshot={snap(DOCUMENTS, [
           { source: 'context', target: 'architecture-overview' },
           { source: 'context', target: 'T-0001' },
         ])}
-        onOpenBrief={vi.fn()}
+        onOpenDocument={vi.fn()}
         onSaveLayout={noop}
       />,
     );
@@ -54,25 +54,25 @@ describe('Graph view', () => {
   });
 
   it('deep-links a clicked node by its path', () => {
-    const onOpenBrief = vi.fn();
+    const onOpenDocument = vi.fn();
     render(
       <Graph
-        snapshot={snap(BRIEFS, [{ source: 'context', target: 'architecture-overview' }])}
-        onOpenBrief={onOpenBrief}
+        snapshot={snap(DOCUMENTS, [{ source: 'context', target: 'architecture-overview' }])}
+        onOpenDocument={onOpenDocument}
         onSaveLayout={noop}
       />,
     );
     const node = screen.getByText('Architecture Overview').closest('g');
     fireEvent.pointerDown(node!, { clientX: 40, clientY: 40 });
     fireEvent.pointerUp(window, { clientX: 40, clientY: 40 });
-    expect(onOpenBrief).toHaveBeenCalledWith('.lovelace/briefs/architecture/OVERVIEW.md');
+    expect(onOpenDocument).toHaveBeenCalledWith('.lovelace/documentation/architecture/OVERVIEW.md');
   });
 
   it('places a saved (pinned) node at exactly its stored position', () => {
     render(
       <Graph
-        snapshot={snap(BRIEFS, [], { context: { x: 220, y: 160 } })}
-        onOpenBrief={vi.fn()}
+        snapshot={snap(DOCUMENTS, [], { context: { x: 220, y: 160 } })}
+        onOpenDocument={vi.fn()}
         onSaveLayout={noop}
       />,
     );
@@ -82,7 +82,7 @@ describe('Graph view', () => {
   });
 
   it('shows an empty state when there are no documents', () => {
-    render(<Graph snapshot={snap([], [])} onOpenBrief={vi.fn()} onSaveLayout={noop} />);
+    render(<Graph snapshot={snap([], [])} onOpenDocument={vi.fn()} onSaveLayout={noop} />);
     expect(screen.getByText('Nothing to graph yet')).toBeTruthy();
   });
 });

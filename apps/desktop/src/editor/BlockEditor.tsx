@@ -236,7 +236,7 @@ function Toolbar({ candidates = [] }: { candidates?: ReferenceCandidate[] }) {
   const [code, setCode] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [picker, setPicker] = useState<'ticket' | 'brief' | 'file' | null>(null);
+  const [picker, setPicker] = useState<'ticket' | 'document' | 'file' | null>(null);
 
   /** Insert a reference chip at the current selection (retained across the picker). */
   const insertReference = (token: string) => {
@@ -303,7 +303,7 @@ function Toolbar({ candidates = [] }: { candidates?: ReferenceCandidate[] }) {
   };
 
   const pickerTitle =
-    picker === 'ticket' ? 'Link a ticket' : picker === 'brief' ? 'Link a document' : 'Link a file';
+    picker === 'ticket' ? 'Link a ticket' : picker === 'document' ? 'Link a document' : 'Link a file';
 
   return (
     <div className="lexical-toolbar" role="toolbar" aria-label="formatting">
@@ -355,7 +355,7 @@ function Toolbar({ candidates = [] }: { candidates?: ReferenceCandidate[] }) {
       <button className="tool" aria-label="link a ticket" title="Link a ticket" onClick={() => setPicker('ticket')}>
         <TicketIcon />
       </button>
-      <button className="tool" aria-label="link a document" title="Link a document" onClick={() => setPicker('brief')}>
+      <button className="tool" aria-label="link a document" title="Link a document" onClick={() => setPicker('document')}>
         <DocsIcon />
       </button>
       <button className="tool" aria-label="link a file" title="Link a file" onClick={() => setPicker('file')}>

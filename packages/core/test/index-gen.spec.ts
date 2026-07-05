@@ -36,9 +36,9 @@ describe('index.json', () => {
       'T-0003',
       'T-0004',
     ]);
-    const briefs = index.briefs as Array<{ id: string; summary: string }>;
-    expect(briefs.length).toBe(6);
-    for (const b of briefs) expect(b.summary.length).toBeGreaterThan(0);
+    const documents = index.documents as Array<{ id: string; summary: string }>;
+    expect(documents.length).toBe(6);
+    for (const b of documents) expect(b.summary.length).toBeGreaterThan(0);
     expect((index.sessions as Array<{ id: string }>).map((s) => s.id)).toEqual(['S-0001', 'S-0002']);
     expect(index.comments).toHaveLength(2);
   });
@@ -84,8 +84,8 @@ describe('link graph', () => {
 
   it('drops unresolved tokens, self-links and duplicates', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/briefs/domain/OVERVIEW.md', (t) =>
-      `${t}\n\nSee [[no-such-brief]], [[domain-overview]] (self) and [[architecture-overview]] twice: [[architecture-overview]].\n`,
+    corrupt(root, '.lovelace/documentation/domain/OVERVIEW.md', (t) =>
+      `${t}\n\nSee [[no-such-document]], [[domain-overview]] (self) and [[architecture-overview]] twice: [[architecture-overview]].\n`,
     );
     const links = buildLinks(loadProject(root)).filter((l) => l.source === 'domain-overview');
     expect(links).toEqual([{ source: 'domain-overview', target: 'architecture-overview' }]);
@@ -93,7 +93,7 @@ describe('link graph', () => {
 
   it('excludes file and person references from the graph', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/briefs/domain/OVERVIEW.md', (t) =>
+    corrupt(root, '.lovelace/documentation/domain/OVERVIEW.md', (t) =>
       `${t}\n\nSee [[file:src/cache.ts]] and [[@ada]] and [[architecture-overview]].\n`,
     );
     const links = buildLinks(loadProject(root)).filter((l) => l.source === 'domain-overview');

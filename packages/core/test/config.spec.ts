@@ -20,20 +20,20 @@ describe('manifest', () => {
     const root = fixture();
     const manifest = loadManifest(join(root, '.lovelace'));
     expect(manifest.name).toBe('Orbit Weather Service');
-    expect(manifest.spec_version).toBe('1.0.0');
+    expect(manifest.spec_version).toBe('2.0.0');
     expect(manifest.paths.tickets).toBe('tickets');
   });
 
   it('refuses an unknown major spec version with a clear error', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('1.0.0', '2.0.0'));
-    expect(() => loadManifest(join(root, '.lovelace'))).toThrowError(/major version 1/);
+    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('2.0.0', '3.0.0'));
+    expect(() => loadManifest(join(root, '.lovelace'))).toThrowError(/major version 2/);
   });
 
   it('tolerates a newer minor version', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('1.0.0', '1.9.0'));
-    expect(loadManifest(join(root, '.lovelace')).spec_version).toBe('1.9.0');
+    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('2.0.0', '2.9.0'));
+    expect(loadManifest(join(root, '.lovelace')).spec_version).toBe('2.9.0');
   });
 
   it('reports YAML syntax errors with file and line', () => {

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
-import { briefGraph } from '../lib/links';
+import { documentGraph } from '../lib/links';
 import { layoutGraph, type Vec } from '../lib/forceGraph';
 import type { GraphLayout, Snapshot } from '../lib/types';
 
 interface GraphProps {
   snapshot: Snapshot;
-  /** Open a brief in the Documentation tab by its repository-relative path. */
-  onOpenBrief: (path: string) => void;
+  /** Open a document in the Documentation tab by its repository-relative path. */
+  onOpenDocument: (path: string) => void;
   /** Persist manual node positions after a drag (machine-local). */
   onSaveLayout: (layout: GraphLayout) => void;
 }
@@ -83,13 +83,13 @@ function screenToLocal(el: SVGGraphicsElement | null, clientX: number, clientY: 
 }
 
 /**
- * The documentation graph: briefs as nodes, their wiki-links as edges, laid out
+ * The documentation graph: documents as nodes, their wiki-links as edges, laid out
  * with a deterministic force simulation. Pan by dragging the canvas, zoom with
  * the wheel or the controls, drag a node to reposition it (positions persist),
  * hover to light up its connections, and click a node to open that document.
  */
-export function Graph({ snapshot, onOpenBrief, onSaveLayout }: GraphProps) {
-  const { nodes, links } = useMemo(() => briefGraph(snapshot), [snapshot]);
+export function Graph({ snapshot, onOpenDocument, onSaveLayout }: GraphProps) {
+  const { nodes, links } = useMemo(() => documentGraph(snapshot), [snapshot]);
   const savedLayout = snapshot.graphLayout ?? {};
 
   const signature = useMemo(
@@ -104,8 +104,8 @@ export function Graph({ snapshot, onOpenBrief, onSaveLayout }: GraphProps) {
   savedRef.current = savedLayout;
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
-  const onOpenBriefRef = useRef(onOpenBrief);
-  onOpenBriefRef.current = onOpenBrief;
+  const onOpenDocumentRef = useRef(onOpenDocument);
+  onOpenDocumentRef.current = onOpenDocument;
   const onSaveLayoutRef = useRef(onSaveLayout);
   onSaveLayoutRef.current = onSaveLayout;
 
@@ -187,7 +187,7 @@ export function Graph({ snapshot, onOpenBrief, onSaveLayout }: GraphProps) {
       if (g?.type !== 'node') return;
       if (!g.dragged) {
         // A node press with no real drag is a click: open that document.
-        onOpenBriefRef.current(g.path);
+        onOpenDocumentRef.current(g.path);
         return;
       }
       // Persist the arrangement: previously-saved pins for nodes that still

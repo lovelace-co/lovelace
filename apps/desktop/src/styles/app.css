@@ -2188,7 +2188,7 @@ input[type='checkbox'] {
 }
 
 /* Inside the ticket detail cards the editor fills the card padding, matching
-   the read view and the Properties panel; Briefs keeps the global 26px rail. */
+   the read view and the Properties panel; Documents keeps the global 26px rail. */
 .body-editor .lexical-scroller,
 .comment-editor .lexical-scroller {
   padding-left: 0;
@@ -2355,7 +2355,7 @@ input[type='checkbox'] {
   cursor: default;
 }
 
-/* ---------- briefs as a plain file browser ---------- */
+/* ---------- documents as a plain file browser ---------- */
 
 .tree-dir {
   color: var(--ink);
@@ -3296,13 +3296,6 @@ input[type='checkbox'] {
   outline: 1.5px solid var(--current);
   outline-offset: 0;
   background: var(--raise);
-}
-
-/* Locked names (CONTEXT, OVERVIEW, ADRs) look like their editable peers. */
-.doc-title:disabled {
-  color: var(--ink);
-  -webkit-text-fill-color: var(--ink);
-  opacity: 1;
 }
 
 .doc-head .id-chip {
@@ -4267,13 +4260,25 @@ input[type='checkbox'] {
   border-radius: var(--radius-card);
 }
 
-.file-preview-pdf {
-  width: 100%;
-  height: 100%;
-  min-height: 60vh;
-  border: 0;
+.pdf-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.pdf-page {
   border-radius: var(--radius-card);
-  background: var(--bg-1);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+}
+
+/* Scale each page canvas to the well, keeping its aspect ratio, even if the
+   scrollbar narrows the column after the initial width measurement. */
+.pdf-view canvas {
+  display: block;
+  max-width: 100%;
+  height: auto !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

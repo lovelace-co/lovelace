@@ -12,7 +12,7 @@ import type { FieldDef, WorkflowStatus, WorkflowType } from './types';
 
 export const FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'list', 'reference'] as const;
 export const ITEM_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'reference'] as const;
-export const SPECIAL_REF_KINDS = ['actor', 'brief'] as const;
+export const SPECIAL_REF_KINDS = ['actor', 'document'] as const;
 export type FieldType = FieldDef['type'];
 
 export interface StatusRow {

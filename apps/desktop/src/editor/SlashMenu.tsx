@@ -78,7 +78,7 @@ function formatOptions(): SlashOption[] {
 /** Section label and result cap for each reference kind, in menu order. */
 const REFERENCE_GROUPS: Array<{ kind: LinkKind; label: string; cap: number }> = [
   { kind: 'ticket', label: 'Tickets', cap: 5 },
-  { kind: 'brief', label: 'Documents', cap: 5 },
+  { kind: 'document', label: 'Documents', cap: 5 },
   { kind: 'file', label: 'Files', cap: 6 },
 ];
 

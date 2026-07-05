@@ -4,6 +4,16 @@ import { FilePreviewModal } from '../src/components/FilePreviewModal';
 import { HostProvider } from '../src/state/store';
 import { FakeHost } from './fakeHost';
 
+// PdfView pulls in pdf.js, which needs a browser canvas and worker jsdom lacks;
+// stub it so the pdf branch is testable without rendering a real document.
+vi.mock('../src/components/PdfView', () => ({
+  default: ({ base64, label }: { base64: string; label: string }) => (
+    <div data-testid="pdf-view" data-label={label}>
+      {base64}
+    </div>
+  ),
+}));
+
 function renderPreview(host: FakeHost, path: string, onClose = vi.fn()) {
   return render(
     <HostProvider host={host}>
@@ -31,11 +41,13 @@ describe('FilePreviewModal', () => {
     expect(img.getAttribute('src')).toBe('data:image/png;base64,aGVsbG8=');
   });
 
-  it('renders a pdf reference inline', async () => {
+  it('renders a pdf reference with the pdf viewer', async () => {
     const host = new FakeHost();
     host.sourceFiles.set('docs/spec.pdf', { kind: 'pdf', mime: 'application/pdf', base64: 'JVBERi0x', size: 6 });
     renderPreview(host, 'docs/spec.pdf');
-    await waitFor(() => expect(document.querySelector('iframe.file-preview-pdf')).not.toBeNull());
+    const view = await screen.findByTestId('pdf-view');
+    expect(view.getAttribute('data-label')).toBe('spec.pdf');
+    expect(view.textContent).toBe('JVBERi0x');
   });
 
   it('prompts to open a non-previewable binary file externally', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest';
-import { rmSync, writeFileSync, cpSync } from 'node:fs';
+import { writeFileSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadProject, validateProject, hasErrors, formatIssues } from '../src/index.js';
 import { tempFixture, corrupt, FIXED_NOW } from './helpers.js';
@@ -25,9 +25,9 @@ describe('the pristine fixture', () => {
     expect(issues.filter((i) => i.severity === 'error')).toEqual([]);
   });
 
-  it('flags the stale conventions brief as a warning, not an error', () => {
+  it('flags the stale conventions document as a warning, not an error', () => {
     const issues = validate(fixture());
-    const stale = issues.filter((i) => i.rule === 'briefs/stale');
+    const stale = issues.filter((i) => i.rule === 'documents/stale');
     expect(stale).toHaveLength(1);
     expect(stale[0]?.file).toContain('conventions/OVERVIEW.md');
     expect(hasErrors(stale)).toBe(false);
@@ -190,26 +190,18 @@ describe('corrupted sessions and comments', () => {
   });
 });
 
-describe('briefs and workflow rules', () => {
-  it('reports a brief without a summary', () => {
+describe('documents and workflow rules', () => {
+  it('reports a document without a summary', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/briefs/domain/OVERVIEW.md', (t) =>
+    corrupt(root, '.lovelace/documentation/domain/OVERVIEW.md', (t) =>
       t.replace(/summary: .*\n/, 'summary: ""\n'),
     );
-    expect(validate(root).some((i) => i.rule === 'briefs/summary')).toBe(true);
+    expect(validate(root).some((i) => i.rule === 'documents/summary')).toBe(true);
   });
 
-  it('warns on a briefs directory without OVERVIEW.md', () => {
+  it('reports duplicate document ids', () => {
     const root = fixture();
-    rmSync(join(root, '.lovelace/briefs/domain/OVERVIEW.md'));
-    const issue = validate(root).find((i) => i.rule === 'briefs/overview');
-    expect(issue?.severity).toBe('warning');
-    expect(issue?.file).toContain('briefs/domain');
-  });
-
-  it('reports duplicate brief ids', () => {
-    const root = fixture();
-    corrupt(root, '.lovelace/briefs/domain/OVERVIEW.md', (t) =>
+    corrupt(root, '.lovelace/documentation/domain/OVERVIEW.md', (t) =>
       t.replace('id: domain-overview', 'id: architecture-overview'),
     );
     expect(validate(root).some((i) => i.rule === 'ids/duplicate')).toBe(true);

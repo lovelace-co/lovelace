@@ -57,7 +57,7 @@ export function scanHighestId(lovelaceDir: string, manifest: Manifest, prefix: s
   const dirs = [
     join(lovelaceDir, manifest.paths.tickets),
     join(lovelaceDir, manifest.paths.sessions),
-    join(lovelaceDir, manifest.paths.briefs),
+    join(lovelaceDir, manifest.paths.documentation),
   ];
   const re = new RegExp(`^${prefix}-(\\d+)\\.md$`);
   let highest = 0;

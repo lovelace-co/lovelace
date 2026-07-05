@@ -126,12 +126,12 @@ export class FakeHost implements HostClient {
     );
   }
 
-  async writeBrief(
+  async writeDocument(
     root: string,
     path: string,
     changes: { body?: string; summary?: string; review_by?: string | null },
   ): Promise<Snapshot> {
-    this.record('writeBrief', [root, path, changes]);
+    this.record('writeDocument', [root, path, changes]);
     return this.snapshotData;
   }
 
@@ -145,14 +145,8 @@ export class FakeHost implements HostClient {
     return this.snapshotData;
   }
 
-  async createBrief(
-    root: string,
-    dir: string,
-    name: string,
-    summary: string,
-    createOverview: boolean,
-  ): Promise<Snapshot> {
-    this.record('createBrief', [root, dir, name, summary, createOverview]);
+  async createDocument(root: string, dir: string, name: string, summary: string): Promise<Snapshot> {
+    this.record('createDocument', [root, dir, name, summary]);
     return this.snapshotData;
   }
 
@@ -161,8 +155,8 @@ export class FakeHost implements HostClient {
     return this.snapshotData;
   }
 
-  async renameBrief(root: string, path: string, name: string): Promise<Snapshot> {
-    this.record('renameBrief', [root, path, name]);
+  async renameDocument(root: string, path: string, name: string): Promise<Snapshot> {
+    this.record('renameDocument', [root, path, name]);
     return this.snapshotData;
   }
 

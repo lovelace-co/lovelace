@@ -2,7 +2,7 @@ import type { Snapshot } from './types';
 
 /**
  * The presence engine. Every external change to the project (an agent
- * mutating tickets, writing sessions, editing briefs) raises the project's
+ * mutating tickets, writing sessions, editing documents) raises the project's
  * energy; stillness lets it decay back to zero. Nothing here is simulated:
  * presence is derived entirely from real file-watcher events, so the app
  * only ever looks alive when something is actually happening.
@@ -47,11 +47,11 @@ export function observeChange(
 ): PresenceState {
   const sessionsGrew = next.index.sessions.length > prev.index.sessions.length;
   const commentsGrew = next.index.comments.length > prev.index.comments.length;
-  const briefsTouched = next.index.briefs.some((b) => {
-    const old = prev.index.briefs.find((p) => p.path === b.path);
+  const documentsTouched = next.index.documents.some((b) => {
+    const old = prev.index.documents.find((p) => p.path === b.path);
     return old === undefined || old.updated !== b.updated;
   });
-  const anything = changed.length > 0 || sessionsGrew || commentsGrew || briefsTouched;
+  const anything = changed.length > 0 || sessionsGrew || commentsGrew || documentsTouched;
   if (!anything) return state;
 
   const recent = { ...state.recent };

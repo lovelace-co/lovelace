@@ -1,6 +1,6 @@
 ---
 id: <id>
-type: brief
+type: document
 summary: <summary>
 updated: <updated>
 ---

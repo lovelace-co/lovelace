@@ -90,7 +90,7 @@ title: <title>
 
 const TEMPLATE_ADR = `---
 id: <id>
-type: brief
+type: document
 summary: <summary>
 updated: <updated>
 ---
@@ -137,20 +137,6 @@ outcome: <outcome>
 - <question>
 `;
 
-function overviewStub(title: string, summary: string, updated: string): string {
-  return `---
-id: ${title.toLowerCase()}-overview
-type: brief
-summary: ${summary}
-updated: ${updated}
----
-
-# ${title[0]?.toUpperCase()}${title.slice(1)}
-
-(to be written)
-`;
-}
-
 /**
  * Scaffolds a fresh .lovelace directory. Refuses to run when one already
  * exists. Returns repo-relative paths of everything created.
@@ -191,22 +177,9 @@ export function initProject(root: string, options: InitOptions): string[] {
     `actors:\n  - id: me\n    name: ${options.userName ?? 'Developer'}\n    kind: human\n  - id: claude\n    name: Claude Code\n    kind: agent\n`,
   );
   write(
-    'CONTEXT.md',
-    `---\nid: context\ntype: brief\nsummary: Root brief for ${options.name}; written at init, replace with a real project summary.\nupdated: ${stamp}\n---\n\n# ${options.name}\n\n(Replace this with a project summary.)\n\n## Reading order\n\n1. This file.\n2. briefs/architecture/OVERVIEW.md\n3. The active ticket, its parent and its dependencies.\n`,
+    'documentation/index.md',
+    `---\nid: index\ntype: document\nsummary: Where a Lovelace agent starts reading; written at init, replace with a real project summary.\nupdated: ${stamp}\n---\n\n# ${options.name}\n\nThis is \`documentation/index.md\`, the first place an agent looks. Replace it with a project summary and a reading order, and add any documents and folders you like alongside it.\n`,
   );
-  write(
-    'briefs/architecture/OVERVIEW.md',
-    overviewStub('architecture', 'How the system is decomposed; decisions live in decisions/.', stamp),
-  );
-  write(
-    'briefs/domain/OVERVIEW.md',
-    overviewStub('domain', 'Domain terminology and concepts.', stamp),
-  );
-  write(
-    'briefs/conventions/OVERVIEW.md',
-    overviewStub('conventions', 'Code style and commit conventions.', stamp),
-  );
-  write('briefs/architecture/decisions/.gitkeep', '');
   write('templates/ticket.md', TEMPLATE_TICKET);
   write('templates/adr.md', TEMPLATE_ADR);
   write('templates/session.md', TEMPLATE_SESSION);

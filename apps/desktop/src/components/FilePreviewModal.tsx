@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { CloseIcon } from './icons';
 import type { SourceFile } from '../lib/host';
 import { basename } from '../lib/links';
 import { revealInFinder } from '../lib/os';
 import { useHost } from '../state/store';
+
+// pdf.js is ~1 MB; load it only when a PDF is actually previewed, keeping it out
+// of the initial bundle (and out of the test path unless a PDF is rendered).
+const PdfView = lazy(() => import('./PdfView'));
 
 interface FilePreviewModalProps {
   root: string;
@@ -21,25 +25,12 @@ interface FilePreviewModalProps {
 export function FilePreviewModal({ root, path, onClose }: FilePreviewModalProps) {
   const host = useHost();
   const [file, setFile] = useState<SourceFile | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const abs = `${root.replace(/\/$/, '')}/${path}`;
 
   useEffect(() => {
     setFile(null);
     void host.readSourceFile(root, path).then(setFile, () => setFile({ kind: 'missing' }));
   }, [host, root, path]);
-
-  // PDFs render from a blob URL (more reliable in the webview than a data: URL).
-  useEffect(() => {
-    if (file?.kind === 'pdf' && file.base64 && typeof URL.createObjectURL === 'function') {
-      const bytes = Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0));
-      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-      setPdfUrl(url);
-      return () => URL.revokeObjectURL(url);
-    }
-    setPdfUrl(null);
-    return undefined;
-  }, [file]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -64,10 +55,12 @@ export function FilePreviewModal({ root, path, onClose }: FilePreviewModalProps)
         <img className="file-preview-image" src={`data:${file.mime};base64,${file.base64}`} alt={basename(path)} />
       );
     if (file.kind === 'pdf')
-      return pdfUrl ? (
-        <iframe className="file-preview-pdf" src={pdfUrl} title={basename(path)} />
+      return file.base64 ? (
+        <Suspense fallback={<p className="label">loading...</p>}>
+          <PdfView base64={file.base64} label={basename(path)} />
+        </Suspense>
       ) : (
-        <p className="label">loading...</p>
+        <p className="subtle">This PDF can't be previewed here. Open it to view.</p>
       );
     if (file.kind === 'binary')
       return <p className="subtle">This file can't be previewed here. Open it to view.</p>;

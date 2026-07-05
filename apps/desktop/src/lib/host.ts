@@ -75,24 +75,18 @@ export interface HostClient {
   listFiles(root: string): Promise<string[]>;
   /** Read a repo-relative source file for preview (traversal-guarded; size/binary capped). */
   readSourceFile(root: string, path: string): Promise<SourceFile>;
-  writeBrief(
+  writeDocument(
     root: string,
     path: string,
     changes: { body?: string; summary?: string; review_by?: string | null },
   ): Promise<Snapshot>;
   addComment(root: string, ticket: string, actor: string, body: string): Promise<Snapshot>;
   writeTicketBody(root: string, id: string, body: string): Promise<Snapshot>;
-  createBrief(
-    root: string,
-    dir: string,
-    name: string,
-    summary: string,
-    createOverview: boolean,
-  ): Promise<Snapshot>;
-  /** Create a folder under briefs (its OVERVIEW.md), child of `dir`. */
+  createDocument(root: string, dir: string, name: string, summary: string): Promise<Snapshot>;
+  /** Create a folder under the documentation root (with a starter index.md), child of `dir`. */
   createFolder(root: string, dir: string, name: string): Promise<Snapshot>;
-  /** Rename a brief file (its directory and frontmatter stay put). */
-  renameBrief(root: string, path: string, name: string): Promise<Snapshot>;
+  /** Rename a document file (its directory and frontmatter stay put). */
+  renameDocument(root: string, path: string, name: string): Promise<Snapshot>;
   commitsForTicket(root: string, id: string): Promise<Array<{ sha: string; subject: string }>>;
   search(root: string, query: string): Promise<SearchHit[]>;
   pickDirectory(): Promise<string | null>;
@@ -237,12 +231,12 @@ export class TauriHost implements HostClient {
     return tauriRequest({ op: 'read_source_file', root, path }) as Promise<SourceFile>;
   }
 
-  writeBrief(
+  writeDocument(
     root: string,
     path: string,
     changes: { body?: string; summary?: string; review_by?: string | null },
   ): Promise<Snapshot> {
-    return tauriRequest({ op: 'write_brief', root, path, ...changes }) as Promise<Snapshot>;
+    return tauriRequest({ op: 'write_document', root, path, ...changes }) as Promise<Snapshot>;
   }
 
   addComment(root: string, ticket: string, actor: string, body: string): Promise<Snapshot> {
@@ -253,22 +247,16 @@ export class TauriHost implements HostClient {
     return tauriRequest({ op: 'write_ticket_body', root, id, body }) as Promise<Snapshot>;
   }
 
-  createBrief(
-    root: string,
-    dir: string,
-    name: string,
-    summary: string,
-    createOverview: boolean,
-  ): Promise<Snapshot> {
-    return tauriRequest({ op: 'create_brief', root, dir, name, summary, createOverview }) as Promise<Snapshot>;
+  createDocument(root: string, dir: string, name: string, summary: string): Promise<Snapshot> {
+    return tauriRequest({ op: 'create_document', root, dir, name, summary }) as Promise<Snapshot>;
   }
 
   createFolder(root: string, dir: string, name: string): Promise<Snapshot> {
     return tauriRequest({ op: 'create_folder', root, dir, name }) as Promise<Snapshot>;
   }
 
-  renameBrief(root: string, path: string, name: string): Promise<Snapshot> {
-    return tauriRequest({ op: 'rename_brief', root, path, name }) as Promise<Snapshot>;
+  renameDocument(root: string, path: string, name: string): Promise<Snapshot> {
+    return tauriRequest({ op: 'rename_document', root, path, name }) as Promise<Snapshot>;
   }
 
   async commitsForTicket(root: string, id: string): Promise<Array<{ sha: string; subject: string }>> {

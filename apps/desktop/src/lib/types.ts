@@ -64,7 +64,7 @@ export interface IndexTicket {
   path: string;
 }
 
-export interface IndexBrief {
+export interface IndexDocument {
   id: string;
   summary: string;
   updated?: string;
@@ -103,10 +103,10 @@ export interface ProjectIndex {
   spec_version: string;
   project: { id: string; name: string };
   tickets: IndexTicket[];
-  briefs: IndexBrief[];
+  documents: IndexDocument[];
   sessions: IndexSession[];
   comments: IndexComment[];
-  /** The wiki-link graph derived from ticket and brief bodies. */
+  /** The wiki-link graph derived from ticket and document bodies. */
   links: LinkEdge[];
 }
 

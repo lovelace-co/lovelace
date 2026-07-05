@@ -1,7 +1,7 @@
 import type { Project } from './types.js';
 
 export interface SearchHit {
-  kind: 'ticket' | 'brief' | 'session' | 'comment';
+  kind: 'ticket' | 'document' | 'session' | 'comment';
   id: string;
   path: string;
   /** Why it matched: the line containing the first hit, trimmed. */
@@ -43,13 +43,13 @@ export function search(project: Project, query: string, limit = 20): SearchHit[]
       });
     }
   }
-  for (const b of project.briefs) {
+  for (const b of project.documents) {
     let score = 0;
     if (b.summary.toLowerCase().includes(needle)) score += 3;
     if (b.body.toLowerCase().includes(needle)) score += 1;
     if (score > 0) {
       hits.push({
-        kind: 'brief',
+        kind: 'document',
         id: b.id,
         path: b.path,
         snippet: snippetFor(`${b.summary}\n${b.body}`, needle) ?? b.summary,

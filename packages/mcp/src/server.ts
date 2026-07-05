@@ -18,7 +18,7 @@ import {
   setActiveTicket,
   getActiveTicket,
 } from '@lovelace/core';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { recordTransitionOutcome } from './actions.js';
 
@@ -113,36 +113,38 @@ export function buildServer(root: string): McpServer {
   );
 
   server.registerTool(
-    'read_brief',
+    'read_document',
     {
-      title: 'Read a Lovelace brief',
+      title: 'Read a Lovelace document',
       description:
-        'Read project knowledge: pass a brief id (for example "architecture-overview" or "ADR-0003"), a path relative to the repo root, or a directory under .lovelace/briefs to get its OVERVIEW.md plus the summaries of its children. Read .lovelace/CONTEXT.md first in any new session.',
+        'Read project knowledge: pass a document id (for example "architecture-overview" or "ADR-0003"), a path relative to the repo root, or a directory under .lovelace/documentation to get its index.md plus the summaries of its children. Read .lovelace/documentation/index.md first in any new session.',
       inputSchema: {
-        id_or_path: z.string().describe('Brief id, file path, or briefs directory'),
+        id_or_path: z.string().describe('Document id, file path, or documentation directory'),
       },
     },
     async ({ id_or_path }) => {
       const project = loadProject(root);
-      const byId = project.briefs.find((b) => b.id === id_or_path);
-      const byPath = project.briefs.find((b) => b.path === id_or_path);
-      const brief = byId ?? byPath;
-      if (brief) {
-        return text({ id: brief.id, path: brief.path, summary: brief.summary, body: brief.body });
+      const byId = project.documents.find((b) => b.id === id_or_path);
+      const byPath = project.documents.find((b) => b.path === id_or_path);
+      const document = byId ?? byPath;
+      if (document) {
+        return text({ id: document.id, path: document.path, summary: document.summary, body: document.body });
       }
       const dir = id_or_path.replace(/\/$/, '');
       const abs = join(root, dir);
-      if (existsSync(abs) && existsSync(join(abs, 'OVERVIEW.md'))) {
-        const overview = project.briefs.find((b) => b.path === `${dir}/OVERVIEW.md`);
-        const children = project.briefs
-          .filter((b) => b.path.startsWith(`${dir}/`) && b.path !== `${dir}/OVERVIEW.md`)
+      if (existsSync(abs) && statSync(abs).isDirectory()) {
+        // Prefer index.md as the directory's entry point, but degrade gracefully:
+        // a folder without one still lists its children rather than erroring.
+        const index = project.documents.find((b) => b.path === `${dir}/index.md`);
+        const children = project.documents
+          .filter((b) => b.path.startsWith(`${dir}/`) && b.path !== `${dir}/index.md`)
           .map((b) => ({ path: b.path, id: b.id, summary: b.summary }));
         const subdirs = readdirSync(abs, { withFileTypes: true })
           .filter((e) => e.isDirectory())
           .map((e) => `${dir}/${e.name}`);
-        return text({ overview: overview?.body ?? '', children, subdirectories: subdirs });
+        return text({ index: index?.body ?? '', children, subdirectories: subdirs });
       }
-      throw new Error(`no brief found for "${id_or_path}"`);
+      throw new Error(`no document found for "${id_or_path}"`);
     },
   );
 
@@ -203,7 +205,7 @@ export function buildServer(root: string): McpServer {
     {
       title: 'Search Lovelace entities',
       description:
-        'Plain text search across ticket titles and bodies, briefs, sessions and comments. Returns ranked hits with a snippet. Use it to find prior work, decisions, or discussions before starting something that may already exist.',
+        'Plain text search across ticket titles and bodies, documents, sessions and comments. Returns ranked hits with a snippet. Use it to find prior work, decisions, or discussions before starting something that may already exist.',
       inputSchema: {
         query: z.string().describe('Substring to search for, case-insensitive'),
       },

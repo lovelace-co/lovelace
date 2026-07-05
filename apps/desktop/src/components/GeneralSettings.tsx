@@ -3,7 +3,7 @@ import type { Snapshot } from '../lib/types';
 
 interface GeneralSettingsProps {
   snapshot: Snapshot;
-  /** Rename the project (saved on blur, like a brief summary). */
+  /** Rename the project (saved on blur, like a document summary). */
   onRename: (name: string) => Promise<void>;
 }
 

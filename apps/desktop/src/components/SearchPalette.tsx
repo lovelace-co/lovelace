@@ -56,8 +56,8 @@ export function SearchPalette({ root, onPick, onClose }: SearchPaletteProps) {
     onClose();
   };
 
-  // Briefs are surfaced to the user as "documentation".
-  const kindLabel = (kind: string) => (kind === 'brief' ? 'documentation' : kind);
+  // Documents are surfaced to the user as "documentation".
+  const kindLabel = (kind: string) => (kind === 'document' ? 'documentation' : kind);
 
   return (
     <div className="palette-backdrop" onClick={onClose}>

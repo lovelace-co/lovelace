@@ -8,9 +8,9 @@ Lovelace is a local-first project management tool for software development teams
 
 Project state lives as plain Markdown files with YAML frontmatter inside a `.lovelace/` directory in the user's repository. The files are the source of truth; everything else (indexes, boards, summaries) is derived from them and can be regenerated at any time.
 
-The product thesis: coding agents already live in the filesystem and in Git. Putting tickets, briefs, architectural decisions and agent session history where the agents already are gives them full project context natively, with Git providing the audit trail. For v1 Lovelace is a continuity layer more than a coordination layer. A fresh agent session should start meaningfully smarter because it reads the brief tree, the current ticket and recent session records before touching code.
+The product thesis: coding agents already live in the filesystem and in Git. Putting tickets, documents, architectural decisions and agent session history where the agents already are gives them full project context natively, with Git providing the audit trail. For v1 Lovelace is a continuity layer more than a coordination layer. A fresh agent session should start meaningfully smarter because it reads the documentation tree, the current ticket and recent session records before touching code.
 
-The product is the desktop app. There is no standalone user-facing CLI in the MVP. The app initialises projects (new or existing), manages tickets, epics and the brief tree, and installs the agent integration (CLAUDE.md prompt, hooks, MCP server). A small headless helper binary ships with the app so that hooks and the MCP server have something to execute; it is plumbing, not product.
+The product is the desktop app. There is no standalone user-facing CLI in the MVP. The app initialises projects (new or existing), manages tickets, epics and the documentation tree, and installs the agent integration (CLAUDE.md prompt, hooks, MCP server). A small headless helper binary ships with the app so that hooks and the MCP server have something to execute; it is plumbing, not product.
 
 Scope for v1: a solo developer, one repository per project, reading the current checked-out branch. The app supports multiple projects open simultaneously in tabs. Multiplayer, sync, branch switching, web views and multi-repo are out of scope.
 
@@ -21,7 +21,7 @@ Scope for v1: a solo developer, one repository per project, reading the current 
 3. One entity per file. Comments and session records are append-only sibling files, never edits to existing bodies.
 4. Volatile data lives in frontmatter; stable structure lives in the directory tree. Tickets never move directories when their status or parent changes.
 5. The spec is versioned from day one via the manifest. Tooling must check the spec version before parsing and fail clearly on major versions it does not understand.
-6. Keep everything proportionate. No feature beyond what these phases describe. When a design decision is ambiguous, choose the simpler option and record it as an ADR in `.lovelace/briefs/architecture/decisions/` once dogfooding begins.
+6. Keep everything proportionate. No feature beyond what these phases describe. When a design decision is ambiguous, choose the simpler option and record it as an ADR in `.lovelace/documentation/architecture/decisions/` once dogfooding begins.
 
 ## The `.lovelace/` directory
 
@@ -31,18 +31,15 @@ Scope for v1: a solo developer, one repository per project, reading the current 
   workflow.yaml            ticket types, statuses, transitions, priorities,
                            field definitions, transition automations
   actors.yaml              the user plus named agent identities
-  CONTEXT.md               root brief: project summary and reading order
   AGENTS.md                agent operating instructions (mutate, move and
                            resolve tickets); installed by the integration
-  briefs/                  nested knowledge tree; each directory has an
-                           OVERVIEW.md that summarises and points downward
+  documentation/           nested knowledge tree; index.md is where an
+                           agent starts reading (a convention, not required)
+    index.md
     architecture/
-      OVERVIEW.md
       decisions/           ADRs
     domain/
-      OVERVIEW.md
     conventions/
-      OVERVIEW.md
   tickets/                 flat; one file per ticket, e.g. T-0142.md
   comments/
     T-0142/                one timestamped file per comment
@@ -113,14 +110,14 @@ Rules:
 
 Deliverables:
 
-1. `SPEC.md`: a complete written specification of the format, written as if public documentation. It covers the directory layout, the manifest schema, the workflow and field definition schema, frontmatter schemas for tickets, briefs, sessions and comments, ID conventions (`T-` tickets, `E-` epics, `S-` sessions, `ADR-` decisions, zero-padded sequential), the OVERVIEW.md convention for briefs, and spec versioning rules (semver; tooling refuses major versions it does not know).
+1. `SPEC.md`: a complete written specification of the format, written as if public documentation. It covers the directory layout, the manifest schema, the workflow and field definition schema, frontmatter schemas for tickets, documents, sessions and comments, ID conventions (`T-` tickets, `E-` epics, `S-` sessions, `ADR-` decisions, zero-padded sequential), the index.md convention for the documentation tree, and spec versioning rules (semver; tooling refuses major versions it does not know).
 2. The templates in `templates/`.
 3. A complete hand-made example project under `examples/demo-project/.lovelace/` exercising every entity type, including at least one custom field. This becomes the fixture for tests in later phases.
 
 Frontmatter baselines:
 
 - Ticket: core fields plus defined fields as above.
-- Brief: `id`, `type: brief`, `summary` (one to two sentences; this is what indexes display), `updated`, `review_by` (optional date after which the file should be flagged stale).
+- Document: `id`, `type: document`, `summary` (one to two sentences; this is what indexes display), `updated`, `review_by` (optional date after which the file should be flagged stale).
 - Session: `id`, `ticket`, `actor`, `started`, `ended`, `commits` (list of SHAs), `outcome` (`completed`, `partial`, `abandoned`). Body sections: Approach, What happened, Open questions.
 - Comment filename convention: ISO timestamp plus actor id.
 
@@ -132,7 +129,7 @@ A TypeScript package, `packages/core`, containing all parsing, validation and in
 
 Capabilities:
 
-- Parse and validate every entity: frontmatter against schemas including custom field definitions, link integrity (parents, depends_on and reference fields resolve to existing IDs), status values and ticket types against workflow.yaml, briefs past `review_by` flagged stale. Errors carry file and line. Errors and warnings are distinct; warnings never block.
+- Parse and validate every entity: frontmatter against schemas including custom field definitions, link integrity (parents, depends_on and reference fields resolve to existing IDs), status values and ticket types against workflow.yaml, documents past `review_by` flagged stale. Errors carry file and line. Errors and warnings are distinct; warnings never block.
 - Index generation: `index/index.json` (all entities with their frontmatter, plus per-file `summary` so consumers never need to parse bodies) and `index/BOARD.md` (tickets grouped by status, readable on GitHub). Output is deterministic: running the indexer twice on unchanged input produces byte-identical output. Sort everything; never emit timestamps into index.json.
 - Digest generation: a compact orientation summary for agent session starts. In-progress tickets with titles and summaries, the last three session records (ticket, outcome, open questions), and any validation warnings. Plain text designed to be injected into an agent's context, under roughly 1,500 tokens.
 - Mutations: create ticket, update ticket, transition ticket (validated against legal transitions in workflow.yaml), write session record, write comment. ID assignment is atomic via a counter file with an exclusive lock, safe against concurrent writers.
@@ -157,7 +154,7 @@ An init flow that works for both a brand-new project (create a directory, then `
 
 1. **Board.** Tickets grouped by status, columns from workflow.yaml. Drag between columns performs a validated transition (illegal transitions are not droppable). Filter by type, assignee and any defined custom field.
 2. **Ticket detail.** All fields rendered from the field definitions in workflow.yaml: the form is generated from the schema, not hard-coded, so user-defined fields appear automatically with appropriate inputs per type (enum becomes a select, date a date picker, reference an entity picker, list a tag input). Locked core fields are visible but not editable. Bodies render as Markdown; editing in this phase is plain Markdown text (the WYSIWYG editor arrives in Phase 5).
-3. **Brief tree.** The `briefs/` hierarchy as a navigable tree, OVERVIEW files surfaced as directory landing pages, `review_by`-stale files badged. This view is for the project's documentation (description, architecture, domain, conventions, ADRs), not a general file manager for the user's repository.
+3. **Documentation tree.** The `documentation/` hierarchy as a navigable tree, `index.md` surfaced as a directory's landing page, `review_by`-stale files badged. This view is for the project's documentation (description, architecture, domain, conventions, ADRs), not a general file manager for the user's repository.
 4. **Digest panel.** Mirrors the core digest so the app opens oriented, the same as an agent session does.
 
 ### Behaviours
@@ -168,7 +165,7 @@ An init flow that works for both a brand-new project (create a directory, then `
 - TypeScript strict, vitest, deterministic rendering from index.json fixtures for component tests.
 - Produces installable development builds for macOS, Linux and Windows (signing and auto-update arrive in Phase 7).
 
-Acceptance: a user can initialise a project, create and transition tickets on the board, edit ticket fields through the generated form, browse and edit briefs, and see external file edits reflected live, all without the files ever diverging from what the app shows.
+Acceptance: a user can initialise a project, create and transition tickets on the board, edit ticket fields through the generated form, browse and edit documents, and see external file edits reflected live, all without the files ever diverging from what the app shows.
 
 ## Phase 4: Agent integration
 
@@ -187,7 +184,7 @@ Tools (seven, no more):
 1. `create_ticket(type, fields)`: validates fields against workflow.yaml definitions, assigns ID, writes file, returns the ticket.
 2. `update_ticket(id, fields)`: status changes are validated as legal transitions per workflow.yaml; rejects edits to locked core fields.
 3. `query_tickets(filters)`: filter by status, type, assignee, parent, or any defined custom field; returns frontmatter plus summary, not bodies, unless `include_body` is set.
-4. `read_brief(id_or_path)`: returns a brief's body; given a directory, returns its OVERVIEW.md plus the summaries of children.
+4. `read_document(id_or_path)`: returns a document's body; given a directory, returns its index.md plus the summaries of children.
 5. `log_session(ticket, approach, outcome, commits, open_questions)`: writes a session record file.
 6. `search(query)`: plain text search across entity bodies and titles; simple substring or basic ranking is sufficient, no embeddings.
 7. `set_active_ticket(id)`: records the ticket the session is working on in `.lovelace/state` (null clears it). Validates the ticket exists. The pointer feeds the commit message Git hook, the digest and the session-record check; the file itself remains hand-editable state, not project truth.
@@ -200,9 +197,9 @@ Every mutation triggers a re-index. Tool descriptions must be written for agent 
 2. Hooks in `.claude/settings.json`:
    - `SessionStart`: runs the helper's digest and injects the output.
    - `Stop`: checks whether a session record was written for the active ticket and, if not, emits a prompt instructing the agent to write one before finishing.
-   - `PreToolUse`: blocks `Edit` and `Write` calls targeting `.lovelace/tickets/`, with a message directing the agent to the MCP tools. Briefs remain directly editable.
+   - `PreToolUse`: blocks `Edit` and `Write` calls targeting `.lovelace/tickets/`, with a message directing the agent to the MCP tools. Documents remain directly editable.
 3. Slash commands in `.claude/commands/`:
-   - `/ticket <id>`: loads the ticket, linked briefs and recent sessions into context, sets it as the active ticket via `set_active_ticket`, and transitions it to in progress.
+   - `/ticket <id>`: loads the ticket, linked documents and recent sessions into context, sets it as the active ticket via `set_active_ticket`, and transitions it to in progress.
    - `/done`: replays the ticket's acceptance criteria back to the agent for self-check, transitions the ticket, and writes the session record.
 4. A `prepare-commit-msg` Git hook that injects the active ticket ID from `.lovelace/state` into commit messages when not already present. Installed opt-in by the init flow.
 
@@ -214,21 +211,21 @@ Acceptance: on a machine with only the app installed (no Node), a freshly initia
 
 ### The WYSIWYG editor (core requirement)
 
-Briefs and ticket bodies are edited in a WYSIWYG editor that compiles to Markdown conforming to the spec. Recommended foundation: Milkdown or Tiptap with a Markdown serialiser; evaluate both for round-trip fidelity before committing.
+Documents and ticket bodies are edited in a WYSIWYG editor that compiles to Markdown conforming to the spec. Recommended foundation: Milkdown or Tiptap with a Markdown serialiser; evaluate both for round-trip fidelity before committing.
 
 Requirements:
 
 1. **Round-trip fidelity is the acceptance bar.** Opening a Markdown file and saving without edits must produce a byte-identical file. Edits must produce minimal diffs touching only changed blocks. No reflowing, no list-marker normalisation, no escaping churn. This protects Git history and hand-editability, which are product principles, not conveniences. If the chosen editor cannot achieve this, fix the serialiser or change editor; do not relax the bar.
-2. Frontmatter is never shown raw in the editor. Brief frontmatter (summary, review_by) is edited through a small properties panel; ticket frontmatter is the schema-generated form from the ticket detail view.
+2. Frontmatter is never shown raw in the editor. Document frontmatter (summary, review_by) is edited through a small properties panel; ticket frontmatter is the schema-generated form from the ticket detail view.
 3. Supported constructs: headings, paragraphs, bold and italic, links, ordered and unordered lists, task lists, tables, fenced code blocks with language, blockquotes, images by relative path. Anything outside this set encountered in an existing file is preserved verbatim as an uneditable raw block rather than mangled.
-4. Creating a new brief through the app scaffolds from `templates/`, places the file per the spec's tree conventions, and prompts for the directory if ambiguous. Creating a file in a new directory offers to create that directory's OVERVIEW.md.
+4. Creating a new document through the app scaffolds from `templates/`, places the file in the chosen directory, and prompts for the directory if ambiguous. Creating a folder scaffolds a starter `index.md` so it is discoverable.
 
 ### History views
 
 1. **Sessions.** Reverse-chronological session records with their tickets, outcomes, commits and open questions.
 2. **Ticket timeline.** Linked comments, session records and commits (resolved via the ticket IDs in commit messages) display in a timeline on the ticket detail view.
 
-Acceptance: a fortnight of dogfooding in which the developer manages this repository's own tickets and briefs entirely through the app, while Claude Code sessions run concurrently against the same files, with no corruption, no noisy diffs and no divergence between what the app shows and what the files contain.
+Acceptance: a fortnight of dogfooding in which the developer manages this repository's own tickets and documents entirely through the app, while Claude Code sessions run concurrently against the same files, with no corruption, no noisy diffs and no divergence between what the app shows and what the files contain.
 
 ## Phase 6: Transition automation
 

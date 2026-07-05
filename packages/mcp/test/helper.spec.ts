@@ -119,9 +119,9 @@ describe('lovelace-agent guard', () => {
     expect(result.stderr).toContain('MCP tools');
   });
 
-  it('allows edits to briefs and ordinary files', async () => {
+  it('allows edits to documents and ordinary files', async () => {
     const root = fixture();
-    for (const path of [`${root}/.lovelace/briefs/domain/OVERVIEW.md`, `${root}/src/cache.ts`]) {
+    for (const path of [`${root}/.lovelace/documentation/domain/OVERVIEW.md`, `${root}/src/cache.ts`]) {
       const result = await helper(root, ['guard'], JSON.stringify({
         tool_name: 'Write',
         tool_input: { file_path: path },

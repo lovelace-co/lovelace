@@ -26,8 +26,10 @@
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@tauri-apps/plugin-opener": "^2.2.0",
     "lexical": "^0.45.0",
+    "pdfjs-dist": "^5.4.296",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-pdf": "^10.4.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",

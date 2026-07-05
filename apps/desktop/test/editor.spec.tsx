@@ -142,10 +142,10 @@ describe('BlockEditor component (Lexical)', () => {
 
 describe('wiki-links in the editor', () => {
   const target: LinkTarget = {
-    kind: 'brief',
+    kind: 'document',
     id: 'architecture-overview',
     label: 'Architecture Overview',
-    path: '.lovelace/briefs/architecture/OVERVIEW.md',
+    path: '.lovelace/documentation/architecture/OVERVIEW.md',
   };
   const resolve = (id: string) => (id === target.id ? target : null);
 
@@ -171,7 +171,7 @@ describe('wiki-links in the editor', () => {
     expect(chip.className).toContain('wikilink');
     expect(document.body.textContent).not.toContain('[[architecture-overview]]');
     fireEvent.click(chip);
-    expect(onOpenLink).toHaveBeenCalledWith(expect.objectContaining({ id: target.id, kind: 'brief' }));
+    expect(onOpenLink).toHaveBeenCalledWith(expect.objectContaining({ id: target.id, kind: 'document' }));
   });
 
   it('renders an unresolved link verbatim and inert', () => {

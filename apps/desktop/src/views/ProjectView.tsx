@@ -23,7 +23,7 @@ import { buildLinkResolver, referenceCandidates, type LinkResolver, type OpenLin
 import type { IndexTicket, SearchHit, Snapshot } from '../lib/types';
 import { Actions } from './Actions';
 import { Board } from './Board';
-import { Briefs } from './Briefs';
+import { Documents } from './Documents';
 import { Graph } from './Graph';
 import { List } from './List';
 import { Sessions } from './Sessions';
@@ -168,11 +168,11 @@ export function ProjectView({ root }: ProjectViewProps) {
     setOpenTicket(null);
   };
 
-  /** Follow a clicked reference: a ticket/brief navigates, a file previews, a person is a mention. */
+  /** Follow a clicked reference: a ticket/document navigates, a file previews, a person is a mention. */
   const openLink: OpenLink = (target) => {
     if (target.kind === 'ticket') {
       setOpenTicket(target.id);
-    } else if (target.kind === 'brief' && target.path) {
+    } else if (target.kind === 'document' && target.path) {
       setDocsFocus(target.path);
       goto('docs');
     } else if (target.kind === 'file' && target.path) {
@@ -184,7 +184,7 @@ export function ProjectView({ root }: ProjectViewProps) {
   const pickSearchHit = (hit: SearchHit) => {
     if (hit.kind === 'ticket') {
       setOpenTicket(hit.id);
-    } else if (hit.kind === 'brief') {
+    } else if (hit.kind === 'document') {
       setDocsFocus(hit.path);
       goto('docs');
     } else if (hit.kind === 'session') {
@@ -371,32 +371,32 @@ export function ProjectView({ root }: ProjectViewProps) {
             onRequestDelete={setDeleting}
           />
         ) : nav === 'docs' ? (
-          <Briefs
+          <Documents
             snapshot={snapshot}
             focusPath={docsFocus}
             candidates={linkCandidates}
             resolveLink={resolveLink}
             onOpenLink={openLink}
             onSaveBody={async (path, body) => {
-              await apply((h) => h.writeBrief(root, path, { body }));
+              await apply((h) => h.writeDocument(root, path, { body }));
             }}
             onSaveProperties={async (path, summary, reviewBy) => {
-              await apply((h) => h.writeBrief(root, path, { summary, review_by: reviewBy }));
+              await apply((h) => h.writeDocument(root, path, { summary, review_by: reviewBy }));
             }}
-            onCreateBrief={async (dir, name, summary, createOverview) => {
-              await apply((h) => h.createBrief(root, dir, name, summary, createOverview));
+            onCreateDocument={async (dir, name, summary) => {
+              await apply((h) => h.createDocument(root, dir, name, summary));
             }}
             onCreateFolder={async (dir, name) => {
               await apply((h) => h.createFolder(root, dir, name));
             }}
-            onRenameBrief={async (path, name) => {
-              await apply((h) => h.renameBrief(root, path, name));
+            onRenameDocument={async (path, name) => {
+              await apply((h) => h.renameDocument(root, path, name));
             }}
           />
         ) : nav === 'graph' ? (
           <Graph
             snapshot={snapshot}
-            onOpenBrief={(path) => {
+            onOpenDocument={(path) => {
               setDocsFocus(path);
               goto('docs');
             }}

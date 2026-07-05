@@ -36,7 +36,7 @@ export function buildIndex(project: Project): Record<string, unknown> {
         fields: sortedRecord(t.fields),
         path: t.path,
       })),
-    briefs: [...project.briefs]
+    documents: [...project.documents]
       .sort((a, b) => a.path.localeCompare(b.path))
       .map((b) => ({
         id: b.id,

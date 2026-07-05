@@ -41,7 +41,7 @@ describe('the MCP server', () => {
       'create_ticket',
       'log_session',
       'query_tickets',
-      'read_brief',
+      'read_document',
       'search',
       'set_active_ticket',
       'update_ticket',
@@ -144,16 +144,18 @@ describe('the MCP server', () => {
     expect((result.tickets as Array<{ id: string }>).map((t) => t.id)).toEqual(['T-0004']);
   });
 
-  it('reads briefs by id, path and directory', async () => {
+  it('reads documents by id, path and directory', async () => {
     const client = await connect(fixture());
-    const byId = parse(await client.callTool({ name: 'read_brief', arguments: { id_or_path: 'ADR-0001' } }));
+    const byId = parse(await client.callTool({ name: 'read_document', arguments: { id_or_path: 'ADR-0001' } }));
     expect(String(byId.body)).toContain('File cache instead of a database');
 
+    // A directory prefers its index.md as the entry point and lists its children.
     const byDir = parse(
-      await client.callTool({ name: 'read_brief', arguments: { id_or_path: '.lovelace/briefs/architecture' } }),
+      await client.callTool({ name: 'read_document', arguments: { id_or_path: '.lovelace/documentation' } }),
     );
-    expect(String(byDir.overview)).toContain('Fetcher');
+    expect(String(byDir.index).length).toBeGreaterThan(0);
     const children = byDir.children as Array<{ id: string }>;
+    expect(children.some((c) => c.id === 'architecture-overview')).toBe(true);
     expect(children.some((c) => c.id === 'ADR-0001')).toBe(true);
   });
 

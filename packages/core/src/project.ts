@@ -3,8 +3,8 @@ import { join, relative, sep } from 'node:path';
 import { ConfigError, loadActors, loadManifest, loadWorkflow } from './config.js';
 import { FrontmatterError, parseFrontmatter } from './frontmatter.js';
 import type {
-  Brief,
   Comment,
+  Document,
   Project,
   SessionRecord,
   Ticket,
@@ -107,26 +107,23 @@ export function loadProject(root: string): Project {
     });
   }
 
-  const briefs: Brief[] = [];
-  const briefFiles = [
-    join(dir, 'CONTEXT.md'),
-    ...listMarkdown(join(dir, manifest.paths.briefs)),
-  ].filter((p) => existsSync(p));
-  for (const abs of briefFiles) {
+  const documents: Document[] = [];
+  const documentFiles = listMarkdown(join(dir, manifest.paths.documentation)).filter((p) => existsSync(p));
+  for (const abs of documentFiles) {
     const r = readEntity(abs);
     if (!r) continue;
     const fm = r.parsed.data;
     const { id, type, summary, updated, review_by, ...extra } = fm;
-    const brief: Brief = {
+    const document: Document = {
       id: str(id),
       summary: str(summary),
       extra: { type, ...extra },
       body: r.parsed.body,
       path: r.file,
     };
-    if (updated !== undefined) brief.updated = str(updated);
-    if (review_by !== undefined) brief.review_by = str(review_by);
-    briefs.push(brief);
+    if (updated !== undefined) document.updated = str(updated);
+    if (review_by !== undefined) document.review_by = str(review_by);
+    documents.push(document);
   }
 
   const sessions: SessionRecord[] = [];
@@ -168,7 +165,7 @@ export function loadProject(root: string): Project {
     workflow,
     actors,
     tickets,
-    briefs,
+    documents,
     sessions,
     comments,
     issues,

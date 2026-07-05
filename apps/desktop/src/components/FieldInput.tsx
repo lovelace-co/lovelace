@@ -29,7 +29,7 @@ function referenceOptions(
     if (!targets || targets.includes(t.type)) out.push({ id: t.id, label: `${t.id} ${t.title}` });
   }
   if (wants('actor')) for (const a of actors) out.push({ id: a.id, label: `${a.id} (${a.name})` });
-  if (wants('brief')) for (const b of index.briefs) out.push({ id: b.id, label: b.id });
+  if (wants('document')) for (const b of index.documents) out.push({ id: b.id, label: b.id });
   return out;
 }
 

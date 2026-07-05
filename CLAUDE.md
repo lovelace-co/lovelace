@@ -21,7 +21,7 @@ pnpm workspaces. Node 22 for development. TypeScript strict mode.
 4. One entity per file. Comments and sessions are append-only sibling files.
 5. The spec is versioned. Any change to the format requires a version bump in SPEC.md and a note in the manifest schema. Tooling fails clearly on unknown major versions.
 6. Round-trip fidelity in the editor is an acceptance bar, not a preference. Opening and saving a file without edits must be byte-identical; edits produce minimal diffs. Do not relax this.
-7. Simpler wins. When two designs are defensible, take the one with less machinery and record the decision as an ADR in `.lovelace/briefs/architecture/decisions/` once dogfooding begins.
+7. Simpler wins. When two designs are defensible, take the one with less machinery and record the decision as an ADR in `.lovelace/documentation/architecture/decisions/` once dogfooding begins.
 
 ## Conventions
 
@@ -58,17 +58,18 @@ The desktop app has a deliberate visual language. These are settled decisions, r
 ## Working in this repo
 
 - Run `pnpm test` before declaring any task complete. Run `pnpm build` to confirm types across packages.
+- `pnpm app:dev` runs against `packages/mcp/dist/host.js` directly (via `LOVELACE_HOST_JS`), so dev picks up host changes from a plain `pnpm build`. A packaged production build does not: run `pnpm sidecars` to Bun-compile the host, agent and MCP binaries into `src-tauri/binaries/` (needs the Rust toolchain for the target triple) before `pnpm app:build`, or the app ships stale sidecars.
 - When changing `packages/core` schemas, check all three consumers: the validator and indexer, the MCP tools, and the app's generated forms.
 - ID assignment uses a counter file with an exclusive lock. Do not introduce alternative ID schemes.
 - The MCP server has exactly seven tools. Do not add tools without an explicit instruction.
 - Transition automation has exactly two action kinds, `run` and `agent`. Lovelace is an orchestrator, not a CI system: no retries, queues or scheduling.
 - All app mutations route through core validation. The app must never be able to produce a file the validator rejects.
-- From the end of Phase 4, this repository dogfoods itself: read `.lovelace/CONTEXT.md` at session start, work from tickets, and write a session record before finishing.
+- From the end of Phase 4, this repository dogfoods itself: read `.lovelace/documentation/index.md` at session start, work from tickets, and write a session record before finishing.
 
 <!-- lovelace:start -->
 ## Lovelace
 
-This project uses Lovelace; its tickets, briefs and session history live in `.lovelace/`. Before any work, read and follow `.lovelace/AGENTS.md`.
+This project uses Lovelace; its tickets, documentation and session history live in `.lovelace/`. Before any work, read and follow `.lovelace/AGENTS.md`.
 
 @.lovelace/AGENTS.md
 <!-- lovelace:end -->

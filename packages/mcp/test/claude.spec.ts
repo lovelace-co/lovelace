@@ -31,7 +31,7 @@ describe('installClaudeAssets', () => {
 
     // The direction lives in AGENTS.md: how to mutate, resolve and finish.
     const agents = readFileSync(join(root, '.lovelace/AGENTS.md'), 'utf8');
-    expect(agents).toContain('.lovelace/CONTEXT.md');
+    expect(agents).toContain('.lovelace/documentation/index.md');
     expect(agents).toContain('log_session');
     expect(agents).toContain('update_ticket'); // the move-by-outcome guidance
 

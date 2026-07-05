@@ -1,7 +1,7 @@
 import { titleCase } from './format';
 import type { Snapshot } from './types';
 
-export type LinkKind = 'ticket' | 'brief' | 'file' | 'person';
+export type LinkKind = 'ticket' | 'document' | 'file' | 'person';
 
 /** The `file:` scheme prefix for a source-file reference token. */
 export const FILE_SCHEME = 'file:';
@@ -11,16 +11,16 @@ export interface LinkTarget {
   kind: LinkKind;
   /** The stored token: an entity id, `file:<path>`, or `@<actor>`. */
   id: string;
-  /** The current human label: a ticket title, brief/file name, or actor name. */
+  /** The current human label: a ticket title, document/file name, or actor name. */
   label: string;
-  /** Repository-relative path (briefs deep-link by it; files preview/open by it). Absent for people. */
+  /** Repository-relative path (documents deep-link by it; files preview/open by it). Absent for people. */
   path?: string;
 }
 
 /** Resolves a stored `[[token]]` to its current target, or null if broken. */
 export type LinkResolver = (token: string) => LinkTarget | null;
 
-/** Opens a resolved reference: a ticket/brief navigates, a file previews, a person is a mention. */
+/** Opens a resolved reference: a ticket/document navigates, a file previews, a person is a mention. */
 export type OpenLink = (target: LinkTarget) => void;
 
 /** The last path segment, for a file's display label. */
@@ -30,21 +30,22 @@ export function basename(path: string): string {
 }
 
 /**
- * The display label for a brief. Briefs have no title field and many share the
- * filename OVERVIEW.md, so the unique id slug (title-cased) is the readable name.
+ * The display label for a document. Documents have no title field, and filenames
+ * need not be unique across folders, so the unique id slug (title-cased) is the
+ * readable name.
  */
-export function briefLabel(id: string): string {
+export function documentLabel(id: string): string {
   return titleCase(id);
 }
 
 /**
  * Builds a resolver over the current snapshot, dispatching on the token's
  * scheme: `file:<path>` -> a source file, `@<actor>` -> a person, otherwise a
- * ticket or brief id.
+ * ticket or document id.
  */
 export function buildLinkResolver(snapshot: Snapshot): LinkResolver {
   const tickets = new Map(snapshot.index.tickets.map((t) => [t.id, t]));
-  const briefs = new Map(snapshot.index.briefs.map((b) => [b.id, b]));
+  const documents = new Map(snapshot.index.documents.map((b) => [b.id, b]));
   const actors = new Map(snapshot.actors.map((a) => [a.id, a]));
   return (token: string) => {
     if (token.startsWith(FILE_SCHEME)) {
@@ -57,8 +58,8 @@ export function buildLinkResolver(snapshot: Snapshot): LinkResolver {
     }
     const ticket = tickets.get(token);
     if (ticket) return { kind: 'ticket', id: token, label: ticket.title || token, path: ticket.path };
-    const brief = briefs.get(token);
-    if (brief) return { kind: 'brief', id: token, label: briefLabel(token), path: brief.path };
+    const document = documents.get(token);
+    if (document) return { kind: 'document', id: token, label: documentLabel(token), path: document.path };
     return null;
   };
 }
@@ -69,26 +70,26 @@ export interface ReferenceCandidate {
   token: string;
   label: string;
   kind: LinkKind;
-  /** Secondary line: the ticket id, brief summary, or file path. */
+  /** Secondary line: the ticket id, document summary, or file path. */
   hint: string;
 }
 
 /**
  * Every insertable reference for the unified `/` menu and the toolbar pickers:
- * tickets, then briefs, then repo files (as `file:<path>` tokens). People are
+ * tickets, then documents, then repo files (as `file:<path>` tokens). People are
  * added later. `files` is the repo file list from `host.listFiles`.
  */
 export function referenceCandidates(snapshot: Snapshot, files: string[] = []): ReferenceCandidate[] {
   const tickets = snapshot.index.tickets.map(
     (t): ReferenceCandidate => ({ token: t.id, label: t.title || t.id, kind: 'ticket', hint: t.id }),
   );
-  const briefs = snapshot.index.briefs.map(
-    (b): ReferenceCandidate => ({ token: b.id, label: briefLabel(b.id), kind: 'brief', hint: b.summary }),
+  const documents = snapshot.index.documents.map(
+    (b): ReferenceCandidate => ({ token: b.id, label: documentLabel(b.id), kind: 'document', hint: b.summary }),
   );
   const fileCandidates = files.map(
     (p): ReferenceCandidate => ({ token: `${FILE_SCHEME}${p}`, label: basename(p), kind: 'file', hint: p }),
   );
-  return [...tickets, ...briefs, ...fileCandidates];
+  return [...tickets, ...documents, ...fileCandidates];
 }
 
 export interface GraphNode {
@@ -103,21 +104,21 @@ export interface GraphLink {
 }
 
 /**
- * The documentation graph: every brief as a node, and one undirected edge per
- * unique pair of briefs that link to each other in either direction. Ticket
+ * The documentation graph: every document as a node, and one undirected edge per
+ * unique pair of documents that link to each other in either direction. Ticket
  * links are excluded (the graph is documentation-only). Deterministic: nodes
  * sorted by id, links sorted by pair.
  */
-export function briefGraph(snapshot: Snapshot): { nodes: GraphNode[]; links: GraphLink[] } {
-  const briefIds = new Set(snapshot.index.briefs.map((b) => b.id));
-  const nodes = snapshot.index.briefs
-    .map((b): GraphNode => ({ id: b.id, label: briefLabel(b.id), path: b.path }))
+export function documentGraph(snapshot: Snapshot): { nodes: GraphNode[]; links: GraphLink[] } {
+  const documentIds = new Set(snapshot.index.documents.map((b) => b.id));
+  const nodes = snapshot.index.documents
+    .map((b): GraphNode => ({ id: b.id, label: documentLabel(b.id), path: b.path }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
   const seen = new Set<string>();
   const links: GraphLink[] = [];
   for (const edge of snapshot.index.links ?? []) {
-    if (!briefIds.has(edge.source) || !briefIds.has(edge.target) || edge.source === edge.target) continue;
+    if (!documentIds.has(edge.source) || !documentIds.has(edge.target) || edge.source === edge.target) continue;
     const [a, b] = edge.source < edge.target ? [edge.source, edge.target] : [edge.target, edge.source];
     const key = `${a} ${b}`;
     if (seen.has(key)) continue;

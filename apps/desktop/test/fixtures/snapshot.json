@@ -7,7 +7,7 @@
     "created": "2026-05-28",
     "paths": {
       "tickets": "tickets",
-      "briefs": "briefs",
+      "documentation": "documentation",
       "comments": "comments",
       "sessions": "sessions",
       "templates": "templates",
@@ -271,43 +271,43 @@
         "path": ".lovelace/tickets/T-0004.md"
       }
     ],
-    "briefs": [
+    "documents": [
       {
         "id": "ADR-0001",
         "summary": "Forecasts are cached as flat JSON files rather than in a database, accepting slower queries for zero operational surface.",
         "updated": "2026-05-30T10:00:00Z",
-        "path": ".lovelace/briefs/architecture/decisions/ADR-0001.md"
+        "path": ".lovelace/documentation/architecture/decisions/ADR-0001.md"
       },
       {
         "id": "decisions-overview",
         "summary": "Architecture decision records for Orbit, one file per decision, never edited after acceptance.",
         "updated": "2026-05-30T10:00:00Z",
-        "path": ".lovelace/briefs/architecture/decisions/OVERVIEW.md"
+        "path": ".lovelace/documentation/architecture/decisions/OVERVIEW.md"
       },
       {
         "id": "architecture-overview",
         "summary": "Orbit is a single Node service with a fetcher, a cache and an HTTP layer; decisions live in decisions/.",
         "updated": "2026-06-02T11:00:00Z",
-        "path": ".lovelace/briefs/architecture/OVERVIEW.md"
+        "path": ".lovelace/documentation/architecture/OVERVIEW.md"
       },
       {
         "id": "conventions-overview",
         "summary": "Code style and commit conventions for Orbit.",
         "updated": "2026-04-20T14:00:00Z",
         "review_by": "2026-06-01",
-        "path": ".lovelace/briefs/conventions/OVERVIEW.md"
+        "path": ".lovelace/documentation/conventions/OVERVIEW.md"
       },
       {
         "id": "domain-overview",
         "summary": "Forecast, observation and location terminology used across Orbit.",
         "updated": "2026-06-01T09:30:00Z",
-        "path": ".lovelace/briefs/domain/OVERVIEW.md"
+        "path": ".lovelace/documentation/domain/OVERVIEW.md"
       },
       {
         "id": "context",
         "summary": "Orbit is a small weather forecast API; read this file, then the architecture overview, before any work.",
         "updated": "2026-06-08T09:00:00Z",
-        "path": ".lovelace/CONTEXT.md"
+        "path": ".lovelace/documentation/index.md"
       }
     ],
     "sessions": [
@@ -479,12 +479,12 @@
   "issues": [
     {
       "severity": "warning",
-      "file": ".lovelace/briefs/conventions/OVERVIEW.md",
-      "rule": "briefs/stale",
+      "file": ".lovelace/documentation/conventions/OVERVIEW.md",
+      "rule": "documents/stale",
       "message": "past its review_by date (2026-06-01)",
       "line": 6
     }
   ],
-  "digest": "Lovelace digest for Orbit Weather Service\n\nIn progress:\n  E-0001 [in_progress] Public API v1\n  T-0002 [in_progress] @claude Forecast endpoint\n  T-0004 [in_review] @claude Wind gusts reported as negative values\n\nRecent sessions:\n  S-0002 on T-0002: partial\n    open: Should the 503 test freeze the refresh timer, or should `isCold()` take an injectable clock?\n  S-0001 on T-0001: completed\n\nWarnings (1):\n  .lovelace/briefs/conventions/OVERVIEW.md:6 past its review_by date (2026-06-01)\n",
+  "digest": "Lovelace digest for Orbit Weather Service\n\nIn progress:\n  E-0001 [in_progress] Public API v1\n  T-0002 [in_progress] @claude Forecast endpoint\n  T-0004 [in_review] @claude Wind gusts reported as negative values\n\nRecent sessions:\n  S-0002 on T-0002: partial\n    open: Should the 503 test freeze the refresh timer, or should `isCold()` take an injectable clock?\n  S-0001 on T-0001: completed\n\nWarnings (1):\n  .lovelace/documentation/conventions/OVERVIEW.md:6 past its review_by date (2026-06-01)\n",
   "activeTicket": null
 }

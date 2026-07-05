@@ -25,7 +25,7 @@ export interface LayoutOptions {
  * nodes are seeded on a circle by their sorted index (never Math.random), then
  * relaxed for a fixed number of iterations, so the same graph always lays out
  * the same way and the result is testable. Big graphs are not the target here
- * (a project's briefs number in the tens), so the O(n^2) repulsion is fine.
+ * (a project's documents number in the tens), so the O(n^2) repulsion is fine.
  * Pinned nodes (options.fixed) are held in place and anchor the rest.
  */
 export function layoutGraph(

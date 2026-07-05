@@ -47,7 +47,7 @@ describe('search', () => {
     expect(hits[0]?.kind).toBe('ticket');
     expect(hits[0]?.id).toBe('T-0002');
     const kinds = new Set(hits.map((h) => h.kind));
-    expect(kinds.has('brief')).toBe(true);
+    expect(kinds.has('document')).toBe(true);
     expect(search(project, '')).toEqual([]);
     expect(search(project, 'zzz-no-such-text')).toEqual([]);
   });

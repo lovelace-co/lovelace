@@ -11,7 +11,7 @@ export interface ValidationIssue {
 
 export interface ProjectPaths {
   tickets: string;
-  briefs: string;
+  documentation: string;
   comments: string;
   sessions: string;
   templates: string;
@@ -109,7 +109,7 @@ export interface Ticket {
   path: string;
 }
 
-export interface Brief {
+export interface Document {
   id: string;
   summary: string;
   updated?: string;
@@ -148,7 +148,7 @@ export interface Project {
   workflow: Workflow;
   actors: Actor[];
   tickets: Ticket[];
-  briefs: Brief[];
+  documents: Document[];
   sessions: SessionRecord[];
   comments: Comment[];
   /** Issues found while loading and parsing. Validation adds more. */
@@ -159,5 +159,5 @@ export interface Project {
 
 export const SESSION_OUTCOMES = ['completed', 'partial', 'abandoned'] as const;
 
-export const SPEC_VERSION = '1.0.0';
-export const SUPPORTED_SPEC_MAJOR = 1;
+export const SPEC_VERSION = '2.0.0';
+export const SUPPORTED_SPEC_MAJOR = 2;

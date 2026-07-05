@@ -67,71 +67,73 @@ describe('host ops: init configuration', () => {
   });
 });
 
-describe('host ops: rename_brief', () => {
-  it('renames a brief file in place and reindexes', async () => {
+describe('host ops: rename_document', () => {
+  it('renames a document file in place and reindexes', async () => {
     const root = fixture();
-    const res = await handle({ op: 'create_brief', root, dir: '.lovelace/briefs/domain', name: 'pricing' });
-    expect((res.created as string[])[0]).toBe('.lovelace/briefs/domain/pricing.md');
+    const res = await handle({ op: 'create_document', root, dir: '.lovelace/documentation/domain', name: 'pricing' });
+    expect((res.created as string[])[0]).toBe('.lovelace/documentation/domain/pricing.md');
     const renamed = await handle({
-      op: 'rename_brief',
+      op: 'rename_document',
       root,
-      path: '.lovelace/briefs/domain/pricing.md',
+      path: '.lovelace/documentation/domain/pricing.md',
       name: 'pricing-model',
     });
-    expect(renamed.renamed).toBe('.lovelace/briefs/domain/pricing-model.md');
-    expect(existsSync(join(root, '.lovelace/briefs/domain/pricing.md'))).toBe(false);
-    expect(existsSync(join(root, '.lovelace/briefs/domain/pricing-model.md'))).toBe(true);
-    const briefs = (renamed.index as { briefs: Array<{ path: string }> }).briefs;
-    expect(briefs.some((b) => b.path === '.lovelace/briefs/domain/pricing-model.md')).toBe(true);
+    expect(renamed.renamed).toBe('.lovelace/documentation/domain/pricing-model.md');
+    expect(existsSync(join(root, '.lovelace/documentation/domain/pricing.md'))).toBe(false);
+    expect(existsSync(join(root, '.lovelace/documentation/domain/pricing-model.md'))).toBe(true);
+    const documents = (renamed.index as { documents: Array<{ path: string }> }).documents;
+    expect(documents.some((b) => b.path === '.lovelace/documentation/domain/pricing-model.md')).toBe(true);
   });
 
-  it('refuses fixed names, bad names and collisions', async () => {
+  it('renames formerly locked names now that filenames are unrestricted', async () => {
+    const root = fixture();
+    // OVERVIEW.md and ADR files used to be fixed; they are now ordinary documents.
+    const renamed = await handle({
+      op: 'rename_document',
+      root,
+      path: '.lovelace/documentation/domain/OVERVIEW.md',
+      name: 'domain notes',
+    });
+    expect(renamed.renamed).toBe('.lovelace/documentation/domain/domain notes.md');
+    expect(existsSync(join(root, '.lovelace/documentation/domain/domain notes.md'))).toBe(true);
+  });
+
+  it('refuses paths outside documentation, traversal and collisions', async () => {
     const root = fixture();
     await expect(
-      handle({ op: 'rename_brief', root, path: '.lovelace/CONTEXT.md', name: 'other' }),
-    ).rejects.toThrow(/only renames files under briefs/);
+      handle({ op: 'rename_document', root, path: '.lovelace/tickets/T-0002.md', name: 'other' }),
+    ).rejects.toThrow(/only renames files under the documentation root/);
+    await handle({ op: 'create_document', root, dir: '.lovelace/documentation/domain', name: 'pricing' });
     await expect(
-      handle({ op: 'rename_brief', root, path: '.lovelace/briefs/domain/OVERVIEW.md', name: 'other' }),
-    ).rejects.toThrow(/fixed name/);
+      handle({ op: 'rename_document', root, path: '.lovelace/documentation/domain/pricing.md', name: '../evil' }),
+    ).rejects.toThrow(/path separators/);
     await expect(
-      handle({
-        op: 'rename_brief',
-        root,
-        path: '.lovelace/briefs/architecture/decisions/ADR-0001.md',
-        name: 'other',
-      }),
-    ).rejects.toThrow(/ADR filenames/);
-    await handle({ op: 'create_brief', root, dir: '.lovelace/briefs/domain', name: 'pricing' });
-    await expect(
-      handle({ op: 'rename_brief', root, path: '.lovelace/briefs/domain/pricing.md', name: 'bad name!' }),
-    ).rejects.toThrow(/letters, digits and hyphens/);
-    await expect(
-      handle({ op: 'rename_brief', root, path: '.lovelace/briefs/domain/pricing.md', name: 'OVERVIEW' }),
+      handle({ op: 'rename_document', root, path: '.lovelace/documentation/domain/pricing.md', name: 'OVERVIEW' }),
     ).rejects.toThrow(/already exists/);
   });
 });
 
 describe('host op: create_folder', () => {
-  it('creates a folder as its OVERVIEW.md with a unique id', async () => {
+  it('creates a folder with a starter index.md', async () => {
     const root = fixture();
-    const res = await handle({ op: 'create_folder', root, dir: '.lovelace/briefs', name: 'operations' });
-    expect((res.created as string[])[0]).toBe('.lovelace/briefs/operations/OVERVIEW.md');
-    expect(existsSync(join(root, '.lovelace/briefs/operations/OVERVIEW.md'))).toBe(true);
-    const briefs = (res.index as { briefs: Array<{ id: string; path: string }> }).briefs;
-    const overview = briefs.find((b) => b.path === '.lovelace/briefs/operations/OVERVIEW.md');
-    expect(overview?.id).toBe('operations-overview');
+    const res = await handle({ op: 'create_folder', root, dir: '.lovelace/documentation', name: 'operations' });
+    expect((res.created as string[])[0]).toBe('.lovelace/documentation/operations/index.md');
+    expect(existsSync(join(root, '.lovelace/documentation/operations/index.md'))).toBe(true);
+    const documents = (res.index as { documents: Array<{ id: string; path: string }> }).documents;
+    const index = documents.find((b) => b.path === '.lovelace/documentation/operations/index.md');
+    expect(index?.id).toBe('operations');
   });
 
-  it('refuses bad names, paths outside briefs, and existing folders', async () => {
+  it('refuses traversal, paths outside documentation, and existing folders', async () => {
     const root = fixture();
     await expect(
-      handle({ op: 'create_folder', root, dir: '.lovelace/briefs', name: 'bad name!' }),
-    ).rejects.toThrow(/letters, digits and hyphens/);
+      handle({ op: 'create_folder', root, dir: '.lovelace/documentation', name: '../evil' }),
+    ).rejects.toThrow(/path separators/);
     await expect(
       handle({ op: 'create_folder', root, dir: '.lovelace/tickets', name: 'x' }),
-    ).rejects.toThrow(/only creates folders under briefs/);
+    ).rejects.toThrow(/only creates folders under the documentation root/);
     await expect(
-      handle({ op: 'create_folder', root, dir: '.lovelace/briefs', name: 'architecture' }),
+      handle({ op: 'create_folder', root, dir: '.lovelace/documentation', name: 'architecture' }),
     ).rejects.toThrow(/already exists/);
   });
 });

@@ -7,7 +7,7 @@ import { SUPPORTED_SPEC_MAJOR } from './types.js';
 
 const DEFAULT_PATHS: ProjectPaths = {
   tickets: 'tickets',
-  briefs: 'briefs',
+  documentation: 'documentation',
   comments: 'comments',
   sessions: 'sessions',
   templates: 'templates',
@@ -23,7 +23,7 @@ const manifestSchema = z.object({
   paths: z
     .object({
       tickets: z.string().default('tickets'),
-      briefs: z.string().default('briefs'),
+      documentation: z.string().default('documentation'),
       comments: z.string().default('comments'),
       sessions: z.string().default('sessions'),
       templates: z.string().default('templates'),
@@ -197,7 +197,7 @@ export function validateWorkflow(workflow: Workflow, file: string): ValidationIs
       }
     }
     for (const target of field.refers_to ?? []) {
-      if (!typeNames.has(target) && !['actor', 'brief'].includes(target)) {
+      if (!typeNames.has(target) && !['actor', 'document'].includes(target)) {
         err('workflow/unknown-ref-target', `field "${field.name}" refers_to unknown kind "${target}"`);
       }
     }

@@ -94,7 +94,7 @@ async function guard(): Promise<number> {
   const path = input.tool_input?.file_path ?? '';
   if (/\.lovelace\/tickets\//.test(path)) {
     process.stderr.write(
-      'Ticket files are managed through the Lovelace MCP tools (create_ticket, update_ticket), not direct edits. Use those tools instead; briefs under .lovelace/briefs/ remain directly editable.\n',
+      'Ticket files are managed through the Lovelace MCP tools (create_ticket, update_ticket), not direct edits. Use those tools instead; documents under .lovelace/documentation/ remain directly editable.\n',
     );
     return 2;
   }

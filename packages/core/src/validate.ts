@@ -1,4 +1,3 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { validateWorkflow } from './config.js';
 import { collectReferences, validateTicketFields } from './fields.js';
@@ -25,7 +24,7 @@ export interface ValidateOptions {
 export function validateProject(project: Project, options: ValidateOptions = {}): ValidationIssue[] {
   const now = options.now ?? (() => new Date());
   const issues: ValidationIssue[] = [...project.issues];
-  const { workflow, manifest } = project;
+  const { workflow } = project;
 
   const add = (
     severity: 'error' | 'warning',
@@ -46,7 +45,7 @@ export function validateProject(project: Project, options: ValidateOptions = {})
   const typeNames = new Set(workflow.types.map((t) => t.name));
   const actorIds = new Set(project.actors.map((a) => a.id));
   const ticketIds = new Set(project.tickets.map((t) => t.id));
-  const briefIds = new Set(project.briefs.map((b) => b.id));
+  const documentIds = new Set(project.documents.map((b) => b.id));
   const ticketsById = new Map(project.tickets.map((t) => [t.id, t]));
 
   if (project.actors.filter((a) => a.kind === 'human').length !== 1) {
@@ -65,23 +64,23 @@ export function validateProject(project: Project, options: ValidateOptions = {})
       }
     }
   }
-  const seenBriefIds = new Map<string, string>();
-  for (const brief of project.briefs) {
-    const prev = seenBriefIds.get(brief.id);
+  const seenDocumentIds = new Map<string, string>();
+  for (const document of project.documents) {
+    const prev = seenDocumentIds.get(document.id);
     if (prev) {
-      add('error', brief.path, 'ids/duplicate', `duplicate brief id "${brief.id}" (also in ${prev})`, 'id');
-    } else if (brief.id) {
-      seenBriefIds.set(brief.id, brief.path);
+      add('error', document.path, 'ids/duplicate', `duplicate document id "${document.id}" (also in ${prev})`, 'id');
+    } else if (document.id) {
+      seenDocumentIds.set(document.id, document.path);
     }
   }
 
   const resolveRef = (targets: string[] | undefined, value: string): boolean => {
     if (!targets || targets.length === 0) {
-      return ticketIds.has(value) || briefIds.has(value) || actorIds.has(value);
+      return ticketIds.has(value) || documentIds.has(value) || actorIds.has(value);
     }
     return targets.some((target) => {
       if (target === 'actor') return actorIds.has(value);
-      if (target === 'brief') return briefIds.has(value);
+      if (target === 'document') return documentIds.has(value);
       const ticket = ticketsById.get(value);
       return ticket !== undefined && ticket.type === target;
     });
@@ -124,39 +123,25 @@ export function validateProject(project: Project, options: ValidateOptions = {})
     }
   }
 
-  for (const brief of project.briefs) {
-    const file = brief.path;
-    if (!brief.id) {
-      add('error', file, 'briefs/id', 'briefs need an id slug', 'id');
-    } else if (!SLUG_RE.test(brief.id) && !/^ADR-\d{4,}$/.test(brief.id)) {
-      add('error', file, 'briefs/id', `brief id "${brief.id}" is not a slug or ADR id`, 'id');
+  for (const document of project.documents) {
+    const file = document.path;
+    if (!document.id) {
+      add('error', file, 'documents/id', 'documents need an id slug', 'id');
+    } else if (!SLUG_RE.test(document.id) && !/^ADR-\d{4,}$/.test(document.id)) {
+      add('error', file, 'documents/id', `document id "${document.id}" is not a slug or ADR id`, 'id');
     }
-    if (!brief.summary) {
-      add('error', file, 'briefs/summary', 'briefs need a one to two sentence summary', 'summary');
+    if (!document.summary) {
+      add('error', file, 'documents/summary', 'documents need a one to two sentence summary', 'summary');
     }
-    if (brief.review_by !== undefined) {
-      if (!DATE_RE.test(brief.review_by)) {
-        add('error', file, 'briefs/review-by', 'review_by must be an ISO date', 'review_by');
-      } else if (new Date(brief.review_by).getTime() < now().getTime()) {
-        add('warning', file, 'briefs/stale', `past its review_by date (${brief.review_by})`, 'review_by');
+    if (document.review_by !== undefined) {
+      if (!DATE_RE.test(document.review_by)) {
+        add('error', file, 'documents/review-by', 'review_by must be an ISO date', 'review_by');
+      } else if (new Date(document.review_by).getTime() < now().getTime()) {
+        add('warning', file, 'documents/stale', `past its review_by date (${document.review_by})`, 'review_by');
       }
     }
   }
 
-  // Every directory under briefs/ needs an OVERVIEW.md.
-  const briefsDir = join(project.dir, manifest.paths.briefs);
-  if (existsSync(briefsDir)) {
-    const walk = (dir: string, rel: string, isRoot: boolean) => {
-      if (!isRoot && !existsSync(join(dir, 'OVERVIEW.md'))) {
-        add('warning', `.lovelace/${rel}`, 'briefs/overview', 'directory has no OVERVIEW.md');
-      }
-      for (const entry of readdirSync(dir).sort()) {
-        const full = join(dir, entry);
-        if (statSync(full).isDirectory()) walk(full, `${rel}/${entry}`, false);
-      }
-    };
-    walk(briefsDir, manifest.paths.briefs, true);
-  }
 
   for (const session of project.sessions) {
     const file = session.path;
