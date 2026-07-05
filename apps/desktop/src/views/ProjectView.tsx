@@ -5,33 +5,32 @@ import {
   CloseIcon,
   DigestIcon,
   DocsIcon,
-  FolderIcon,
   GraphIcon,
-  InfoIcon,
   ListIcon,
+  ProblemsIcon,
   SearchIcon,
   SessionsIcon,
-  WorkflowIcon,
+  SettingsIcon,
 } from '../components/icons';
-import { formatDate } from '../lib/datetime';
 import { EmptyState } from '../components/EmptyState';
 import { NewTicketModal } from '../components/NewTicketModal';
 import { SearchPalette } from '../components/SearchPalette';
+import { FilePreviewModal } from '../components/FilePreviewModal';
 import { Toast } from '../components/Toast';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { rememberRecent, useProject } from '../state/store';
-import { buildLinkResolver, wikiCandidates, type LinkResolver, type OpenLink } from '../lib/links';
+import { rememberRecent, useHost, useProject } from '../state/store';
+import { buildLinkResolver, referenceCandidates, type LinkResolver, type OpenLink } from '../lib/links';
 import type { IndexTicket, SearchHit, Snapshot } from '../lib/types';
-import { Automations } from './Automations';
+import { Actions } from './Actions';
 import { Board } from './Board';
 import { Briefs } from './Briefs';
 import { Graph } from './Graph';
 import { List } from './List';
 import { Sessions } from './Sessions';
-import { Workflow } from './Workflow';
+import { Settings } from './Settings';
 import { TicketDetail } from './TicketDetail';
 
-type NavKey = 'board' | 'list' | 'docs' | 'graph' | 'workflow' | 'sessions' | 'automations' | 'issues';
+type NavKey = 'board' | 'list' | 'docs' | 'graph' | 'sessions' | 'runs' | 'settings' | 'issues';
 
 interface ProjectViewProps {
   root: string;
@@ -46,9 +45,13 @@ export function ProjectView({ root }: ProjectViewProps) {
   const [deleting, setDeleting] = useState<IndexTicket | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [digestOpen, setDigestOpen] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
-  const [pathCopied, setPathCopied] = useState(false);
   const [docsFocus, setDocsFocus] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<string | null>(null);
+  // Settings reports unsaved edits so navigating away can prompt; pendingNav
+  // holds the destination the user asked for while that prompt is open.
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [pendingNav, setPendingNav] = useState<NavKey | null>(null);
+  const host = useHost();
 
   // The active nav row rests on a seat that glides between rows rather than
   // teleporting (state moves, never marks). Measured, not hard-coded, so a
@@ -80,16 +83,6 @@ export function ProjectView({ root }: ProjectViewProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Escape closes the project info card.
-  useEffect(() => {
-    if (!infoOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setInfoOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [infoOpen]);
-
   // Escape closes the digest.
   useEffect(() => {
     if (!digestOpen) return;
@@ -100,32 +93,34 @@ export function ProjectView({ root }: ProjectViewProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [digestOpen]);
 
-  const openInfo = () => {
-    setPathCopied(false);
-    setInfoOpen(true);
-  };
-
-  const copyPath = async () => {
-    try {
-      await navigator.clipboard.writeText(root);
-      setPathCopied(true);
-      window.setTimeout(() => setPathCopied(false), 1600);
-    } catch {
-      setPathCopied(false);
-    }
-  };
-
   const humanActor = useMemo(
     () => snapshot?.actors.find((a) => a.kind === 'human')?.id ?? 'me',
     [snapshot],
   );
 
-  // Wiki-link plumbing, shared by every editor and read-only body in the app.
+  // Reference plumbing, shared by every editor and read-only body in the app.
   const resolveLink = useMemo<LinkResolver>(
     () => (snapshot ? buildLinkResolver(snapshot) : () => null),
     [snapshot],
   );
-  const linkCandidates = useMemo(() => (snapshot ? wikiCandidates(snapshot) : []), [snapshot]);
+  // The repo file list backs the Files section of the insert menu; fetched once.
+  const [files, setFiles] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void host.listFiles(root).then(
+      (f) => {
+        if (!cancelled) setFiles(f);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [host, root]);
+  const linkCandidates = useMemo(
+    () => (snapshot ? referenceCandidates(snapshot, files) : []),
+    [snapshot, files],
+  );
 
   /** A status move shown immediately, confirmed (or rolled back) by core. */
   const moveOptimistically = (id: string, to: string) => (current: Snapshot): Snapshot => ({
@@ -164,18 +159,26 @@ export function ProjectView({ root }: ProjectViewProps) {
   };
 
   const goto = (key: NavKey) => {
+    // Leaving Settings with unsaved edits prompts rather than dropping them.
+    if (nav === 'settings' && key !== 'settings' && settingsDirty) {
+      setPendingNav(key);
+      return;
+    }
     setNav(key);
     setOpenTicket(null);
   };
 
-  /** Follow a clicked wiki-link: a ticket opens its detail, a brief opens in Documentation. */
+  /** Follow a clicked reference: a ticket/brief navigates, a file previews, a person is a mention. */
   const openLink: OpenLink = (target) => {
     if (target.kind === 'ticket') {
       setOpenTicket(target.id);
-    } else {
+    } else if (target.kind === 'brief' && target.path) {
       setDocsFocus(target.path);
       goto('docs');
+    } else if (target.kind === 'file' && target.path) {
+      setPreviewFile(target.path);
     }
+    // person: a mention only, for now.
   };
 
   const pickSearchHit = (hit: SearchHit) => {
@@ -208,7 +211,7 @@ export function ProjectView({ root }: ProjectViewProps) {
   const errors = snapshot.issues.filter((i) => i.severity === 'error');
   const warnings = snapshot.issues.filter((i) => i.severity === 'warning');
 
-  const navButton = (key: NavKey, icon: ReactNode, text: string, note?: number) => (
+  const navButton = (key: NavKey, icon: ReactNode, text: string, note?: number, noteClass?: string) => (
     <button
       ref={(el) => {
         if (el) navRefs.current.set(key, el);
@@ -219,12 +222,13 @@ export function ProjectView({ root }: ProjectViewProps) {
     >
       {icon}
       {text}
-      {note !== undefined && note > 0 && <span className="count-note num">{note}</span>}
+      {note !== undefined && note > 0 && (
+        <span className={`count-note num${noteClass ? ` ${noteClass}` : ''}`}>{note}</span>
+      )}
     </button>
   );
 
   const agentActor = snapshot.actors.find((a) => a.kind === 'agent')?.id ?? 'agent';
-  const homePath = root.replace(/^\/Users\/[^/]+/, '~');
   const focusTask = presence.focus ?? snapshot.activeTicket;
   const healthClass =
     snapshot.issues.length === 0 ? 'clean' : errors.length > 0 ? 'snag-error' : 'snag-warning';
@@ -244,14 +248,6 @@ export function ProjectView({ root }: ProjectViewProps) {
                 title="Search (⌘K)"
               >
                 <SearchIcon />
-              </button>
-              <button
-                className="head-btn"
-                onClick={openInfo}
-                aria-label="Project details"
-                title="Project details"
-              >
-                <InfoIcon />
               </button>
             </div>
           </div>
@@ -276,8 +272,8 @@ export function ProjectView({ root }: ProjectViewProps) {
         <div className="nav-group">
           <div className="nav-section-head">Activity</div>
           {navButton('sessions', <SessionsIcon />, 'Sessions')}
-          {navButton('workflow', <WorkflowIcon />, 'Workflow')}
-          {navButton('automations', <AutomationsIcon />, 'Automations')}
+          {navButton('runs', <AutomationsIcon />, 'Runs')}
+          {navButton('issues', <ProblemsIcon />, 'Problems', snapshot.issues.length, healthClass)}
         </div>
 
         <div className="nav-footer">
@@ -302,9 +298,16 @@ export function ProjectView({ root }: ProjectViewProps) {
               )}
             </div>
           </div>
-          <div className="seat-tools">
-            <ThemeToggle />
-            <div className="seat-tools-right">
+          <div className="footer-bar">
+            <button
+              className={`footer-settings${nav === 'settings' && !openTicket ? ' active' : ''}`}
+              onClick={() => goto('settings')}
+            >
+              <SettingsIcon />
+              Settings
+            </button>
+            <div className="footer-tools">
+              <ThemeToggle />
               <button
                 className="seat-tool tip tip--end"
                 data-tip="Digest"
@@ -312,18 +315,6 @@ export function ProjectView({ root }: ProjectViewProps) {
                 onClick={() => setDigestOpen(true)}
               >
                 <DigestIcon />
-              </button>
-              <button
-                className="seat-tool seat-health tip tip--end"
-                data-tip={
-                  snapshot.issues.length === 0
-                    ? 'No problems'
-                    : `${snapshot.issues.length} problem${snapshot.issues.length === 1 ? '' : 's'}`
-                }
-                aria-label="View problems"
-                onClick={() => goto('issues')}
-              >
-                <span className={`num health-count ${healthClass}`}>{snapshot.issues.length}</span>
               </button>
             </div>
           </div>
@@ -342,7 +333,7 @@ export function ProjectView({ root }: ProjectViewProps) {
             onBack={() => setOpenTicket(null)}
             onOpenTicket={setOpenTicket}
             onUpdate={guardedUpdate}
-            wikiCandidates={linkCandidates}
+            candidates={linkCandidates}
             resolveLink={resolveLink}
             onOpenLink={openLink}
             onComment={async (ticket, body) => {
@@ -383,7 +374,7 @@ export function ProjectView({ root }: ProjectViewProps) {
           <Briefs
             snapshot={snapshot}
             focusPath={docsFocus}
-            wikiCandidates={linkCandidates}
+            candidates={linkCandidates}
             resolveLink={resolveLink}
             onOpenLink={openLink}
             onSaveBody={async (path, body) => {
@@ -394,6 +385,9 @@ export function ProjectView({ root }: ProjectViewProps) {
             }}
             onCreateBrief={async (dir, name, summary, createOverview) => {
               await apply((h) => h.createBrief(root, dir, name, summary, createOverview));
+            }}
+            onCreateFolder={async (dir, name) => {
+              await apply((h) => h.createFolder(root, dir, name));
             }}
             onRenameBrief={async (path, name) => {
               await apply((h) => h.renameBrief(root, path, name));
@@ -417,19 +411,25 @@ export function ProjectView({ root }: ProjectViewProps) {
             resolveLink={resolveLink}
             onOpenLink={openLink}
           />
-        ) : nav === 'workflow' ? (
-          <Workflow
+        ) : nav === 'runs' ? (
+          <Actions snapshot={snapshot} />
+        ) : nav === 'settings' ? (
+          <Settings
             snapshot={snapshot}
-            onSave={async (edit) => {
+            onDirtyChange={setSettingsDirty}
+            onSaveWorkflow={async (edit) => {
               await apply((h) => h.writeWorkflow(root, edit));
             }}
-          />
-        ) : nav === 'automations' ? (
-          <Automations
-            snapshot={snapshot}
             onSaveAutomations={async (rules) => {
               await apply((h) => h.setAutomations(root, rules));
             }}
+            onRenameProject={async (name) => {
+              await apply((h) => h.writeManifest(root, { name }));
+            }}
+            onSaveActors={async (actors) => {
+              await apply((h) => h.writeActors(root, actors));
+            }}
+            onInstallClaude={(gitHook) => host.installClaude(root, gitHook)}
           />
         ) : (
           <>
@@ -447,7 +447,7 @@ export function ProjectView({ root }: ProjectViewProps) {
                 {snapshot.issues.map((issue, i) => (
                   <div key={i} className="issue-row">
                     <span className={`sev-${issue.severity}`}>{issue.severity}</span>
-                    <span className="mono" style={{ color: 'var(--text-secondary)' }}>
+                    <span className="mono" style={{ color: 'var(--slate)' }}>
                       {issue.file}
                       {issue.line !== undefined ? `:${issue.line}` : ''}
                     </span>
@@ -461,6 +461,9 @@ export function ProjectView({ root }: ProjectViewProps) {
       </main>
       {searchOpen && (
         <SearchPalette root={root} onClose={() => setSearchOpen(false)} onPick={pickSearchHit} />
+      )}
+      {previewFile && (
+        <FilePreviewModal root={root} path={previewFile} onClose={() => setPreviewFile(null)} />
       )}
       {digestOpen && (
         <div className="modal-backdrop" onClick={() => setDigestOpen(false)}>
@@ -491,74 +494,29 @@ export function ProjectView({ root }: ProjectViewProps) {
           </div>
         </div>
       )}
-      {infoOpen && (
-        <div className="modal-backdrop" onClick={() => setInfoOpen(false)}>
-          <div className="modal-shell">
-            <button
-              className="modal-close"
-              aria-label="Close project details"
-              onClick={() => setInfoOpen(false)}
-            >
-              <CloseIcon />
-            </button>
-            <div
-              className="info-card"
-              role="dialog"
-              aria-label="project details"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="info-card-head">
-                <div className="info-card-titles">
-                  <h2 className="info-card-name">{snapshot.manifest.name}</h2>
-                  <span className="info-card-sub">Project details</span>
-                </div>
-                <span className="spec-chip">spec {snapshot.manifest.spec_version}</span>
-              </div>
-
-              <div className="info-path">
-                <FolderIcon />
-                <span className="info-path-text mono">{homePath}</span>
-                <button className="info-copy" onClick={copyPath}>
-                  {pathCopied ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-
-              <div className="info-stats">
-                {[
-                  { n: snapshot.index.tickets.length, label: 'Tickets' },
-                  { n: snapshot.index.briefs.length, label: 'Docs' },
-                  { n: snapshot.index.sessions.length, label: 'Sessions' },
-                ].map((stat) => (
-                  <div key={stat.label} className="info-stat">
-                    <span className="info-stat-num num">{stat.n}</span>
-                    <span className="info-stat-label">{stat.label}</span>
-                  </div>
-                ))}
-              </div>
-
-              <dl className="info-grid">
-                <dt>Created</dt>
-                <dd>{formatDate(snapshot.manifest.created)}</dd>
-
-                <dt>Project ID</dt>
-                <dd className="mono">{snapshot.manifest.project_id}</dd>
-
-                <dt>Team</dt>
-                <dd className="info-team">
-                  {snapshot.actors.map((a) => (
-                    <span key={a.id} className="info-member">
-                      {a.name}
-                      <span className="info-member-kind">{a.kind}</span>
-                    </span>
-                  ))}
-                </dd>
-              </dl>
-
-              <div className={`info-health ${healthClass}`}>
-                {snapshot.issues.length === 0
-                  ? 'Everything validates'
-                  : `${errors.length} error${errors.length === 1 ? '' : 's'}, ${warnings.length} warning${warnings.length === 1 ? '' : 's'}`}
-              </div>
+      {pendingNav !== null && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <h2>Discard unsaved changes?</h2>
+            <p style={{ color: 'var(--slate)', fontSize: '0.8125rem' }}>
+              You have unsaved changes in Settings. Leaving now discards them.
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setPendingNav(null)}>
+                Keep editing
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  const key = pendingNav;
+                  setSettingsDirty(false);
+                  setPendingNav(null);
+                  setNav(key);
+                  setOpenTicket(null);
+                }}
+              >
+                Discard changes
+              </button>
             </div>
           </div>
         </div>
@@ -567,7 +525,7 @@ export function ProjectView({ root }: ProjectViewProps) {
         <div className="modal-backdrop">
           <div className="modal">
             <h2>Delete this ticket?</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+            <p style={{ color: 'var(--slate)', fontSize: '0.8125rem' }}>
               <span className="id-chip">{deleting.id}</span> {deleting.title}
             </p>
             {(() => {

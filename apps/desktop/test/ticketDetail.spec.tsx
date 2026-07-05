@@ -153,8 +153,8 @@ describe('TicketDetail', () => {
 
   it('shows linked sessions and comments in the activity timeline', () => {
     renderDetail('T-0002');
-    expect(screen.getByText(/S-0002: partial/)).toBeTruthy();
-    const comments = screen.getAllByText('comment');
+    expect(screen.getByText(/S-0002: Partial/)).toBeTruthy();
+    const comments = screen.getAllByText('Comment');
     expect(comments.length).toBe(2);
   });
 

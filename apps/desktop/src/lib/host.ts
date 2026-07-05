@@ -20,6 +20,20 @@ export interface InstallClaudeResult {
   manual: string[];
 }
 
+/** The result of reading a file for preview, dispatched on `kind`. */
+export interface SourceFile {
+  kind: 'text' | 'image' | 'pdf' | 'binary' | 'missing';
+  size?: number;
+  /** UTF-8 text (kind: 'text'). */
+  content?: string;
+  /** Base64 bytes (kind: 'image' | 'pdf'). */
+  base64?: string;
+  /** MIME type (kind: 'image' | 'pdf'). */
+  mime?: string;
+  /** Too large to preview inline. */
+  truncated?: boolean;
+}
+
 export interface HostClient {
   detect(root: string): Promise<boolean>;
   init(root: string, name: string, userName?: string, workflow?: Workflow): Promise<Snapshot>;
@@ -57,6 +71,10 @@ export interface HostClient {
   /** The automation run history (actions.log). */
   actionLog(root: string): Promise<string>;
   readFile(root: string, path: string): Promise<string>;
+  /** List repo files for the reference picker (tracked + untracked, non-ignored, excluding .lovelace/). */
+  listFiles(root: string): Promise<string[]>;
+  /** Read a repo-relative source file for preview (traversal-guarded; size/binary capped). */
+  readSourceFile(root: string, path: string): Promise<SourceFile>;
   writeBrief(
     root: string,
     path: string,
@@ -71,6 +89,8 @@ export interface HostClient {
     summary: string,
     createOverview: boolean,
   ): Promise<Snapshot>;
+  /** Create a folder under briefs (its OVERVIEW.md), child of `dir`. */
+  createFolder(root: string, dir: string, name: string): Promise<Snapshot>;
   /** Rename a brief file (its directory and frontmatter stay put). */
   renameBrief(root: string, path: string, name: string): Promise<Snapshot>;
   commitsForTicket(root: string, id: string): Promise<Array<{ sha: string; subject: string }>>;
@@ -208,6 +228,15 @@ export class TauriHost implements HostClient {
     return data.content;
   }
 
+  async listFiles(root: string): Promise<string[]> {
+    const data = (await tauriRequest({ op: 'list_files', root })) as { files: string[] };
+    return data.files;
+  }
+
+  readSourceFile(root: string, path: string): Promise<SourceFile> {
+    return tauriRequest({ op: 'read_source_file', root, path }) as Promise<SourceFile>;
+  }
+
   writeBrief(
     root: string,
     path: string,
@@ -232,6 +261,10 @@ export class TauriHost implements HostClient {
     createOverview: boolean,
   ): Promise<Snapshot> {
     return tauriRequest({ op: 'create_brief', root, dir, name, summary, createOverview }) as Promise<Snapshot>;
+  }
+
+  createFolder(root: string, dir: string, name: string): Promise<Snapshot> {
+    return tauriRequest({ op: 'create_folder', root, dir, name }) as Promise<Snapshot>;
   }
 
   renameBrief(root: string, path: string, name: string): Promise<Snapshot> {

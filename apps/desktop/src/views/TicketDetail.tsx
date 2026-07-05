@@ -8,7 +8,7 @@ import { formatDateTime, formatDateTimeShort } from '../lib/datetime';
 import { fieldLabel, statusLabel, titleCase, typeLabel } from '../lib/format';
 import { STATUS_HUE_CSS, statusHue } from '../lib/loom';
 import { Markdown } from '../lib/markdown';
-import type { LinkResolver, OpenLink, WikiCandidate } from '../lib/links';
+import type { LinkResolver, OpenLink, ReferenceCandidate } from '../lib/links';
 import { useHost } from '../state/store';
 import type { Snapshot } from '../lib/types';
 import { fieldsFor } from '../lib/types';
@@ -22,7 +22,7 @@ interface TicketDetailProps {
   onComment: (ticket: string, body: string) => Promise<void>;
   onSaveBody?: (id: string, body: string) => Promise<void>;
   /** Wiki-link plumbing for the body editor, comment composer and read views. */
-  wikiCandidates?: WikiCandidate[];
+  candidates?: ReferenceCandidate[];
   resolveLink?: LinkResolver;
   onOpenLink?: OpenLink;
 }
@@ -40,7 +40,7 @@ export function TicketDetail({
   onUpdate,
   onComment,
   onSaveBody,
-  wikiCandidates,
+  candidates,
   resolveLink,
   onOpenLink,
 }: TicketDetailProps) {
@@ -144,7 +144,7 @@ export function TicketDetail({
       })),
     ...snapshot.index.sessions
       .filter((s) => s.ticket === ticket.id)
-      .map((s) => ({ kind: 'session' as const, at: s.ended, who: s.actor, what: `${s.id}: ${s.outcome}` })),
+      .map((s) => ({ kind: 'session' as const, at: s.ended, who: s.actor, what: `${s.id}: ${titleCase(s.outcome)}` })),
     ...commits.map((c) => ({ kind: 'commit' as const, at: '', who: '', what: `${c.sha} ${c.subject}` })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 
@@ -287,7 +287,7 @@ export function TicketDetail({
                 <BlockEditor
                   source={bodyDraft}
                   onChange={setBodyDraft}
-                  wikiCandidates={wikiCandidates}
+                  candidates={candidates}
                   resolveLink={resolveLink}
                   onOpenLink={onOpenLink}
                 />
@@ -341,8 +341,8 @@ export function TicketDetail({
                   <div key={i} className="thread-event">
                     <div className="thread-main">
                       <div className="thread-meta">
-                        <span className="thread-who">{entry.who ? `@${entry.who}` : entry.kind}</span>
-                        {entry.who && <span className="thread-kind">{entry.kind}</span>}
+                        <span className="thread-who">{entry.who ? `@${entry.who}` : titleCase(entry.kind)}</span>
+                        {entry.who && <span className="thread-kind">{titleCase(entry.kind)}</span>}
                         {entry.at && <span className="when">{formatDateTimeShort(entry.at)}</span>}
                       </div>
                       {entry.kind === 'comment' ? (
@@ -383,7 +383,7 @@ export function TicketDetail({
                     key={composeKey}
                     source={draft}
                     onChange={setDraft}
-                    wikiCandidates={wikiCandidates}
+                    candidates={candidates}
                     resolveLink={resolveLink}
                     onOpenLink={onOpenLink}
                   />

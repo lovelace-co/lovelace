@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
 import { Markdown } from '../lib/markdown';
 import { formatDateTimeShort } from '../lib/datetime';
+import { titleCase } from '../lib/format';
 import type { LinkResolver, OpenLink } from '../lib/links';
 import { useHost } from '../state/store';
 import type { Snapshot } from '../lib/types';
@@ -54,15 +55,15 @@ export function Sessions({ snapshot, onOpenTicket, resolveLink, onOpenLink }: Se
                 <button className="btn-ghost" onClick={() => onOpenTicket(session.ticket)}>
                   {session.ticket}
                 </button>
-                <span className={`outcome-pill outcome-${session.outcome}`}>{session.outcome}</span>
-                <span style={{ color: 'var(--text-faint)', fontSize: '0.6875rem' }}>
+                <span className={`outcome-pill outcome-${session.outcome}`}>{titleCase(session.outcome)}</span>
+                <span style={{ color: 'var(--mist)', fontSize: '0.6875rem' }}>
                   {formatDateTimeShort(session.ended)}
                 </span>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.6875rem' }}>
+                <span style={{ color: 'var(--slate)', fontSize: '0.6875rem' }}>
                   @{session.actor}
                 </span>
                 {session.commits.length > 0 && (
-                  <span className="mono" style={{ color: 'var(--text-faint)', fontSize: '0.6875rem' }}>
+                  <span className="mono" style={{ color: 'var(--mist)', fontSize: '0.6875rem' }}>
                     {session.commits.join(' ')}
                   </span>
                 )}

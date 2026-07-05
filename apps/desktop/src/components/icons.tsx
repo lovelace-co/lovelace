@@ -21,6 +21,11 @@ import {
   CommandLineIcon,
   PencilSquareIcon,
   CalendarIcon as HeroCalendarIcon,
+  Cog6ToothIcon,
+  TicketIcon as HeroTicketIcon,
+  ExclamationTriangleIcon,
+  FolderPlusIcon,
+  DocumentPlusIcon,
 } from '@heroicons/react/24/outline';
 
 /* Heroicons (outline) under the app's semantic names. Each wrapper bakes in a
@@ -35,6 +40,16 @@ const make = (Hero: HeroIcon, size: number) =>
   function Icon(props: SVGProps<SVGSVGElement>) {
     return <Hero width={size} height={size} aria-hidden {...props} />;
   };
+
+/** Settings: the configuration home. */
+export const SettingsIcon = make(Cog6ToothIcon, 17);
+
+/** Problems: the validation warning triangle. */
+export const ProblemsIcon = make(ExclamationTriangleIcon, 17);
+
+/** New folder / new file: the tree's create affordances. */
+export const NewFolderIcon = make(FolderPlusIcon, 15);
+export const NewFileIcon = make(DocumentPlusIcon, 15);
 
 /** Board: the columns of work. */
 export const BoardIcon = make(ViewColumnsIcon, 17);
@@ -68,6 +83,9 @@ export const EditIcon = make(PencilSquareIcon, 15);
 
 /** File: a single card. */
 export const FileIcon = make(DocumentIcon, 15);
+
+/** Ticket: the work item, for the reference toolbar. */
+export const TicketIcon = make(HeroTicketIcon, 15);
 
 /** Folder: the drawer. */
 export const FolderIcon = make(HeroFolderIcon, 15);

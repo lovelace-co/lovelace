@@ -88,7 +88,7 @@ Brief files other than ADRs are identified by their repository-relative path, an
 
 ## 4. Spec versioning
 
-This specification is versioned with semver. The current version is `1.5.0`.
+This specification is versioned with semver. The current version is `1.6.0`.
 
 - The manifest declares the spec version the project conforms to.
 - Tooling must read `manifest.yaml` before parsing anything else and must refuse to operate on a major version it does not know, with a clear error naming both versions.
@@ -97,6 +97,7 @@ This specification is versioned with semver. The current version is `1.5.0`.
 
 Changes by version:
 
+- `1.6.0`: generalises the `[[...]]` wiki-link into a scheme namespace: a bare token is an entity id (as before), `file:<repo-relative-path>` references a source file, and `@<actor-id>` mentions a person. Only entity-to-entity links enter the index `links` graph; file and person references are display links, never indexed. Backward compatible: existing `[[id]]` bodies are unaffected.
 - `1.5.0`: adds the optional, machine-local `state/graph-layout.json` holding manual documentation-graph node positions (see 13). Gitignored and never required for correctness; absent positions fall back to the automatic layout.
 - `1.4.0`: adds optional wiki-links (`[[id]]`) in entity bodies and a derived `links` array in the index (see 7.1 and 11). Backward compatible: bodies without wiki-links are unaffected, and a project declaring an earlier version gains the index `links` section when reindexed by current tooling.
 - `1.3.0`: removes the cycle entity, the `C-` identifier prefix and the default `cycle` field. The `cycles/` directory is no longer part of the layout, and `cycle` is no longer a valid `refers_to` target. Projects declaring an earlier version that still carry cycle data will see validation errors against the removed constructs.
@@ -220,7 +221,7 @@ Each field definition has:
 - `id` must match the filename (for ID-named files).
 - `created` and `updated` are ISO 8601 datetimes in UTC.
 - Frontmatter keys not defined by this spec or by `workflow.yaml` produce a warning.
-- Bodies are free Markdown and may contain wiki-links written `[[id]]`, where `id` is a ticket id or a brief id. The stored token is the stable id, so changing a target's displayed title never breaks the link; tools resolve the id to a title for display and to the index link graph (see 11). A token that does not resolve is shown verbatim and omitted from the graph.
+- Bodies are free Markdown and may contain references written `[[token]]`. The token is one of: a bare **entity id** (`[[T-0142]]`, `[[architecture-overview]]`); `file:<path>` for a **source file** by repository-relative path (`[[file:src/cache.ts]]`); or `@<actor-id>` to **mention a person** (`[[@ada]]`). The stored token is stable, so changing a target's displayed title never breaks the link; tools resolve it to a title for display. Only bare entity ids feed the index link graph (see 11); `file:` and `@` references are display links and are never indexed. A token that does not resolve is shown verbatim.
 
 ### 7.2 Ticket
 

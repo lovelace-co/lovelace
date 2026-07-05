@@ -108,10 +108,10 @@ export function InitWizard({ initTarget, defaults, initialName, onCancel, onDone
       <div className="modal-backdrop">
         <div className="modal">
           <h2>A few manual steps</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+          <p style={{ color: 'var(--slate)', fontSize: '0.8125rem' }}>
             The project is initialised, but these could not be done automatically:
           </p>
-          <ul style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+          <ul style={{ fontSize: '0.8125rem', color: 'var(--slate)' }}>
             {manualSteps.map((s, i) => (
               <li key={i}>{s}</li>
             ))}
@@ -141,7 +141,7 @@ export function InitWizard({ initTarget, defaults, initialName, onCancel, onDone
         {step === 0 && (
           <>
             <h2>Initialise Lovelace here?</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+            <p style={{ color: 'var(--slate)', fontSize: '0.8125rem' }}>
               <span className="mono">{initTarget}</span> has no <span className="mono">.lovelace</span> directory.
               Set up the workflow below, or use the defaults. Your existing files are not touched.
             </p>
@@ -267,7 +267,7 @@ export function InitWizard({ initTarget, defaults, initialName, onCancel, onDone
               <div><span className="label">Types</span> {types.map((t) => `${t.human} (${t.prefix})`).join(', ')}</div>
               <div><span className="label">Fields</span> {['Title', 'Body', ...fields.filter((f) => f.machine !== 'title').map((f) => f.human)].join(', ')}</div>
               <div><span className="label">Priorities</span> {priorities.map((p) => titleCase(p)).join(', ')}</div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+              <div style={{ color: 'var(--slate)', fontSize: '0.8125rem' }}>
                 {JSON.stringify(statuses.map((s) => s.machine)) !== JSON.stringify(defaults.statuses.map((s) => s.name))
                   ? 'Because you changed the statuses, agents will be allowed to move tickets between any columns. Tighten this later in workflow.yaml.'
                   : 'Using the default transition flow.'}

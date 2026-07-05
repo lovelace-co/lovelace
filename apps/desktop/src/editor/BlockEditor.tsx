@@ -23,6 +23,7 @@ import { $setBlocksType } from '@lexical/selection';
 import { $findMatchingParent } from '@lexical/utils';
 import {
   $createParagraphNode,
+  $createTextNode,
   $getSelection,
   $isRangeSelection,
   CAN_REDO_COMMAND,
@@ -36,22 +37,23 @@ import {
 } from 'lexical';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from '../components/Dropdown';
-import type { LinkResolver, OpenLink, WikiCandidate } from '../lib/links';
+import { DocsIcon, FileIcon, TicketIcon } from '../components/icons';
+import { ReferencePicker } from '../components/ReferencePicker';
+import type { LinkResolver, OpenLink, ReferenceCandidate } from '../lib/links';
 import { buildTransformers, EDITOR_NODES, prepareMarkdown, reconcile } from './convert';
 import { DragHandlePlugin } from './DragHandlePlugin';
 import { SlashMenuPlugin } from './SlashMenu';
-import { WikiLinkContext, type WikiLinkController } from './WikiLinkNode';
-import { WikiMenuPlugin } from './WikiMenu';
+import { $createWikiLinkNode, WikiLinkContext, type WikiLinkController } from './WikiLinkNode';
 
 interface BlockEditorProps {
   source: string;
   onChange: (next: string) => void;
   readOnly?: boolean;
-  /** Linkable entities for the `[[` menu. Omit to disable link insertion. */
-  wikiCandidates?: WikiCandidate[];
-  /** Resolves `[[id]]` to a current title/target for rendering a link chip. */
+  /** Insertable references (tickets, documents, files) for the `/` menu and toolbar. */
+  candidates?: ReferenceCandidate[];
+  /** Resolves a `[[token]]` to a current target for rendering a reference chip. */
   resolveLink?: LinkResolver;
-  /** Opens a clicked wiki-link. */
+  /** Opens a clicked reference. */
   onOpenLink?: OpenLink;
   /** Test hook: receives the editor instance once mounted. */
   onReady?: (editor: LexicalEditor) => void;
@@ -87,7 +89,7 @@ export function BlockEditor({
   source,
   onChange,
   readOnly = false,
-  wikiCandidates,
+  candidates,
   resolveLink,
   onOpenLink,
   onReady,
@@ -133,7 +135,7 @@ export function BlockEditor({
     <LexicalComposer initialConfig={initialConfig}>
       <WikiLinkContext.Provider value={wikiController}>
         <div className={`lexical-shell${readOnly ? ' read-only' : ''}`} data-testid="block-editor">
-          {!readOnly && <Toolbar />}
+          {!readOnly && <Toolbar candidates={candidates} />}
           <RichTextPlugin
             contentEditable={
               <div className="lexical-scroller" ref={(el) => setAnchorElem(el)}>
@@ -143,8 +145,7 @@ export function BlockEditor({
             placeholder={<div className="lexical-placeholder">Type, or press / for blocks</div>}
             ErrorBoundary={LexicalErrorBoundary}
           />
-          {!readOnly && <SlashMenuPlugin />}
-          {!readOnly && wikiCandidates && <WikiMenuPlugin candidates={wikiCandidates} />}
+          {!readOnly && <SlashMenuPlugin candidates={candidates} />}
           {!readOnly && <DragHandlePlugin anchorElem={anchorElem} />}
           <HistoryPlugin />
           <ListPlugin />
@@ -227,7 +228,7 @@ const BLOCK_OPTIONS = [
 
 type BlockType = (typeof BLOCK_OPTIONS)[number][0];
 
-function Toolbar() {
+function Toolbar({ candidates = [] }: { candidates?: ReferenceCandidate[] }) {
   const [editor] = useLexicalComposerContext();
   const [blockType, setBlockType] = useState<BlockType>('paragraph');
   const [bold, setBold] = useState(false);
@@ -235,6 +236,21 @@ function Toolbar() {
   const [code, setCode] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [picker, setPicker] = useState<'ticket' | 'brief' | 'file' | null>(null);
+
+  /** Insert a reference chip at the current selection (retained across the picker). */
+  const insertReference = (token: string) => {
+    editor.update(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) return;
+      const node = $createWikiLinkNode(token);
+      selection.insertNodes([node]);
+      const space = $createTextNode(' ');
+      node.insertAfter(space);
+      space.select(1, 1);
+    });
+    setPicker(null);
+  };
 
   const refresh = useCallback(() => {
     const selection = $getSelection();
@@ -286,6 +302,9 @@ function Toolbar() {
     });
   };
 
+  const pickerTitle =
+    picker === 'ticket' ? 'Link a ticket' : picker === 'brief' ? 'Link a document' : 'Link a file';
+
   return (
     <div className="lexical-toolbar" role="toolbar" aria-label="formatting">
       <button className="tool" disabled={!canUndo} aria-label="undo" onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)}>
@@ -332,6 +351,24 @@ function Toolbar() {
       >
         ∞
       </button>
+      <span className="tool-gap" />
+      <button className="tool" aria-label="link a ticket" title="Link a ticket" onClick={() => setPicker('ticket')}>
+        <TicketIcon />
+      </button>
+      <button className="tool" aria-label="link a document" title="Link a document" onClick={() => setPicker('brief')}>
+        <DocsIcon />
+      </button>
+      <button className="tool" aria-label="link a file" title="Link a file" onClick={() => setPicker('file')}>
+        <FileIcon />
+      </button>
+      {picker && (
+        <ReferencePicker
+          title={pickerTitle}
+          candidates={candidates.filter((c) => c.kind === picker)}
+          onPick={insertReference}
+          onClose={() => setPicker(null)}
+        />
+      )}
     </div>
   );
 }

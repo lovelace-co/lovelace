@@ -1,23 +1,33 @@
 import { titleCase } from './format';
 import type { Snapshot } from './types';
 
-export type LinkKind = 'ticket' | 'brief';
+export type LinkKind = 'ticket' | 'brief' | 'file' | 'person';
 
-/** A wiki-link target the user can open. */
+/** The `file:` scheme prefix for a source-file reference token. */
+export const FILE_SCHEME = 'file:';
+
+/** A reference target the user can open. */
 export interface LinkTarget {
   kind: LinkKind;
+  /** The stored token: an entity id, `file:<path>`, or `@<actor>`. */
   id: string;
-  /** The current human label: a ticket's title or a brief's title-cased id. */
+  /** The current human label: a ticket title, brief/file name, or actor name. */
   label: string;
-  /** Repository-relative path, used to deep-link a brief into Documentation. */
-  path: string;
+  /** Repository-relative path (briefs deep-link by it; files preview/open by it). Absent for people. */
+  path?: string;
 }
 
-/** Resolves a stored `[[id]]` token to its current target, or null if broken. */
-export type LinkResolver = (id: string) => LinkTarget | null;
+/** Resolves a stored `[[token]]` to its current target, or null if broken. */
+export type LinkResolver = (token: string) => LinkTarget | null;
 
-/** Opens a resolved wiki-link: a ticket in its detail view, a brief in Documentation. */
+/** Opens a resolved reference: a ticket/brief navigates, a file previews, a person is a mention. */
 export type OpenLink = (target: LinkTarget) => void;
+
+/** The last path segment, for a file's display label. */
+export function basename(path: string): string {
+  const i = path.lastIndexOf('/');
+  return i === -1 ? path : path.slice(i + 1);
+}
 
 /**
  * The display label for a brief. Briefs have no title field and many share the
@@ -27,37 +37,58 @@ export function briefLabel(id: string): string {
   return titleCase(id);
 }
 
-/** Builds a resolver over the current snapshot: id -> ticket or brief target. */
+/**
+ * Builds a resolver over the current snapshot, dispatching on the token's
+ * scheme: `file:<path>` -> a source file, `@<actor>` -> a person, otherwise a
+ * ticket or brief id.
+ */
 export function buildLinkResolver(snapshot: Snapshot): LinkResolver {
   const tickets = new Map(snapshot.index.tickets.map((t) => [t.id, t]));
   const briefs = new Map(snapshot.index.briefs.map((b) => [b.id, b]));
-  return (id: string) => {
-    const ticket = tickets.get(id);
-    if (ticket) return { kind: 'ticket', id, label: ticket.title || id, path: ticket.path };
-    const brief = briefs.get(id);
-    if (brief) return { kind: 'brief', id, label: briefLabel(id), path: brief.path };
+  const actors = new Map(snapshot.actors.map((a) => [a.id, a]));
+  return (token: string) => {
+    if (token.startsWith(FILE_SCHEME)) {
+      const path = token.slice(FILE_SCHEME.length);
+      return { kind: 'file', id: token, label: basename(path), path };
+    }
+    if (token.startsWith('@')) {
+      const actor = actors.get(token.slice(1));
+      return actor ? { kind: 'person', id: token, label: actor.name } : null;
+    }
+    const ticket = tickets.get(token);
+    if (ticket) return { kind: 'ticket', id: token, label: ticket.title || token, path: ticket.path };
+    const brief = briefs.get(token);
+    if (brief) return { kind: 'brief', id: token, label: briefLabel(token), path: brief.path };
     return null;
   };
 }
 
-/** A candidate for the `[[` typeahead. */
-export interface WikiCandidate {
-  id: string;
+/** One choice in the reference picker / unified insert menu. */
+export interface ReferenceCandidate {
+  /** The token stored in `[[...]]`: an entity id, or `file:<path>`. */
+  token: string;
   label: string;
   kind: LinkKind;
-  /** Secondary line: the ticket id or the brief summary. */
+  /** Secondary line: the ticket id, brief summary, or file path. */
   hint: string;
 }
 
-/** All linkable entities (tickets then briefs), for the `[[` menu. */
-export function wikiCandidates(snapshot: Snapshot): WikiCandidate[] {
+/**
+ * Every insertable reference for the unified `/` menu and the toolbar pickers:
+ * tickets, then briefs, then repo files (as `file:<path>` tokens). People are
+ * added later. `files` is the repo file list from `host.listFiles`.
+ */
+export function referenceCandidates(snapshot: Snapshot, files: string[] = []): ReferenceCandidate[] {
   const tickets = snapshot.index.tickets.map(
-    (t): WikiCandidate => ({ id: t.id, label: t.title || t.id, kind: 'ticket', hint: t.id }),
+    (t): ReferenceCandidate => ({ token: t.id, label: t.title || t.id, kind: 'ticket', hint: t.id }),
   );
   const briefs = snapshot.index.briefs.map(
-    (b): WikiCandidate => ({ id: b.id, label: briefLabel(b.id), kind: 'brief', hint: b.summary }),
+    (b): ReferenceCandidate => ({ token: b.id, label: briefLabel(b.id), kind: 'brief', hint: b.summary }),
   );
-  return [...tickets, ...briefs];
+  const fileCandidates = files.map(
+    (p): ReferenceCandidate => ({ token: `${FILE_SCHEME}${p}`, label: basename(p), kind: 'file', hint: p }),
+  );
+  return [...tickets, ...briefs, ...fileCandidates];
 }
 
 export interface GraphNode {

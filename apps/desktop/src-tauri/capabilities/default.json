@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "dialog:default",
+    "opener:allow-reveal-item-in-dir",
+    "opener:allow-open-path",
     "core:window:allow-set-theme",
     "core:window:allow-set-background-color"
   ]

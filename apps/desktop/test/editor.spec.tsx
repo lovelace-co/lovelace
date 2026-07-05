@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -162,7 +162,7 @@ describe('wiki-links in the editor', () => {
       <BlockEditor
         source={'See [[architecture-overview]] now.\n'}
         onChange={vi.fn()}
-        wikiCandidates={[]}
+        candidates={[]}
         resolveLink={resolve}
         onOpenLink={onOpenLink}
       />,
@@ -179,12 +179,58 @@ describe('wiki-links in the editor', () => {
       <BlockEditor
         source={'See [[ghost]] now.\n'}
         onChange={vi.fn()}
-        wikiCandidates={[]}
+        candidates={[]}
         resolveLink={() => null}
         onOpenLink={vi.fn()}
       />,
     );
     const broken = document.querySelector('.wikilink.broken');
     expect(broken?.textContent).toContain('[[ghost]]');
+  });
+});
+
+describe('reference toolbar', () => {
+  const fileCandidate = {
+    token: 'file:src/cache/store.ts',
+    label: 'store.ts',
+    kind: 'file' as const,
+    hint: 'src/cache/store.ts',
+  };
+  const resolve = (token: string) =>
+    token.startsWith('file:')
+      ? { kind: 'file' as const, id: token, label: 'store.ts', path: 'src/cache/store.ts' }
+      : null;
+
+  it('offers a button per reference type', () => {
+    render(<BlockEditor source={'hi\n'} onChange={vi.fn()} candidates={[]} />);
+    expect(screen.getByLabelText('link a ticket')).toBeTruthy();
+    expect(screen.getByLabelText('link a document')).toBeTruthy();
+    expect(screen.getByLabelText('link a file')).toBeTruthy();
+  });
+
+  it('inserts a file reference from the File picker', async () => {
+    let ed: LexicalEditor | null = null;
+    render(
+      <BlockEditor
+        source={'Body.\n'}
+        onChange={vi.fn()}
+        candidates={[fileCandidate]}
+        resolveLink={resolve}
+        onOpenLink={vi.fn()}
+        onReady={(e) => (ed = e)}
+      />,
+    );
+    // A selection must exist for the insertion to land.
+    await act(async () => {
+      ed!.update(() => $getRoot().selectEnd());
+    });
+    fireEvent.click(screen.getByLabelText('link a file'));
+    const option = await screen.findByRole('option', { name: /store\.ts/ });
+    await act(async () => {
+      fireEvent.pointerDown(option);
+    });
+    // The picker closed and a resolved file chip was inserted.
+    await waitFor(() => expect(document.querySelector('.wikilink.file')?.textContent).toContain('store.ts'));
+    expect(screen.queryByRole('dialog', { name: 'Link a file' })).toBeNull();
   });
 });

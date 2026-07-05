@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DatePicker } from '../components/DatePicker';
 import { Toast } from '../components/Toast';
-import { Dropdown } from '../components/Dropdown';
-import { AddIcon, CaretIcon, EditIcon, FileIcon, FolderIcon } from '../components/icons';
+import { CaretIcon, EditIcon, FileIcon, FolderIcon, NewFileIcon, NewFolderIcon } from '../components/icons';
 import { BlockEditor } from '../editor/BlockEditor';
-import type { LinkResolver, OpenLink, WikiCandidate } from '../lib/links';
+import type { LinkResolver, OpenLink, ReferenceCandidate } from '../lib/links';
 import { Markdown } from '../lib/markdown';
 import { useHost } from '../state/store';
 import type { Snapshot } from '../lib/types';
@@ -14,16 +13,18 @@ interface BriefsProps {
   onSaveBody: (path: string, body: string) => Promise<void>;
   onSaveProperties: (path: string, summary: string, reviewBy: string | null) => Promise<void>;
   onCreateBrief: (dir: string, name: string, summary: string, createOverview: boolean) => Promise<void>;
+  onCreateFolder: (dir: string, name: string) => Promise<void>;
   onRenameBrief: (path: string, name: string) => Promise<void>;
   /** A path to open on entry (e.g. when arriving from search). */
   focusPath?: string | null;
   /** Wiki-link plumbing for the editor. */
-  wikiCandidates?: WikiCandidate[];
+  candidates?: ReferenceCandidate[];
   resolveLink?: LinkResolver;
   onOpenLink?: OpenLink;
 }
 
 const FILENAME_RE = /^[A-Za-z][A-Za-z0-9-]*$/;
+const BRIEFS_ROOT = '.lovelace/briefs';
 
 /** The document's title is its filename without the extension. */
 function titleOf(path: string): string {
@@ -44,10 +45,10 @@ interface TreeNode {
 }
 
 function buildTree(briefPaths: string[]): TreeNode {
-  const root: TreeNode = { name: 'briefs', path: '.lovelace/briefs', children: [] };
+  const root: TreeNode = { name: '/', path: BRIEFS_ROOT, children: [] };
   for (const path of briefPaths) {
-    if (!path.startsWith('.lovelace/briefs/')) continue;
-    const rel = path.slice('.lovelace/briefs/'.length).split('/');
+    if (!path.startsWith(`${BRIEFS_ROOT}/`)) continue;
+    const rel = path.slice(`${BRIEFS_ROOT}/`.length).split('/');
     let node = root;
     for (let i = 0; i < rel.length - 1; i++) {
       const dir = rel[i] ?? '';
@@ -74,22 +75,15 @@ function bodyOf(content: string): string {
   return parts.length >= 3 ? parts.slice(2).join('---').replace(/^\n/, '') : content;
 }
 
-function directories(node: TreeNode, acc: string[] = []): string[] {
-  acc.push(node.path);
-  for (const child of node.children) {
-    if (!child.briefPath) directories(child, acc);
-  }
-  return acc;
-}
-
 export function Briefs({
   snapshot,
   onSaveBody,
   onSaveProperties,
   onCreateBrief,
+  onCreateFolder,
   onRenameBrief,
   focusPath,
-  wikiCandidates,
+  candidates,
   resolveLink,
   onOpenLink,
 }: BriefsProps) {
@@ -100,17 +94,18 @@ export function Briefs({
   const [editing, setEditing] = useState(false);
   const [bodyDraft, setBodyDraft] = useState('');
   const [savingBody, setSavingBody] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [newDir, setNewDir] = useState('.lovelace/briefs');
+  // The folder a new file is being created in (opens the modal), and the folder
+  // an inline new-folder input is open under.
+  const [newFileFor, setNewFileFor] = useState<string | null>(null);
+  const [newFolderFor, setNewFolderFor] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState('');
   const [newName, setNewName] = useState('');
   const [newSummary, setNewSummary] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const tree = useMemo(() => buildTree(briefs.map((b) => b.path)), [briefs]);
-  const dirs = useMemo(() => directories(tree), [tree]);
   const selectedBrief = briefs.find((b) => b.path === selected);
-  const dirIsNew = !dirs.includes(newDir);
   const stale = (path: string) => {
     const brief = briefs.find((b) => b.path === path);
     return brief?.review_by !== undefined && new Date(brief.review_by).getTime() < Date.now();
@@ -156,6 +151,62 @@ export function Briefs({
     });
   };
 
+  const expand = (path: string) =>
+    setCollapsed((current) => {
+      if (!current.has(path)) return current;
+      const next = new Set(current);
+      next.delete(path);
+      return next;
+    });
+
+  const startNewFolder = (dir: string) => {
+    expand(dir);
+    setNewFileFor(null);
+    setNewFolderName('');
+    setError(null);
+    setNewFolderFor(dir);
+  };
+
+  const startNewFile = (dir: string) => {
+    setNewFolderFor(null);
+    setNewName('');
+    setNewSummary('');
+    setError(null);
+    setNewFileFor(dir);
+  };
+
+  const submitNewFolder = () => {
+    const dir = newFolderFor;
+    const name = newFolderName.trim();
+    if (!dir) return;
+    if (!FILENAME_RE.test(name)) {
+      setError('Folder names are letters, digits and hyphens, starting with a letter.');
+      return;
+    }
+    void onCreateFolder(dir, name)
+      .then(() => {
+        setNewFolderFor(null);
+        setNewFolderName('');
+        setError(null);
+        setSelected(`${dir}/${name}/OVERVIEW.md`);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  };
+
+  const submitNewFile = () => {
+    const dir = newFileFor;
+    const name = newName.trim();
+    if (!dir || !name) return;
+    void onCreateBrief(dir, name, newSummary.trim() || '(to be written)', false)
+      .then(() => {
+        setSelected(`${dir}/${name}.md`);
+        setNewFileFor(null);
+        setNewName('');
+        setNewSummary('');
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  };
+
   // The body is view-only until Edit is pressed; editing works on a local
   // draft, and Save writes once and returns to the rendered view. This mirrors
   // the ticket body, so a save never re-syncs the editor or moves the cursor.
@@ -196,18 +247,59 @@ export function Briefs({
       );
     }
     const isOpen = !collapsed.has(node.path);
+    const label = node.name;
     return (
       <div key={node.path}>
-        <button
-          className="tree-item tree-dir"
-          style={{ paddingLeft: `${depth * 16}px` }}
-          onClick={() => toggleDir(node.path)}
-          aria-expanded={isOpen}
-        >
-          <CaretIcon className={`tree-caret${isOpen ? ' open' : ''}`} />
-          <FolderIcon style={{ color: 'var(--slate)', flexShrink: 0 }} />
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
-        </button>
+        <div className="tree-dir-row">
+          <button
+            className="tree-item tree-dir"
+            style={{ paddingLeft: `${depth * 16}px` }}
+            onClick={() => toggleDir(node.path)}
+            aria-expanded={isOpen}
+          >
+            <CaretIcon className={`tree-caret${isOpen ? ' open' : ''}`} />
+            <FolderIcon style={{ color: 'var(--slate)', flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+          </button>
+          <span className="tree-actions">
+            <button
+              className="tree-action"
+              aria-label={`new folder in ${label}`}
+              title="New folder"
+              onClick={() => startNewFolder(node.path)}
+            >
+              <NewFolderIcon />
+            </button>
+            <button
+              className="tree-action"
+              aria-label={`new file in ${label}`}
+              title="New file"
+              onClick={() => startNewFile(node.path)}
+            >
+              <NewFileIcon />
+            </button>
+          </span>
+        </div>
+        {newFolderFor === node.path && (
+          <div className="tree-new-row" style={{ paddingLeft: `${(depth + 1) * 16 + 14}px` }}>
+            <FolderIcon style={{ color: 'var(--slate)', flexShrink: 0 }} />
+            <input
+              className="tree-new-input mono"
+              autoFocus
+              aria-label="new folder name"
+              placeholder="folder-name"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submitNewFolder();
+                else if (e.key === 'Escape') setNewFolderFor(null);
+              }}
+              onBlur={() => {
+                if (!newFolderName.trim()) setNewFolderFor(null);
+              }}
+            />
+          </div>
+        )}
         {isOpen && node.children.map((c) => renderNode(c, depth + 1))}
       </div>
     );
@@ -217,10 +309,7 @@ export function Briefs({
     <>
       <header className="view-header">
         <h1 className="view-title">Documentation</h1>
-        <button className="btn btn-primary" onClick={() => setCreating(true)}>
-          <AddIcon />
-          New brief
-        </button>
+        <span className="subtle">The project's knowledge tree; hover a folder to add to it.</span>
       </header>
       {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
       <div className="detail-grid" style={{ gridTemplateColumns: '15rem minmax(0, 1fr)' }}>
@@ -233,7 +322,7 @@ export function Briefs({
             <FileIcon style={{ color: 'var(--mist)', flexShrink: 0 }} />
             Context
           </button>
-          {tree.children.map((c) => renderNode(c, 0))}
+          {renderNode(tree, 0)}
         </aside>
         <div>
           <div className="doc-head">
@@ -299,7 +388,7 @@ export function Briefs({
                 <BlockEditor
                   source={bodyDraft}
                   onChange={setBodyDraft}
-                  wikiCandidates={wikiCandidates}
+                  candidates={candidates}
                   resolveLink={resolveLink}
                   onOpenLink={onOpenLink}
                 />
@@ -379,46 +468,25 @@ export function Briefs({
           )}
         </div>
       </div>
-      {creating && (
-        <div className="modal-backdrop" onClick={() => setCreating(false)}>
+      {newFileFor !== null && (
+        <div className="modal-backdrop" onClick={() => setNewFileFor(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>New brief</h2>
-            <div className="field-row">
-              <span className="label">directory</span>
-              <div>
-                <Dropdown
-                  aria-label="brief directory"
-                  mono
-                  width="100%"
-                  value={dirs.includes(newDir) ? newDir : '__custom__'}
-                  options={[
-                    ...dirs.map((d) => ({ value: d, label: d.replace('.lovelace/', '') })),
-                    { value: '__custom__', label: 'new directory...' },
-                  ]}
-                  onChange={(v) => {
-                    if (v && v !== '__custom__') setNewDir(v);
-                    else setNewDir('.lovelace/briefs/');
-                  }}
-                />
-                {!dirs.includes(newDir) && (
-                  <input
-                    className="form-input mono"
-                    aria-label="new directory path"
-                    style={{ marginTop: '0.4rem' }}
-                    value={newDir}
-                    onChange={(e) => setNewDir(e.target.value)}
-                  />
-                )}
-              </div>
-            </div>
+            <h2>New document</h2>
+            <p className="subtle" style={{ margin: '0 0 0.4rem' }}>
+              in <span className="mono">{newFileFor.replace('.lovelace/', '')}</span>
+            </p>
             <div className="field-row">
               <span className="label">filename</span>
               <input
                 className="form-input mono"
                 aria-label="brief filename"
                 placeholder="caching-strategy"
+                autoFocus
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newName.trim()) submitNewFile();
+                }}
               />
             </div>
             <div className="field-row">
@@ -431,30 +499,12 @@ export function Briefs({
                 onChange={(e) => setNewSummary(e.target.value)}
               />
             </div>
-            {dirIsNew && (
-              <p className="label" style={{ margin: '0.5rem 0 0' }}>
-                New directory: its OVERVIEW.md will be created too.
-              </p>
-            )}
             <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setCreating(false)}>
+              <button className="btn btn-ghost" onClick={() => setNewFileFor(null)}>
                 Cancel
               </button>
-              <button
-                className="btn btn-primary"
-                disabled={!newName.trim()}
-                onClick={() => {
-                  void onCreateBrief(newDir, newName.trim(), newSummary.trim() || '(to be written)', dirIsNew)
-                    .then(() => {
-                      setSelected(`${newDir.replace(/\/$/, '')}/${newName.trim()}.md`);
-                      setCreating(false);
-                      setNewName('');
-                      setNewSummary('');
-                    })
-                    .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-                }}
-              >
-                Create brief
+              <button className="btn btn-primary" disabled={!newName.trim()} onClick={submitNewFile}>
+                Create document
               </button>
             </div>
           </div>

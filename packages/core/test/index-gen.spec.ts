@@ -90,6 +90,16 @@ describe('link graph', () => {
     const links = buildLinks(loadProject(root)).filter((l) => l.source === 'domain-overview');
     expect(links).toEqual([{ source: 'domain-overview', target: 'architecture-overview' }]);
   });
+
+  it('excludes file and person references from the graph', () => {
+    const root = fixture();
+    corrupt(root, '.lovelace/briefs/domain/OVERVIEW.md', (t) =>
+      `${t}\n\nSee [[file:src/cache.ts]] and [[@ada]] and [[architecture-overview]].\n`,
+    );
+    const links = buildLinks(loadProject(root)).filter((l) => l.source === 'domain-overview');
+    // Only the entity link survives; file: and @ tokens are never indexed.
+    expect(links).toEqual([{ source: 'domain-overview', target: 'architecture-overview' }]);
+  });
 });
 
 describe('BOARD.md', () => {

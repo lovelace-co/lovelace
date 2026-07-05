@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultWorkflow } from '@lovelace/core';
@@ -108,5 +108,47 @@ describe('host ops: rename_brief', () => {
     await expect(
       handle({ op: 'rename_brief', root, path: '.lovelace/briefs/domain/pricing.md', name: 'OVERVIEW' }),
     ).rejects.toThrow(/already exists/);
+  });
+});
+
+describe('host op: create_folder', () => {
+  it('creates a folder as its OVERVIEW.md with a unique id', async () => {
+    const root = fixture();
+    const res = await handle({ op: 'create_folder', root, dir: '.lovelace/briefs', name: 'operations' });
+    expect((res.created as string[])[0]).toBe('.lovelace/briefs/operations/OVERVIEW.md');
+    expect(existsSync(join(root, '.lovelace/briefs/operations/OVERVIEW.md'))).toBe(true);
+    const briefs = (res.index as { briefs: Array<{ id: string; path: string }> }).briefs;
+    const overview = briefs.find((b) => b.path === '.lovelace/briefs/operations/OVERVIEW.md');
+    expect(overview?.id).toBe('operations-overview');
+  });
+
+  it('refuses bad names, paths outside briefs, and existing folders', async () => {
+    const root = fixture();
+    await expect(
+      handle({ op: 'create_folder', root, dir: '.lovelace/briefs', name: 'bad name!' }),
+    ).rejects.toThrow(/letters, digits and hyphens/);
+    await expect(
+      handle({ op: 'create_folder', root, dir: '.lovelace/tickets', name: 'x' }),
+    ).rejects.toThrow(/only creates folders under briefs/);
+    await expect(
+      handle({ op: 'create_folder', root, dir: '.lovelace/briefs', name: 'architecture' }),
+    ).rejects.toThrow(/already exists/);
+  });
+});
+
+describe('host op: list_files', () => {
+  it('walks the tree when the project is not a git repo, skipping noise and .lovelace', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'lovelace-nogit-'));
+    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    mkdirSync(join(root, 'src'), { recursive: true });
+    mkdirSync(join(root, 'node_modules', 'pkg'), { recursive: true });
+    mkdirSync(join(root, '.lovelace'), { recursive: true });
+    writeFileSync(join(root, 'README.md'), '# hi\n');
+    writeFileSync(join(root, 'src', 'index.ts'), 'export {};\n');
+    writeFileSync(join(root, 'node_modules', 'pkg', 'index.js'), '');
+    writeFileSync(join(root, '.lovelace', 'manifest.yaml'), '');
+
+    const res = (await handle({ op: 'list_files', root })) as { files: string[] };
+    expect(res.files).toEqual(['README.md', 'src/index.ts']);
   });
 });

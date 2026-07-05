@@ -723,7 +723,7 @@ input[type='checkbox'] {
   color: var(--mist);
 }
 
-.view-header > :last-child:not(:first-child):not(.view-title) {
+.view-header > :last-child:not(:first-child):not(.view-title):not(.view-tabs) {
   margin-left: auto;
   display: flex;
   align-items: center;
@@ -748,7 +748,9 @@ input[type='checkbox'] {
   /* One row, bounded to the board height; columns clip and scroll their own
      cards rather than growing the grid and pushing the whole pane to scroll. */
   grid-auto-rows: minmax(0, 1fr);
-  gap: 24px;
+  /* Open lanes carry no fill, so the cards are the visual edges; a tight
+     gap keeps the columns reading as one board rather than islands. */
+  gap: 12px;
   padding: 26px var(--rail-x) var(--rail-bottom);
   overflow-x: auto;
   overflow-y: hidden;
@@ -803,7 +805,7 @@ input[type='checkbox'] {
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-surface);
-  padding: 32px 16px 20px;
+  padding: 32px var(--sp-2) 20px;
   background: transparent;
   transition: background var(--dur-colour) var(--swift);
 }
@@ -2370,6 +2372,76 @@ input[type='checkbox'] {
   transform: rotate(90deg);
 }
 
+/* A folder row: the toggle button, plus new-folder / new-file actions that
+   appear on hover (or keyboard focus) at the right. */
+.tree-dir-row {
+  display: flex;
+  align-items: center;
+}
+
+.tree-dir-row .tree-dir {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.tree-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding-right: 6px;
+  opacity: 0;
+  transition: opacity var(--dur-colour) var(--swift);
+}
+
+.tree-dir-row:hover .tree-actions,
+.tree-dir-row:focus-within .tree-actions {
+  opacity: 1;
+}
+
+.tree-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--slate);
+  border-radius: var(--radius-seat);
+  cursor: pointer;
+  transition: color var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift);
+}
+
+.tree-action:hover {
+  color: var(--ink);
+  background: var(--raise-2);
+}
+
+/* The inline new-folder input, shown under the folder it will nest into. */
+.tree-new-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.tree-new-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--well);
+  color: var(--ink);
+  border: 0;
+  border-radius: var(--radius-well);
+  padding: 5px 8px;
+  font-size: var(--size-body);
+  outline: none;
+}
+
+.tree-new-input:focus {
+  outline: 1.5px solid var(--current);
+  outline-offset: 1px;
+}
+
 /* ---------- the Lexical editor, in the v4 voice ---------- */
 
 .lexical-shell {
@@ -2633,6 +2705,20 @@ input[type='checkbox'] {
   cursor: default;
 }
 
+/* A file reference is a quiet neutral chip, distinct from the cyan entity chip
+   so a source file never reads as an internal ticket or document. */
+.wikilink.file,
+.wikilink.person {
+  color: var(--slate);
+  background: var(--raise);
+}
+
+.wikilink.file:hover,
+.wikilink.person:hover {
+  background: var(--raise-2);
+  color: var(--ink);
+}
+
 /* ---------- the slash menu and drag handle ---------- */
 
 .slash-menu {
@@ -2664,10 +2750,92 @@ input[type='checkbox'] {
   background: var(--pop-wash);
 }
 
+.slash-item {
+  min-width: 0;
+}
+
+.slash-item .slash-title {
+  flex-shrink: 0;
+}
+
 .slash-item .slash-hint {
   font-family: var(--font-mono);
   font-size: var(--size-util);
   color: var(--pop-soft);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Section headers in the unified insert menu (Format / Tickets / Documents / Files). */
+.slash-section {
+  padding: 8px 12px 3px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pop-soft);
+}
+
+/* ---------- the reference picker (toolbar) ---------- */
+
+.ref-picker {
+  width: 32rem;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+}
+
+.ref-picker .form-input {
+  margin-bottom: var(--sp-3);
+}
+
+.ref-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 44vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ref-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 8px 10px;
+  border-radius: var(--radius-seat);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.ref-item.selected {
+  background: var(--wash);
+}
+
+.ref-item-label {
+  color: var(--ink);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ref-item-hint {
+  font-family: var(--font-mono);
+  font-size: var(--size-util);
+  color: var(--mist);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.ref-picker-empty {
+  padding: 10px;
+  color: var(--mist);
+  font-size: var(--size-util);
 }
 
 /* The `[[` link menu: a wider popover whose rows stack a title over a hint. */
@@ -3339,7 +3507,7 @@ input[type='checkbox'] {
   gap: 6px;
   align-items: center;
   font-size: 0.8125rem;
-  color: var(--text-secondary);
+  color: var(--slate);
   white-space: nowrap;
 }
 
@@ -3501,6 +3669,24 @@ input[type='checkbox'] {
 }
 .cols-enum {
   grid-template-columns: minmax(0, 1fr) 60px 34px;
+}
+.cols-actor {
+  grid-template-columns: minmax(0, 1fr) 160px 130px 34px;
+}
+
+/* Settings sections: forms sit at a comfortable measure, and the Team section's
+   own Save bar mirrors the shared workflow one. */
+.settings-section {
+  max-width: 760px;
+}
+.settings-save-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+}
+.info-card-actions {
+  margin-top: 18px;
 }
 
 .wizard-handle {
@@ -3710,6 +3896,77 @@ input[type='checkbox'] {
   gap: 10px;
   /* Same -10px gutter bleed as the card and nav rows. */
   margin: 12px -10px 0;
+}
+
+/* The footer bar: Settings pinned bottom-left (styled like a nav row), with the
+   theme toggle and digest peek on the right. Bleeds into the gutter like the
+   nav rows so its label keeps the shared left edge. */
+.footer-bar {
+  --footer-h: 36px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px -10px 0;
+}
+
+/* Settings takes all the width left of the tools; the whole row is --footer-h tall. */
+.footer-settings {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  height: var(--footer-h);
+  padding: 0 10px;
+  border-radius: var(--radius-seat);
+  color: var(--slate);
+  font-size: var(--size-body);
+  cursor: pointer;
+  transition: color var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift);
+}
+
+.footer-settings svg {
+  flex-shrink: 0;
+  margin-right: 10px;
+  opacity: 0.75;
+  transition: opacity var(--dur-colour) var(--swift);
+}
+
+.footer-settings:hover {
+  color: var(--ink);
+  background: var(--raise);
+}
+
+.footer-settings:hover svg,
+.footer-settings.active svg {
+  opacity: 1;
+}
+
+.footer-settings.active {
+  color: var(--ink);
+  background: var(--raise-2);
+}
+
+.footer-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The theme and digest buttons: exact squares, the same height as the Settings
+   row. A fixed width and height (not aspect-ratio, which a flex row ignores on
+   the main axis) guarantees the square. */
+.footer-tools .seat-tool {
+  width: var(--footer-h);
+  height: var(--footer-h);
+  min-width: 0;
+  padding: 0;
+  border-radius: var(--radius-seat);
+}
+
+.count-note.snag-error {
+  color: var(--bad-fg);
+}
+.count-note.snag-warning {
+  color: var(--warn-fg);
 }
 
 .seat-tools-right {
@@ -3939,6 +4196,86 @@ input[type='checkbox'] {
   padding: 16px 18px;
 }
 
+/* ---------- file preview modal ---------- */
+
+.file-preview-card {
+  width: 54rem;
+  max-width: 92vw;
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-0);
+  border-radius: var(--radius-float);
+  padding: 22px 24px 24px;
+  animation: pop-rise var(--dur-glide) var(--swift);
+}
+
+.file-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.file-preview-titles {
+  min-width: 0;
+}
+
+.file-preview-name {
+  display: block;
+  font-size: var(--size-anchor);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.file-preview-path {
+  font-size: var(--size-util);
+  color: var(--mist);
+  overflow-wrap: anywhere;
+}
+
+.file-preview-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+.file-preview-well {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--well);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+}
+
+.file-preview-pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--size-util);
+  line-height: 1.7;
+  color: var(--ink);
+  white-space: pre;
+}
+
+.file-preview-image {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-card);
+}
+
+.file-preview-pdf {
+  width: 100%;
+  height: 100%;
+  min-height: 60vh;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--bg-1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .seat-dot.awake {
     animation: none;
@@ -4092,39 +4429,65 @@ input[type='checkbox'] {
 
 /* ---------- the Automations view ---------- */
 
-.subtabs {
-  margin-left: auto;
-  display: flex;
-  gap: 4px;
+/* Tabbed views stack the title over the tab bar, so the tabs sit under the
+   title rather than competing with it alongside. */
+.view-header--tabbed {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
 }
 
-.subtab {
-  display: inline-flex;
+.view-titlebar {
+  display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 26px;
+}
+
+.view-titlebar > :last-child:not(.view-title) {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+/* The tab bar: a row of seats with one seat that glides to the active tab, the
+   same gliding-seat language the sidebar nav uses, so tabs and navigation read
+   as one system. State moves (the seat glides); the tab is never marked. */
+.view-tabs {
+  position: relative;
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+}
+
+.view-tabs-seat {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  z-index: 0;
+  border-radius: var(--radius-seat);
+  background: var(--raise-2);
+  pointer-events: none;
+  transition: left var(--dur-glide) var(--swift), width var(--dur-glide) var(--swift);
+}
+
+.view-tab {
+  position: relative;
+  z-index: 1;
   font-size: 13px;
   font-weight: 500;
   color: var(--slate);
-  padding: 7px 13px;
-  border-radius: var(--radius-card);
-  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
+  padding: 8px 15px;
+  border-radius: var(--radius-seat);
+  transition: color var(--dur-colour) var(--swift);
 }
 
-.subtab:hover {
+.view-tab:hover {
   color: var(--ink);
-  background: var(--raise);
 }
 
-.subtab.active {
-  color: var(--current);
-  background: var(--wash);
-}
-
-.subtab .count-note {
-  margin-left: 0;
-  padding-left: 0;
-  font-family: var(--font-sans);
-  color: inherit;
+.view-tab.active {
+  color: var(--ink);
 }
 
 .transition-row {

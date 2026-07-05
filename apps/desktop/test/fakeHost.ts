@@ -1,4 +1,4 @@
-import type { HostClient } from '../src/lib/host';
+import type { HostClient, SourceFile } from '../src/lib/host';
 import type { AutomationRule, SearchHit, Snapshot, WorkflowEdit } from '../src/lib/types';
 import fixture from './fixtures/snapshot.json';
 
@@ -11,6 +11,8 @@ export class FakeHost implements HostClient {
   snapshotData: Snapshot = fixture as unknown as Snapshot;
   calls: Array<{ method: string; args: unknown[] }> = [];
   files = new Map<string, string>();
+  sourceFiles = new Map<string, SourceFile>();
+  fileList: string[] = [];
   transitionRules: AutomationRule[] = [];
   log = '';
 
@@ -112,6 +114,18 @@ export class FakeHost implements HostClient {
     return this.files.get(path) ?? '---\nid: x\n---\n\n## Description\n\nFixture body.\n';
   }
 
+  async listFiles(_root: string): Promise<string[]> {
+    this.record('listFiles', [_root]);
+    return this.fileList;
+  }
+
+  async readSourceFile(_root: string, path: string): Promise<SourceFile> {
+    this.record('readSourceFile', [path]);
+    return (
+      this.sourceFiles.get(path) ?? { kind: 'text', content: this.files.get(path) ?? `// ${path}\n`, size: 0 }
+    );
+  }
+
   async writeBrief(
     root: string,
     path: string,
@@ -139,6 +153,11 @@ export class FakeHost implements HostClient {
     createOverview: boolean,
   ): Promise<Snapshot> {
     this.record('createBrief', [root, dir, name, summary, createOverview]);
+    return this.snapshotData;
+  }
+
+  async createFolder(root: string, dir: string, name: string): Promise<Snapshot> {
+    this.record('createFolder', [root, dir, name]);
     return this.snapshotData;
   }
 

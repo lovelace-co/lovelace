@@ -32,6 +32,7 @@ describe('Briefs view', () => {
     const onSaveBody = vi.fn().mockResolvedValue(undefined);
     const onSaveProperties = vi.fn().mockResolvedValue(undefined);
     const onCreateBrief = vi.fn().mockResolvedValue(undefined);
+    const onCreateFolder = vi.fn().mockResolvedValue(undefined);
     const onRenameBrief = vi.fn().mockResolvedValue(undefined);
     render(
       <HostProvider host={host}>
@@ -40,11 +41,12 @@ describe('Briefs view', () => {
           onSaveBody={onSaveBody}
           onSaveProperties={onSaveProperties}
           onCreateBrief={onCreateBrief}
+          onCreateFolder={onCreateFolder}
           onRenameBrief={onRenameBrief}
         />
       </HostProvider>,
     );
-    return { onSaveBody, onSaveProperties, onCreateBrief, onRenameBrief };
+    return { onSaveBody, onSaveProperties, onCreateBrief, onCreateFolder, onRenameBrief };
   }
 
   it('shows the tree with stale badges and edits frontmatter through the properties panel only', async () => {
@@ -140,20 +142,33 @@ describe('Briefs view', () => {
     expect(reviewBy).toMatch(/^\d{4}-\d{2}-21$/);
   });
 
-  it('creates a brief in a new directory, offering its OVERVIEW.md', async () => {
+  it('shows the "/" root and no longer offers a New brief button', () => {
+    renderBriefs();
+    expect(screen.queryByText('New brief')).toBeNull();
+    // The briefs root is a folder you can create into.
+    expect(screen.getByRole('button', { name: 'new folder in /' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'new file in /' })).toBeTruthy();
+  });
+
+  it('creates a folder inline under the hovered folder', async () => {
+    const { onCreateFolder } = renderBriefs();
+    fireEvent.click(screen.getByRole('button', { name: 'new folder in /' }));
+    const input = screen.getByLabelText('new folder name');
+    fireEvent.change(input, { target: { value: 'operations' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() =>
+      expect(onCreateFolder).toHaveBeenCalledWith('.lovelace/briefs', 'operations'),
+    );
+  });
+
+  it('creates a file through the modal, a child of the hovered folder', async () => {
     const { onCreateBrief } = renderBriefs();
-    fireEvent.click(screen.getByText('New brief'));
-    fireEvent.click(screen.getByLabelText('brief directory'));
-    fireEvent.click(within(screen.getByRole('listbox', { name: 'brief directory' })).getByText('new directory...'));
-    fireEvent.change(screen.getByLabelText('new directory path'), {
-      target: { value: '.lovelace/briefs/operations' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'new file in architecture' }));
     fireEvent.change(screen.getByLabelText('brief filename'), { target: { value: 'runbooks' } });
     fireEvent.change(screen.getByLabelText('new brief summary'), { target: { value: 'How we operate.' } });
-    expect(screen.getByText(/OVERVIEW\.md will be created/)).toBeTruthy();
-    fireEvent.click(screen.getByText('Create brief'));
+    fireEvent.click(screen.getByText('Create document'));
     await waitFor(() =>
-      expect(onCreateBrief).toHaveBeenCalledWith('.lovelace/briefs/operations', 'runbooks', 'How we operate.', true),
+      expect(onCreateBrief).toHaveBeenCalledWith('.lovelace/briefs/architecture', 'runbooks', 'How we operate.', false),
     );
   });
 });
@@ -167,8 +182,9 @@ describe('Sessions view', () => {
     );
     const ids = screen.getAllByText(/^S-\d+$/).map((el) => el.textContent);
     expect(ids).toEqual(['S-0002', 'S-0001']);
-    expect(screen.getByText('partial')).toBeTruthy();
-    expect(screen.getByText('completed')).toBeTruthy();
+    // Outcomes are machine values in the file; the view Title Cases them.
+    expect(screen.getByText('Partial')).toBeTruthy();
+    expect(screen.getByText('Completed')).toBeTruthy();
     expect(screen.getByText(/9c41f2a/)).toBeTruthy();
   });
 });

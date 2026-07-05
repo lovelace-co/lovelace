@@ -32,7 +32,7 @@ describe('Activity: automation history and dry run', () => {
     fireEvent.click(screen.getByLabelText('dry run ticket'));
     fireEvent.click(within(screen.getByRole('listbox', { name: 'dry run ticket' })).getByText(/T-0002/));
     fireEvent.click(screen.getByLabelText('dry run status'));
-    fireEvent.click(within(screen.getByRole('listbox', { name: 'dry run status' })).getByText('in_review'));
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'dry run status' })).getByText('In Review'));
     fireEvent.click(screen.getByText('What would fire?'));
     await waitFor(() => expect(screen.getByText(/Deploy it\./)).toBeTruthy());
     expect(host.calls.some((c) => c.method === 'updateTicket')).toBe(false);

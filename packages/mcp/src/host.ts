@@ -36,7 +36,7 @@ import {
   ProjectError,
 } from '@lovelace/core';
 import type { Workflow, WorkflowEdit } from '@lovelace/core';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseDocument } from 'yaml';
 import {
@@ -88,6 +88,73 @@ function snapshot(root: string): Json {
     boardOrder: readBoardOrder(project.dir),
     graphLayout: readGraphLayout(project.dir, project.manifest.paths.state),
   };
+}
+
+/** File extensions previewed as an image, mapped to their MIME type. */
+const PREVIEW_IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  avif: 'image/avif',
+  svg: 'image/svg+xml',
+};
+
+/** Directories the non-git file walk always skips. */
+const WALK_IGNORE_DIRS = new Set([
+  '.git',
+  '.lovelace',
+  'node_modules',
+  'dist',
+  'build',
+  'out',
+  'target',
+  '.next',
+  'coverage',
+  '.turbo',
+  'vendor',
+]);
+
+/**
+ * A bounded filesystem walk for projects that are not git repositories, so the
+ * reference picker still works. Skips heavy/noise directories and any hidden
+ * directory (there is no .gitignore to consult), and caps the count so a large
+ * tree cannot stall the picker. Returns repo-relative paths, sorted.
+ */
+function walkFiles(root: string): string[] {
+  const MAX = 5000;
+  const out: string[] = [];
+  const walk = (dir: string, rel: string) => {
+    if (out.length >= MAX) return;
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (out.length >= MAX) return;
+      const relPath = rel ? `${rel}/${name}` : name;
+      const abs = join(dir, name);
+      let isDir = false;
+      try {
+        isDir = statSync(abs).isDirectory();
+      } catch {
+        continue;
+      }
+      if (isDir) {
+        if (WALK_IGNORE_DIRS.has(name) || name.startsWith('.')) continue;
+        walk(abs, relPath);
+      } else if (!relPath.startsWith('.lovelace/')) {
+        out.push(relPath);
+      }
+    }
+  };
+  walk(root, '');
+  return out.sort();
 }
 
 export async function handle(request: HostRequest): Promise<Json> {
@@ -216,6 +283,58 @@ export async function handle(request: HostRequest): Promise<Json> {
       }
       return { content: readFileSync(join(root, rel), 'utf8') };
     }
+    case 'list_files': {
+      // Tracked plus untracked-but-not-ignored files, so the reference picker
+      // sees the working tree the developer sees. The .lovelace/ metadata is
+      // excluded: those entities have first-class ticket/document references.
+      // Git respects .gitignore exactly; when the project is not a git repo,
+      // fall back to a bounded walk with a default ignore set.
+      try {
+        const { execSync } = await import('node:child_process');
+        const out = execSync('git ls-files --cached --others --exclude-standard', {
+          cwd: root,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          maxBuffer: 64 * 1024 * 1024,
+        });
+        const files = out
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0 && !l.startsWith('.lovelace/'));
+        return { files: [...new Set(files)].sort() };
+      } catch {
+        return { files: walkFiles(root) };
+      }
+    }
+    case 'read_source_file': {
+      // Any repo-relative path (for previewing a referenced file), with a
+      // traversal guard. Images and PDFs come back base64-encoded for a rich
+      // preview; text comes back as UTF-8; everything else is flagged binary.
+      // Size caps keep the preview (and the JSON bridge) sane.
+      const rel = String(request.path);
+      if (rel.startsWith('/') || rel.includes('..') || rel.includes('\0')) {
+        throw new Error('read_source_file: path must be a repo-relative path');
+      }
+      const abs = join(root, rel);
+      if (!existsSync(abs)) return { kind: 'missing' };
+      const size = statSync(abs).size;
+      const ext = rel.slice(rel.lastIndexOf('.') + 1).toLowerCase();
+      const imageMime = PREVIEW_IMAGE_MIME[ext];
+      const MEDIA_MAX = 20 * 1024 * 1024;
+      const TEXT_MAX = 512 * 1024;
+      if (imageMime) {
+        if (size > MEDIA_MAX) return { kind: 'image', size, truncated: true };
+        return { kind: 'image', mime: imageMime, base64: readFileSync(abs).toString('base64'), size };
+      }
+      if (ext === 'pdf') {
+        if (size > MEDIA_MAX) return { kind: 'pdf', size, truncated: true };
+        return { kind: 'pdf', mime: 'application/pdf', base64: readFileSync(abs).toString('base64'), size };
+      }
+      if (size > TEXT_MAX) return { kind: 'text', size, truncated: true };
+      const buf = readFileSync(abs);
+      if (buf.subarray(0, 8000).includes(0)) return { kind: 'binary', size };
+      return { kind: 'text', content: buf.toString('utf8'), size };
+    }
     case 'write_brief': {
       const rel = String(request.path);
       const project = loadProject(root);
@@ -285,6 +404,34 @@ export async function handle(request: HostRequest): Promise<Json> {
         created.push(`${dirRel}/OVERVIEW.md`);
       }
       return { created, ...snapshot(root) };
+    }
+    case 'create_folder': {
+      const project = loadProject(root);
+      const briefsRoot = `.lovelace/${project.manifest.paths.briefs}`;
+      const parentRel = String(request.dir ?? briefsRoot);
+      if (
+        !(parentRel === briefsRoot || parentRel.startsWith(`${briefsRoot}/`)) ||
+        parentRel.includes('..')
+      ) {
+        throw new Error('create_folder only creates folders under briefs');
+      }
+      const name = String(request.name ?? '');
+      if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(name)) {
+        throw new Error('folder names are letters, digits and hyphens');
+      }
+      const folderRel = `${parentRel}/${name}`;
+      const dirAbs = join(root, folderRel);
+      if (existsSync(dirAbs)) throw new Error(`${folderRel} already exists`);
+      const summary = String(request.summary ?? '(to be written)');
+      const stamp = `${new Date().toISOString().slice(0, 19)}Z`;
+      mkdirSync(dirAbs, { recursive: true });
+      // Every directory under briefs/ carries an OVERVIEW.md (see the spec), so
+      // creating a folder is really creating its overview, with a unique id.
+      writeFileSync(
+        join(dirAbs, 'OVERVIEW.md'),
+        `---\nid: ${name.toLowerCase()}-overview\ntype: brief\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
+      );
+      return { created: [`${folderRel}/OVERVIEW.md`], ...snapshot(root) };
     }
     case 'rename_brief': {
       const rel = String(request.path);

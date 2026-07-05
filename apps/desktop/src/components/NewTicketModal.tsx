@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Snapshot } from '../lib/types';
 import { fieldsFor } from '../lib/types';
-import { fieldLabel, typeLabel } from '../lib/format';
+import { fieldLabel, statusLabel, typeLabel } from '../lib/format';
 import { Dropdown } from './Dropdown';
 import { Toast } from './Toast';
 import { FieldInput } from './FieldInput';
@@ -43,7 +43,7 @@ export function NewTicketModal({ snapshot, initialStatus, onClose, onCreate }: N
         {initialStatus !== undefined && (
           <div className="field-row">
             <span className="label">column</span>
-            <span className="id-chip">{initialStatus}</span>
+            <span className="id-chip">{statusLabel(snapshot.workflow.statuses.find((st) => st.name === initialStatus) ?? { name: initialStatus })}</span>
           </div>
         )}
         <div className="field-row">
