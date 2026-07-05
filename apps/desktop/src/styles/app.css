@@ -31,7 +31,7 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
-  transition: background 300ms ease, color 300ms ease;
+  transition: background var(--dur-glide) var(--swift), color var(--dur-glide) var(--swift);
 }
 
 /* Selection is one of the signal's few sanctioned uses: strong enough to
@@ -400,7 +400,7 @@ input[type='checkbox'] {
   color: var(--mist);
   border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: color 140ms ease;
+  transition: color var(--dur-colour) var(--swift);
 }
 
 .field-chip-remove:hover {
@@ -421,7 +421,7 @@ input[type='checkbox'] {
   height: 46px;
   background: var(--bg-0);
   user-select: none;
-  transition: background 300ms ease;
+  transition: background var(--dur-glide) var(--swift);
 }
 
 .tab-bar-brand {
@@ -446,7 +446,7 @@ input[type='checkbox'] {
   color: var(--slate);
   font-size: 13px;
   max-width: 15rem;
-  transition: color 140ms ease, background 140ms ease;
+  transition: color var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift);
 }
 
 .tab:hover {
@@ -527,7 +527,7 @@ input[type='checkbox'] {
   padding: 38px 28px 32px;
   background: var(--bg-0);
   overflow-y: auto;
-  transition: background 300ms ease;
+  transition: background var(--dur-glide) var(--swift);
 }
 
 /* The seat under the active row; it glides between rows on navigation. */
@@ -581,7 +581,7 @@ input[type='checkbox'] {
   height: 28px;
   border-radius: var(--radius-card);
   color: var(--mist);
-  transition: color 140ms ease, background 140ms ease;
+  transition: color var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift);
 }
 
 .head-btn:hover {
@@ -638,7 +638,7 @@ input[type='checkbox'] {
   flex-direction: column;
   overflow-y: auto;
   background: var(--bg-1);
-  transition: background 300ms ease;
+  transition: background var(--dur-glide) var(--swift);
 }
 
 /* ---------- the topbar: one 28px title per screen ---------- */
@@ -650,7 +650,28 @@ input[type='checkbox'] {
   padding: 44px var(--rail-x) 28px;
   flex-shrink: 0;
   background: var(--bg-1);
-  transition: background 300ms ease;
+  transition: background var(--dur-glide) var(--swift);
+}
+
+/* Entering a room: the header leads and the body follows one press-beat
+   later, rising into place on the glide. Views remount on navigation, so
+   the entrance plays exactly once per arrival. */
+@keyframes view-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.view-header {
+  animation: view-rise var(--dur-glide) var(--swift) backwards;
+}
+
+.view-body,
+.board-scroll,
+.list-scroll,
+.detail-grid {
+  animation: view-rise var(--dur-glide) var(--swift) var(--dur-press) backwards;
 }
 
 /* The page body rail: standard content wrapper beneath a view header,
@@ -686,7 +707,7 @@ input[type='checkbox'] {
   padding: 4px 8px;
   margin-left: -8px;
   text-overflow: ellipsis;
-  transition: background 140ms ease;
+  transition: background var(--dur-colour) var(--swift);
 }
 
 .view-title-input:hover {
@@ -864,7 +885,7 @@ input[type='checkbox'] {
 .ticket-card.pressing,
 .pressing {
   transform: translateY(1px) scale(0.994);
-  transition: transform 80ms steps(2, jump-end);
+  transition: transform var(--dur-press) var(--punch-step);
 }
 
 .punch-mark {
@@ -981,7 +1002,7 @@ input[type='checkbox'] {
   cursor: pointer;
   border-radius: var(--radius-card);
   text-align: left;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 /* Inline quick-add composer: a card-shaped title input in a column. */
@@ -1059,7 +1080,7 @@ input[type='checkbox'] {
 }
 
 .panel-hover {
-  transition: background 180ms ease;
+  transition: background var(--dur-colour) var(--swift);
 }
 
 .panel-hover:hover {
@@ -1181,7 +1202,7 @@ input[type='checkbox'] {
   background: transparent;
   text-align: left;
   cursor: pointer;
-  transition: background 140ms ease;
+  transition: background var(--dur-colour) var(--swift);
 }
 
 .child-row:hover {
@@ -1340,7 +1361,7 @@ input[type='checkbox'] {
   border-radius: var(--radius-card);
   color: var(--slate);
   font-size: var(--size-body);
-  transition: color 140ms ease, background 140ms ease;
+  transition: color var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift);
 }
 
 .tree-item:hover {
@@ -1439,7 +1460,7 @@ input[type='checkbox'] {
   border-radius: var(--radius-card);
   color: var(--slate);
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .recent-row:hover {
@@ -1497,7 +1518,7 @@ input[type='checkbox'] {
   background: var(--bg-0);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
   cursor: pointer;
-  transition: color 140ms ease, background 140ms ease;
+  transition: color var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift);
 }
 
 .modal-close svg {
@@ -1619,7 +1640,7 @@ input[type='checkbox'] {
   font-size: var(--size-util);
   color: var(--slate);
   padding: 2px 4px;
-  transition: color 140ms ease;
+  transition: color var(--dur-colour) var(--swift);
 }
 
 .info-copy:hover {
@@ -1835,7 +1856,7 @@ input[type='checkbox'] {
   border-radius: var(--radius-card);
   padding: 1px 12px;
   margin: 0 -12px;
-  transition: background 150ms ease;
+  transition: background var(--dur-colour) var(--swift);
 }
 
 .block-editable {
@@ -1917,14 +1938,24 @@ input[type='checkbox'] {
 
 /* ---------- scrollbars ---------- */
 
+/* A quiet thumb in a fixed gutter; it thickens under the pointer by
+   shedding its transparent padding, so the layout never moves. */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--band);
+  background: var(--raise-2);
+  background-clip: padding-box;
+  border: 3px solid transparent;
   border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--mist);
+  background-clip: padding-box;
+  border-width: 2px;
 }
 
 ::-webkit-scrollbar-track {
@@ -1944,7 +1975,8 @@ input[type='checkbox'] {
   .type-caret {
     animation: none;
   }
-  /* Floating surfaces appear in place; a notice still dismisses itself. */
+  /* Floating surfaces and rooms appear in place; a notice still
+     dismisses itself. */
   .dropdown-panel,
   .datepicker-panel,
   .palette,
@@ -1952,7 +1984,12 @@ input[type='checkbox'] {
   .info-card,
   .digest-card,
   .toast,
-  .toast.notice::after {
+  .toast.notice::after,
+  .view-header,
+  .view-body,
+  .board-scroll,
+  .list-scroll,
+  .detail-grid {
     animation: none !important;
   }
   * {
@@ -1974,7 +2011,7 @@ input[type='checkbox'] {
   flex-shrink: 0;
   margin-right: 10px;
   opacity: 0.75;
-  transition: opacity 140ms ease;
+  transition: opacity var(--dur-colour) var(--swift);
 }
 
 .side-nav .nav-item:hover svg,
@@ -2326,7 +2363,7 @@ input[type='checkbox'] {
 .tree-caret {
   color: var(--mist);
   flex-shrink: 0;
-  transition: transform 100ms steps(2, jump-end);
+  transition: transform var(--dur-press) var(--punch-step);
 }
 
 .tree-caret.open {
@@ -2359,7 +2396,7 @@ input[type='checkbox'] {
   height: 38px;
   background: var(--raise);
   border-radius: var(--radius-card);
-  transition: color 140ms ease, background 140ms ease;
+  transition: color var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift);
 }
 
 .lexical-toolbar .tool-i {
@@ -2501,7 +2538,7 @@ input[type='checkbox'] {
   border: 1.5px solid var(--slate);
   background: var(--bg-0);
   box-sizing: border-box;
-  transition: border-color 140ms ease;
+  transition: border-color var(--dur-colour) var(--swift);
 }
 
 .le-li-checked::before {
@@ -2582,7 +2619,7 @@ input[type='checkbox'] {
   border-radius: 4px;
   padding: 0 6px;
   cursor: pointer;
-  transition: background 140ms ease, color 140ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .wikilink:hover:not(.broken) {
@@ -2692,7 +2729,7 @@ input[type='checkbox'] {
   opacity: 0;
   cursor: grab;
   will-change: transform;
-  transition: opacity 140ms ease;
+  transition: opacity var(--dur-colour) var(--swift);
 }
 
 .lexical-scroller:hover .drag-handle,
@@ -2958,7 +2995,7 @@ input[type='checkbox'] {
   height: 30px;
   border-radius: var(--radius-card);
   color: var(--pop-soft);
-  transition: background 140ms ease, color 140ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .datepicker-nav button:hover {
@@ -2990,7 +3027,7 @@ input[type='checkbox'] {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--pop-ink);
-  transition: background 140ms ease, color 140ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .datepicker-day:hover {
@@ -3028,7 +3065,7 @@ input[type='checkbox'] {
   color: var(--pop-soft);
   padding: 6px 10px;
   border-radius: var(--radius-card);
-  transition: background 140ms ease, color 140ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .datepicker-action:hover:not(:disabled) {
@@ -3080,7 +3117,7 @@ input[type='checkbox'] {
   border: 0;
   border-radius: var(--radius-card);
   padding: 6px 18px;
-  transition: background 140ms ease;
+  transition: background var(--dur-colour) var(--swift);
 }
 
 .doc-title:hover:not(:disabled) {
@@ -3240,7 +3277,7 @@ input[type='checkbox'] {
   border: 1px solid var(--hole-rim);
   background: transparent;
   flex-shrink: 0;
-  transition: border-color 200ms ease, box-shadow 200ms ease, background 200ms ease;
+  transition: border-color var(--dur-glide) var(--swift), box-shadow var(--dur-glide) var(--swift), background var(--dur-glide) var(--swift);
 }
 
 .wizard-step.done .wizard-dot {
@@ -3398,7 +3435,7 @@ input[type='checkbox'] {
   line-height: 1;
   color: var(--mist);
   opacity: 0;
-  transition: opacity 140ms ease, background 140ms ease, color 140ms ease;
+  transition: opacity var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .recent-row:hover .recent-forget {
@@ -3612,7 +3649,7 @@ input[type='checkbox'] {
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--mist);
-  transition: background 200ms ease, box-shadow 200ms ease;
+  transition: background var(--dur-glide) var(--swift), box-shadow var(--dur-glide) var(--swift);
 }
 
 /* Awake: the one electric signal, breathing slowly like the thread. */
@@ -3656,7 +3693,7 @@ input[type='checkbox'] {
   color: var(--slate);
   font: inherit;
   background: transparent;
-  transition: color 140ms ease;
+  transition: color var(--dur-colour) var(--swift);
 }
 
 .seat-link:hover {
@@ -3697,7 +3734,7 @@ input[type='checkbox'] {
   padding: 0 10px;
   border-radius: var(--radius-card);
   cursor: pointer;
-  transition: background 140ms ease, color 140ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .seat-tool:hover {
@@ -3746,7 +3783,7 @@ input[type='checkbox'] {
   box-shadow: 0 8px 22px var(--backdrop);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms ease, transform 120ms ease;
+  transition: opacity var(--dur-colour) var(--swift), transform var(--dur-colour) var(--swift);
   z-index: 40;
 }
 
@@ -4024,7 +4061,7 @@ input[type='checkbox'] {
   color: var(--mist);
   white-space: nowrap;
   opacity: 0;
-  transition: opacity 150ms ease;
+  transition: opacity var(--dur-colour) var(--swift);
 }
 
 .list-row:hover .list-row-meta .id {
@@ -4070,7 +4107,7 @@ input[type='checkbox'] {
   color: var(--slate);
   padding: 7px 13px;
   border-radius: var(--radius-card);
-  transition: background 140ms ease, color 140ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .subtab:hover {
@@ -4157,7 +4194,7 @@ input[type='checkbox'] {
   background: var(--raise);
   border-radius: var(--radius-region);
   padding: 18px 22px;
-  transition: background 180ms ease;
+  transition: background var(--dur-colour) var(--swift);
 }
 
 .flow-rail:hover {
@@ -4328,7 +4365,7 @@ input[type='checkbox'] {
 .flow-rail-actions .btn-ghost {
   opacity: 0;
   padding: 4px 9px;
-  transition: opacity 140ms ease, background 140ms ease, color 140ms ease;
+  transition: opacity var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .flow-rail:hover .flow-rail-actions .btn-ghost,
@@ -4494,7 +4531,7 @@ input[type='checkbox'] {
   color: var(--slate);
   padding: 9px 12px;
   border-radius: 4px;
-  transition: background 140ms ease, color 140ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .kind-option svg {
@@ -4568,7 +4605,7 @@ input[type='checkbox'] {
   stroke: var(--slate);
   stroke-width: 1.4;
   opacity: 0.22;
-  transition: opacity 140ms ease, stroke 140ms ease;
+  transition: opacity var(--dur-colour) var(--swift), stroke var(--dur-colour) var(--swift);
 }
 
 .graph-edge.active {
@@ -4586,7 +4623,7 @@ input[type='checkbox'] {
 
 .graph-dot {
   fill: var(--slate);
-  transition: fill 140ms ease, opacity 140ms ease;
+  transition: fill var(--dur-colour) var(--swift), opacity var(--dur-colour) var(--swift);
 }
 
 .graph-node:hover .graph-dot,
@@ -4641,7 +4678,7 @@ input[type='checkbox'] {
   color: var(--slate);
   background: var(--raise);
   border-radius: var(--radius-card);
-  transition: background 140ms ease, color 140ms ease;
+  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
 }
 
 .graph-ctl:hover {
