@@ -1,101 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import {
-  STILL,
-  changedTicketIds,
-  decay,
-  glowFor,
-  isAwake,
-  observeChange,
-} from '../src/lib/presence';
-import type { Snapshot } from '../src/lib/types';
-import fixture from './fixtures/snapshot.json';
+import { DEFAULT_PRESENCE_TIMEOUT_MINUTES, STILL, derivePresence } from '../src/lib/presence';
 
-const base = fixture as unknown as Snapshot;
+const NOW = Date.parse('2026-07-05T10:00:00Z');
+const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString();
 
-function withTicketUpdated(snap: Snapshot, id: string, updated: string): Snapshot {
-  return {
-    ...snap,
-    index: {
-      ...snap.index,
-      tickets: snap.index.tickets.map((t) => (t.id === id ? { ...t, updated } : t)),
-    },
-  };
-}
-
-const NOW = 1_000_000;
-
-describe('the presence engine', () => {
-  it('detects which tickets changed between snapshots', () => {
-    const next = withTicketUpdated(base, 'T-0002', '2099-01-01T00:00:00Z');
-    expect(changedTicketIds(base, next)).toEqual(['T-0002']);
-    expect(changedTicketIds(base, base)).toEqual([]);
+describe('presence from the hooks marker', () => {
+  it('is still when there is no marker', () => {
+    expect(derivePresence(null, undefined, NOW)).toEqual(STILL);
+    expect(derivePresence(undefined, undefined, NOW)).toEqual(STILL);
   });
 
-  it('wakes on external change and focuses the changed ticket', () => {
-    const next = withTicketUpdated(base, 'T-0002', '2099-01-01T00:00:00Z');
-    const state = observeChange(STILL, ['T-0002'], next, base, NOW);
-    expect(state.energy).toBeGreaterThan(0.5);
-    expect(isAwake(state)).toBe(true);
-    expect(state.focus).toBe('T-0002');
-    expect(glowFor(state, 'T-0002', NOW)).toBeGreaterThan(0.5);
-    expect(glowFor(state, 'T-0003', NOW)).toBe(0);
+  it('is awake on the marked ticket while the marker is fresh', () => {
+    const p = derivePresence({ ticket: 'T-0142', actor: 'claude', started_at: minutesAgo(4) }, undefined, NOW);
+    expect(p.awake).toBe(true);
+    expect(p.focus).toBe('T-0142');
+    expect(p.elapsedMinutes).toBe(4);
   });
 
-  it('prefers the active ticket as focus when one is set', () => {
-    const next = { ...withTicketUpdated(base, 'T-0003', '2099-01-01T00:00:00Z'), activeTicket: 'T-0002' };
-    const state = observeChange(STILL, ['T-0003'], next, base, NOW);
-    expect(state.focus).toBe('T-0002');
+  it('a marker can be ticketless: awake with no focus', () => {
+    const p = derivePresence({ ticket: null, actor: 'claude', started_at: minutesAgo(1) }, undefined, NOW);
+    expect(p.awake).toBe(true);
+    expect(p.focus).toBeNull();
   });
 
-  it('a new session record wakes presence and names its ticket', () => {
-    const next: Snapshot = {
-      ...base,
-      activeTicket: null,
-      index: {
-        ...base.index,
-        sessions: [
-          ...base.index.sessions,
-          { id: 'S-0099', ticket: 'T-0004', actor: 'claude', started: '', ended: '', commits: [], outcome: 'completed', path: 'x' },
-        ],
-      },
-    };
-    const state = observeChange(STILL, [], next, { ...base, activeTicket: null }, NOW);
-    expect(isAwake(state)).toBe(true);
-    expect(state.focus).toBe('T-0004');
+  it('falls still once the marker outlives the default cap', () => {
+    const fresh = derivePresence(
+      { ticket: 'T-0142', actor: null, started_at: minutesAgo(DEFAULT_PRESENCE_TIMEOUT_MINUTES - 1) },
+      undefined,
+      NOW,
+    );
+    const stale = derivePresence(
+      { ticket: 'T-0142', actor: null, started_at: minutesAgo(DEFAULT_PRESENCE_TIMEOUT_MINUTES + 1) },
+      undefined,
+      NOW,
+    );
+    expect(fresh.awake).toBe(true);
+    expect(stale).toEqual(STILL);
   });
 
-  it('stays still when nothing actually changed', () => {
-    const state = observeChange(STILL, [], base, base, NOW);
-    expect(state).toBe(STILL);
+  it('honours a per-project cap from the manifest', () => {
+    const marker = { ticket: 'T-0142', actor: null, started_at: minutesAgo(180) };
+    expect(derivePresence(marker, 120, NOW)).toEqual(STILL);
+    expect(derivePresence(marker, 480, NOW).awake).toBe(true);
   });
 
-  it('energy accumulates across bursts but never exceeds 1', () => {
-    const next = withTicketUpdated(base, 'T-0002', '2099-01-01T00:00:00Z');
-    let state = observeChange(STILL, ['T-0002'], next, base, NOW);
-    state = observeChange(state, ['T-0001'], next, base, NOW + 1000);
-    state = observeChange(state, ['T-0003'], next, base, NOW + 2000);
-    expect(state.energy).toBe(1);
+  it('treats clock skew from the future as just started', () => {
+    const p = derivePresence({ ticket: 'T-0142', actor: null, started_at: minutesAgo(-2) }, undefined, NOW);
+    expect(p.awake).toBe(true);
+    expect(p.elapsedMinutes).toBe(0);
   });
 
-  it('decays back to stillness and clears focus when the project goes quiet', () => {
-    const next = withTicketUpdated(base, 'T-0002', '2099-01-01T00:00:00Z');
-    let state = observeChange(STILL, ['T-0002'], next, base, NOW);
-    // A minute of silence.
-    for (let i = 0; i < 60; i++) {
-      state = decay(state, 1000, NOW + (i + 1) * 1000);
-    }
-    expect(state.energy).toBe(0);
-    expect(isAwake(state)).toBe(false);
-    expect(state.focus).toBeNull();
-    expect(glowFor(state, 'T-0002', NOW + 61000)).toBe(0);
-  });
-
-  it('glow fades with recency even while energy stays high', () => {
-    const next = withTicketUpdated(base, 'T-0002', '2099-01-01T00:00:00Z');
-    const state = observeChange(STILL, ['T-0002'], next, base, NOW);
-    const early = glowFor(state, 'T-0002', NOW + 1000);
-    const late = glowFor(state, 'T-0002', NOW + 45000);
-    expect(early).toBeGreaterThan(late);
-    expect(late).toBeGreaterThan(0);
+  it('ignores an unreadable marker rather than guessing', () => {
+    const p = derivePresence({ ticket: 'T-0142', actor: null, started_at: 'not a date' }, undefined, NOW);
+    expect(p).toEqual(STILL);
   });
 });

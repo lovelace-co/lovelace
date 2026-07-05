@@ -2379,7 +2379,7 @@ input[type='checkbox'] {
   align-items: center;
 }
 
-.tree-dir-row .tree-dir {
+.tree-dir-row .tree-item {
   flex: 1;
   min-width: 0;
   width: auto;
@@ -3269,7 +3269,6 @@ input[type='checkbox'] {
 .doc-head {
   display: flex;
   align-items: baseline;
-  gap: 14px;
   padding: 2px 0 14px;
 }
 
@@ -3296,10 +3295,6 @@ input[type='checkbox'] {
   outline: 1.5px solid var(--current);
   outline-offset: 0;
   background: var(--raise);
-}
-
-.doc-head .id-chip {
-  padding-right: 18px;
 }
 
 /* No horizontal padding: the fields sit on the same left and right edges as

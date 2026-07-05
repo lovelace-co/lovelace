@@ -138,6 +138,59 @@ describe('host op: create_folder', () => {
   });
 });
 
+describe('host op: delete_document', () => {
+  it('deletes a document file and reindexes', async () => {
+    const root = fixture();
+    await handle({ op: 'create_document', root, dir: '.lovelace/documentation/domain', name: 'pricing' });
+    const res = await handle({
+      op: 'delete_document',
+      root,
+      path: '.lovelace/documentation/domain/pricing.md',
+    });
+    expect(res.deleted).toBe('.lovelace/documentation/domain/pricing.md');
+    expect(existsSync(join(root, '.lovelace/documentation/domain/pricing.md'))).toBe(false);
+    const documents = (res.index as { documents: Array<{ path: string }> }).documents;
+    expect(documents.some((b) => b.path === '.lovelace/documentation/domain/pricing.md')).toBe(false);
+  });
+
+  it('refuses paths outside documentation, traversal and missing files', async () => {
+    const root = fixture();
+    await expect(
+      handle({ op: 'delete_document', root, path: '.lovelace/tickets/T-0002.md' }),
+    ).rejects.toThrow(/only deletes files under the documentation root/);
+    await expect(
+      handle({ op: 'delete_document', root, path: '.lovelace/documentation/../tickets/T-0002.md' }),
+    ).rejects.toThrow(/only deletes files under the documentation root/);
+    await expect(
+      handle({ op: 'delete_document', root, path: '.lovelace/documentation/domain/missing.md' }),
+    ).rejects.toThrow(/does not exist/);
+  });
+});
+
+describe('host op: delete_folder', () => {
+  it('deletes a folder and everything inside it, and reindexes', async () => {
+    const root = fixture();
+    const res = await handle({ op: 'delete_folder', root, path: '.lovelace/documentation/domain' });
+    expect(res.deleted).toBe('.lovelace/documentation/domain');
+    expect(existsSync(join(root, '.lovelace/documentation/domain'))).toBe(false);
+    const documents = (res.index as { documents: Array<{ path: string }> }).documents;
+    expect(documents.some((b) => b.path.startsWith('.lovelace/documentation/domain/'))).toBe(false);
+  });
+
+  it('refuses paths outside documentation, traversal and missing folders', async () => {
+    const root = fixture();
+    await expect(
+      handle({ op: 'delete_folder', root, path: '.lovelace/tickets' }),
+    ).rejects.toThrow(/only deletes folders under the documentation root/);
+    await expect(
+      handle({ op: 'delete_folder', root, path: '.lovelace/documentation/../tickets' }),
+    ).rejects.toThrow(/only deletes folders under the documentation root/);
+    await expect(
+      handle({ op: 'delete_folder', root, path: '.lovelace/documentation/missing' }),
+    ).rejects.toThrow(/does not exist/);
+  });
+});
+
 describe('host op: list_files', () => {
   it('walks the tree when the project is not a git repo, skipping noise and .lovelace', async () => {
     const root = mkdtempSync(join(tmpdir(), 'lovelace-nogit-'));

@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { writeManifest, writeActors, loadProject, MutationError } from '../src/index.js';
+import { clearPresence, loadProject, MutationError, readPresence, writeActors, writeManifest, writePresence } from '../src/index.js';
 import { tempFixture } from './helpers.js';
 
 const cleanups: Array<() => void> = [];
@@ -83,5 +83,49 @@ describe('writeActors', () => {
     const root = fixture();
     // claude is the actor on sessions and comments and an assignee in the demo.
     await expect(writeActors(root, [ada])).rejects.toThrow(/cannot remove actor "claude"/);
+  });
+});
+
+describe('presence timeout in the manifest', () => {
+  it('persists a positive whole number of minutes and clears back to default', async () => {
+    const root = fixture();
+    await writeManifest(root, { presence_timeout_minutes: 480 });
+    expect(loadProject(root).manifest.presence_timeout_minutes).toBe(480);
+    expect(readFileSync(join(root, '.lovelace/manifest.yaml'), 'utf8')).toContain('presence_timeout_minutes: 480');
+
+    await writeManifest(root, { presence_timeout_minutes: null });
+    expect(loadProject(root).manifest.presence_timeout_minutes).toBeUndefined();
+    expect(readFileSync(join(root, '.lovelace/manifest.yaml'), 'utf8')).not.toContain('presence_timeout_minutes');
+  });
+
+  it('refuses zero, negatives and fractions', async () => {
+    const root = fixture();
+    await expect(writeManifest(root, { presence_timeout_minutes: 0 })).rejects.toBeInstanceOf(MutationError);
+    await expect(writeManifest(root, { presence_timeout_minutes: -5 })).rejects.toBeInstanceOf(MutationError);
+    await expect(writeManifest(root, { presence_timeout_minutes: 1.5 })).rejects.toBeInstanceOf(MutationError);
+  });
+});
+
+describe('the live agent marker', () => {
+  it('round-trips through state/presence.json and clears cleanly', () => {
+    const root = fixture();
+    expect(readPresence(root)).toBeNull();
+
+    writePresence(root, { ticket: 'T-0002', actor: 'claude', started_at: '2026-07-05T10:00:00Z' });
+    expect(readPresence(root)).toEqual({ ticket: 'T-0002', actor: 'claude', started_at: '2026-07-05T10:00:00Z' });
+
+    clearPresence(root);
+    expect(readPresence(root)).toBeNull();
+    // Clearing twice is quiet: an ending turn never fails on a missing marker.
+    clearPresence(root);
+    expect(readPresence(root)).toBeNull();
+  });
+
+  it('treats a torn or foreign file as no marker rather than an error', () => {
+    const root = fixture();
+    const { writeFileSync, mkdirSync } = require('node:fs');
+    mkdirSync(join(root, '.lovelace/state'), { recursive: true });
+    writeFileSync(join(root, '.lovelace/state/presence.json'), '{ half a wri');
+    expect(readPresence(root)).toBeNull();
   });
 });

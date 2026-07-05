@@ -160,6 +160,16 @@ export class FakeHost implements HostClient {
     return this.snapshotData;
   }
 
+  async deleteDocument(root: string, path: string): Promise<Snapshot> {
+    this.record('deleteDocument', [root, path]);
+    return this.snapshotData;
+  }
+
+  async deleteFolder(root: string, path: string): Promise<Snapshot> {
+    this.record('deleteFolder', [root, path]);
+    return this.snapshotData;
+  }
+
   async commitsForTicket(_root: string, _id: string): Promise<Array<{ sha: string; subject: string }>> {
     return [{ sha: '4e7aa10', subject: 'feat: forecast endpoint (T-0002)' }];
   }

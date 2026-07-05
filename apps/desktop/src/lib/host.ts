@@ -62,7 +62,10 @@ export interface HostClient {
    */
   writeWorkflow(root: string, edit: WorkflowEdit): Promise<Snapshot>;
   /** Edit the manifest's user-editable fields (the project name). */
-  writeManifest(root: string, changes: { name: string }): Promise<Snapshot>;
+  writeManifest(
+    root: string,
+    changes: { name?: string; presence_timeout_minutes?: number | null },
+  ): Promise<Snapshot>;
   /**
    * Replace the project's actors (validated by core: one human, unique ids,
    * and no removal of an actor still referenced by a ticket, session or comment).
@@ -87,6 +90,10 @@ export interface HostClient {
   createFolder(root: string, dir: string, name: string): Promise<Snapshot>;
   /** Rename a document file (its directory and frontmatter stay put). */
   renameDocument(root: string, path: string, name: string): Promise<Snapshot>;
+  /** Delete a document file under the documentation root. */
+  deleteDocument(root: string, path: string): Promise<Snapshot>;
+  /** Delete a folder under the documentation root, including everything in it. */
+  deleteFolder(root: string, path: string): Promise<Snapshot>;
   commitsForTicket(root: string, id: string): Promise<Array<{ sha: string; subject: string }>>;
   search(root: string, query: string): Promise<SearchHit[]>;
   pickDirectory(): Promise<string | null>;
@@ -204,7 +211,10 @@ export class TauriHost implements HostClient {
     return tauriRequest({ op: 'write_workflow', root, edit }) as Promise<Snapshot>;
   }
 
-  writeManifest(root: string, changes: { name: string }): Promise<Snapshot> {
+  writeManifest(
+    root: string,
+    changes: { name?: string; presence_timeout_minutes?: number | null },
+  ): Promise<Snapshot> {
     return tauriRequest({ op: 'write_manifest', root, changes }) as Promise<Snapshot>;
   }
 
@@ -257,6 +267,14 @@ export class TauriHost implements HostClient {
 
   renameDocument(root: string, path: string, name: string): Promise<Snapshot> {
     return tauriRequest({ op: 'rename_document', root, path, name }) as Promise<Snapshot>;
+  }
+
+  deleteDocument(root: string, path: string): Promise<Snapshot> {
+    return tauriRequest({ op: 'delete_document', root, path }) as Promise<Snapshot>;
+  }
+
+  deleteFolder(root: string, path: string): Promise<Snapshot> {
+    return tauriRequest({ op: 'delete_folder', root, path }) as Promise<Snapshot>;
   }
 
   async commitsForTicket(root: string, id: string): Promise<Array<{ sha: string; subject: string }>> {

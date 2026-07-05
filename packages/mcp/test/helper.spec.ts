@@ -1,6 +1,6 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { execFile } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { tempFixture } from './helpers.js';
@@ -55,6 +55,7 @@ describe('lovelace-agent digest', () => {
   it('includes the active ticket and drains approved agent instructions', async () => {
     const root = fixture();
     mkdirSync(join(root, '.lovelace/state'), { recursive: true });
+    mkdirSync(join(root, '.lovelace/state'), { recursive: true });
     writeFileSync(join(root, '.lovelace/state/active_ticket'), 'T-0002\n');
     writeFileSync(
       join(root, '.lovelace/state/agent_instructions.json'),
@@ -87,6 +88,7 @@ describe('lovelace-agent session-check', () => {
   it('passes when a session record exists for the active ticket', async () => {
     const root = fixture();
     mkdirSync(join(root, '.lovelace/state'), { recursive: true });
+    mkdirSync(join(root, '.lovelace/state'), { recursive: true });
     writeFileSync(join(root, '.lovelace/state/active_ticket'), 'T-0002\n');
     const result = await helper(root, ['session-check']);
     expect(result.code).toBe(0);
@@ -94,6 +96,7 @@ describe('lovelace-agent session-check', () => {
 
   it('blocks when the work is marked complete but the ticket was never moved on', async () => {
     const root = fixture();
+    mkdirSync(join(root, '.lovelace/state'), { recursive: true });
     mkdirSync(join(root, '.lovelace/state'), { recursive: true });
     writeFileSync(join(root, '.lovelace/state/active_ticket'), 'T-0002\n');
     // T-0002 is still In Progress; record completed work without moving it.
@@ -128,5 +131,37 @@ describe('lovelace-agent guard', () => {
       }));
       expect(result.code).toBe(0);
     }
+  });
+});
+
+describe('presence marker commands', () => {
+  it('presence-start writes the live marker with the agent actor and active ticket', async () => {
+    const { root, cleanup } = tempFixture();
+    cleanups.push(cleanup);
+    mkdirSync(join(root, '.lovelace/state'), { recursive: true });
+    writeFileSync(join(root, '.lovelace/state/active_ticket'), 'T-0002\n');
+
+    const started = await helper(root, ['presence-start']);
+    expect(started.code).toBe(0);
+    expect(started.stdout).toBe('');
+
+    const marker = JSON.parse(readFileSync(join(root, '.lovelace/state/presence.json'), 'utf8'));
+    expect(marker.ticket).toBe('T-0002');
+    expect(marker.actor).toBe('claude');
+    expect(typeof marker.started_at).toBe('string');
+  });
+
+  it('presence-clear removes the marker and is quiet when there is none', async () => {
+    const { root, cleanup } = tempFixture();
+    cleanups.push(cleanup);
+    await helper(root, ['presence-start']);
+    expect(existsSync(join(root, '.lovelace/state/presence.json'))).toBe(true);
+
+    const cleared = await helper(root, ['presence-clear']);
+    expect(cleared.code).toBe(0);
+    expect(existsSync(join(root, '.lovelace/state/presence.json'))).toBe(false);
+
+    const again = await helper(root, ['presence-clear']);
+    expect(again.code).toBe(0);
   });
 });

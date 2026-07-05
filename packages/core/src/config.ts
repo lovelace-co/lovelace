@@ -20,6 +20,7 @@ const manifestSchema = z.object({
   project_id: z.string().min(8),
   name: z.string().min(1),
   created: z.string().regex(/^\d{4}-\d{2}-\d{2}/),
+  presence_timeout_minutes: z.number().int().positive().optional(),
   paths: z
     .object({
       tickets: z.string().default('tickets'),

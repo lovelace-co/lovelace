@@ -26,6 +26,7 @@ import {
   ExclamationTriangleIcon,
   FolderPlusIcon,
   DocumentPlusIcon,
+  TrashIcon as HeroTrashIcon,
 } from '@heroicons/react/24/outline';
 
 /* Heroicons (outline) under the app's semantic names. Each wrapper bakes in a
@@ -50,6 +51,9 @@ export const ProblemsIcon = make(ExclamationTriangleIcon, 17);
 /** New folder / new file: the tree's create affordances. */
 export const NewFolderIcon = make(FolderPlusIcon, 15);
 export const NewFileIcon = make(DocumentPlusIcon, 15);
+
+/** Trash: the tree's delete affordance. */
+export const TrashIcon = make(HeroTrashIcon, 15);
 
 /** Board: the columns of work. */
 export const BoardIcon = make(ViewColumnsIcon, 17);

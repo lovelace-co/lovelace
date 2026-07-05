@@ -1,6 +1,6 @@
 # Lovelace Format Specification
 
-Version 2.0.0
+Version 2.1.0
 
 This document specifies the on-disk format of a Lovelace project. It is written so that a developer who has never seen Lovelace can create a valid `.lovelace/` directory by hand using only this document. Files conforming to this specification are the single source of truth for a project; anything derived from them (indexes, boards, digests) can be regenerated at any time.
 
@@ -83,7 +83,7 @@ Document files other than ADRs are identified by their repository-relative path;
 
 ## 4. Spec versioning
 
-This specification is versioned with semver. The current version is `2.0.0`.
+This specification is versioned with semver. The current version is `2.1.0`.
 
 - The manifest declares the spec version the project conforms to.
 - Tooling must read `manifest.yaml` before parsing anything else and must refuse to operate on a major version it does not know, with a clear error naming both versions.
@@ -92,6 +92,7 @@ This specification is versioned with semver. The current version is `2.0.0`.
 
 Changes by version:
 
+- `2.1.0`: adds the optional manifest key `presence_timeout_minutes` (positive integer; tooling defaults to 120) and the machine-local `state/presence.json` live-agent marker (see 13). Projects declaring `2.0.0` remain valid.
 - `2.0.0`: the knowledge tree is `documentation/` (the `paths.documentation` key, default `documentation`), and its files are "documents". It informs rather than enforces: there are no fixed-name, required files. `documentation/index.md` is a scaffolded-at-init convention, the place an agent starts reading, but it is freely renamable, and a directory's `index.md`, when present, is its landing page. Document filenames are unrestricted (any `.md` name, no slug rule; the only guard is no path separators), and nothing under `documentation/` is required; documents that nothing links to surface as orphans in the documentation graph rather than being enforced against. This is a breaking change over the 1.x line, which required fixed-name landing files throughout the knowledge tree: 2.0 tooling refuses a 1.x project.
 - `1.6.0`: generalises the `[[...]]` wiki-link into a scheme namespace: a bare token is an entity id (as before), `file:<repo-relative-path>` references a source file, and `@<actor-id>` mentions a person. Only entity-to-entity links enter the index `links` graph; file and person references are display links, never indexed. Backward compatible: existing `[[id]]` bodies are unaffected.
 - `1.5.0`: adds the optional, machine-local `state/graph-layout.json` holding manual documentation-graph node positions (see 13). Gitignored and never required for correctness; absent positions fall back to the automatic layout.
@@ -108,6 +109,9 @@ spec_version: 1.0.0        # required, semver string
 project_id: 7f3a9c2e       # required, stable opaque string, assigned at init
 name: My Project           # required, display name
 created: 2026-06-10        # required, ISO date
+presence_timeout_minutes: 120  # optional, positive integer; how long a live
+                           # agent marker stays believable without its end
+                           # hook having fired (defaults to 120)
 paths:                     # optional, all default to the values shown
   tickets: tickets
   documentation: documentation
@@ -358,6 +362,7 @@ Gitignored, machine-local, never required for correctness:
 - `state/active_ticket` contains the active ticket ID, one line.
 - `state/counters/<prefix>` contains the last assigned number for that ID prefix.
 - `state/agent_instructions.json` contains automation instructions queued for the next agent session.
+- `state/presence.json` is the live-agent marker: `{ "ticket": "T-0142" | null, "actor": "<id>" | null, "started_at": "<ISO datetime>" }`. The agent integration writes it when a turn begins processing and removes it when the turn or session ends; readers treat a marker older than `presence_timeout_minutes` as gone.
 - `state/graph-layout.json` contains manual node positions for the documentation graph: `{ "version": 1, "nodes": { "<id>": { "x": <number>, "y": <number> } } }`. A node without a saved position falls back to the automatic layout.
 
 Deleting `state/` loses only the active-ticket pointer, any queued automation instructions and the graph arrangement; counters are rebuilt by scanning existing IDs.

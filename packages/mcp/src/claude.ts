@@ -180,6 +180,11 @@ function writeHooks(root: string, options: ClaudeAssetOptions, result: ClaudeAss
   ensure('SessionStart', undefined, `${helper} digest`);
   ensure('Stop', undefined, `${helper} session-check`);
   ensure('PreToolUse', 'Edit|Write', `${helper} guard`);
+  // The live-agent marker: on while a turn is processing, off between turns
+  // and when the session ends for any reason.
+  ensure('UserPromptSubmit', undefined, `${helper} presence-start`);
+  ensure('Stop', undefined, `${helper} presence-clear`);
+  ensure('SessionEnd', undefined, `${helper} presence-clear`);
   settings.hooks = hooks;
   writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`);
   result.written.push('.claude/settings.json');

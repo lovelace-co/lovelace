@@ -130,9 +130,22 @@ export interface TransitionOutcome {
   executed: Array<{ kind: 'run'; command: string; exitCode: number; logTail: string }>;
 }
 
+/** The live agent marker from state/presence.json. */
+export interface AgentPresence {
+  ticket: string | null;
+  actor: string | null;
+  started_at: string;
+}
+
 export interface Snapshot {
   root: string;
-  manifest: { spec_version: string; project_id: string; name: string; created: string };
+  manifest: {
+    spec_version: string;
+    project_id: string;
+    name: string;
+    created: string;
+    presence_timeout_minutes?: number;
+  };
   workflow: Workflow;
   actors: Actor[];
   index: ProjectIndex;
@@ -140,6 +153,8 @@ export interface Snapshot {
   issues: Issue[];
   digest: string;
   activeTicket: string | null;
+  /** The live agent marker, or null when no agent is processing. */
+  agentPresence?: AgentPresence | null;
   /** Manual board ordering per status column; absent columns fall back to index order. */
   boardOrder?: Record<string, string[]>;
   /** Manual graph node positions; nodes absent here fall back to the force layout. */

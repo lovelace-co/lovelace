@@ -1,99 +1,44 @@
-import type { Snapshot } from './types';
+import type { AgentPresence } from './types';
 
 /**
- * The presence engine. Every external change to the project (an agent
- * mutating tickets, writing sessions, editing documents) raises the project's
- * energy; stillness lets it decay back to zero. Nothing here is simulated:
- * presence is derived entirely from real file-watcher events, so the app
- * only ever looks alive when something is actually happening.
+ * Agent presence, read straight from the hooks. The integration writes
+ * state/presence.json when a turn begins processing and removes it when
+ * the turn or session ends, so liveness is a fact on disk, not an
+ * inference: the marker exists and is younger than the stale cap, or the
+ * project is still. The cap guards against sessions that died without
+ * their end hook firing, and is configurable per project for
+ * long-running work.
  */
 
-export interface PresenceState {
-  /** 0 (still) to 1 (fully awake). Drives the atmosphere. */
-  energy: number;
-  /** The ticket the activity centres on, when one can be named. */
+export interface LivePresence {
+  /** An agent is processing right now. */
+  awake: boolean;
+  /** The ticket the work centres on, when the marker names one. */
   focus: string | null;
-  /** Recently changed ticket IDs and when they changed (epoch ms). */
-  recent: Record<string, number>;
+  /** Whole minutes since the current turn began, when awake. */
+  elapsedMinutes: number | null;
 }
 
-export const STILL: PresenceState = { energy: 0, focus: null, recent: {} };
+export const STILL: LivePresence = { awake: false, focus: null, elapsedMinutes: null };
 
-/** Energy half-life while idle, in milliseconds. */
-const HALF_LIFE_MS = 14000;
-/** How long a changed ticket keeps its glow. */
-const GLOW_WINDOW_MS = 60000;
-/** Below this the project is considered still again. */
-const STILL_THRESHOLD = 0.04;
+/** The default stale cap when the manifest does not set one, in minutes. */
+export const DEFAULT_PRESENCE_TIMEOUT_MINUTES = 120;
 
-/** Ticket IDs whose `updated` stamp moved between two snapshots. */
-export function changedTicketIds(prev: Snapshot, next: Snapshot): string[] {
-  const before = new Map(prev.index.tickets.map((t) => [t.id, t.updated]));
-  const out: string[] = [];
-  for (const ticket of next.index.tickets) {
-    const was = before.get(ticket.id);
-    if (was === undefined || was !== ticket.updated) out.push(ticket.id);
-  }
-  return out;
-}
-
-/** Folds one observed external change into the state. */
-export function observeChange(
-  state: PresenceState,
-  changed: string[],
-  next: Snapshot,
-  prev: Snapshot,
+export function derivePresence(
+  marker: AgentPresence | null | undefined,
+  timeoutMinutes: number | undefined,
   now: number,
-): PresenceState {
-  const sessionsGrew = next.index.sessions.length > prev.index.sessions.length;
-  const commentsGrew = next.index.comments.length > prev.index.comments.length;
-  const documentsTouched = next.index.documents.some((b) => {
-    const old = prev.index.documents.find((p) => p.path === b.path);
-    return old === undefined || old.updated !== b.updated;
-  });
-  const anything = changed.length > 0 || sessionsGrew || commentsGrew || documentsTouched;
-  if (!anything) return state;
-
-  const recent = { ...state.recent };
-  for (const id of changed) recent[id] = now;
-  // A session record names its ticket; that is the strongest focus signal.
-  const newestSession = sessionsGrew ? next.index.sessions[next.index.sessions.length - 1] : undefined;
-  const focus =
-    next.activeTicket ??
-    newestSession?.ticket ??
-    changed[changed.length - 1] ??
-    state.focus;
+): LivePresence {
+  if (!marker) return STILL;
+  const started = Date.parse(marker.started_at);
+  if (Number.isNaN(started)) return STILL;
+  const age = now - started;
+  const cap = (timeoutMinutes ?? DEFAULT_PRESENCE_TIMEOUT_MINUTES) * 60_000;
+  if (age > cap) return STILL;
+  // A marker from the future (clock skew) still counts as just started.
   return {
-    energy: Math.min(1, state.energy + 0.55),
-    focus,
-    recent,
+    awake: true,
+    focus: marker.ticket,
+    elapsedMinutes: Math.max(0, Math.floor(age / 60_000)),
   };
-}
-
-/** Advances time: energy decays, old glows fall away. */
-export function decay(state: PresenceState, elapsedMs: number, now: number): PresenceState {
-  if (state.energy === 0 && Object.keys(state.recent).length === 0) return state;
-  const energy = state.energy * Math.pow(0.5, elapsedMs / HALF_LIFE_MS);
-  const still = energy < STILL_THRESHOLD;
-  const recent: Record<string, number> = {};
-  for (const [id, ts] of Object.entries(state.recent)) {
-    if (now - ts < GLOW_WINDOW_MS) recent[id] = ts;
-  }
-  return {
-    energy: still ? 0 : energy,
-    focus: still ? null : state.focus,
-    recent,
-  };
-}
-
-/** Glow strength for one ticket, 0 to 1: recency shaped by overall energy. */
-export function glowFor(state: PresenceState, id: string, now: number): number {
-  const ts = state.recent[id];
-  if (ts === undefined) return 0;
-  const recency = Math.max(0, 1 - (now - ts) / GLOW_WINDOW_MS);
-  return recency * (0.35 + 0.65 * state.energy);
-}
-
-export function isAwake(state: PresenceState): boolean {
-  return state.energy >= STILL_THRESHOLD;
 }

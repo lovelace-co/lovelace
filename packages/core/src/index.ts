@@ -35,6 +35,9 @@ export {
   addComment,
   setActiveTicket,
   getActiveTicket,
+  writePresence,
+  clearPresence,
+  readPresence,
   MutationError,
 } from './mutate.js';
 export type {

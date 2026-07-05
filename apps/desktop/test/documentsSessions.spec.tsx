@@ -34,6 +34,8 @@ describe('Documents view', () => {
     const onCreateDocument = vi.fn().mockResolvedValue(undefined);
     const onCreateFolder = vi.fn().mockResolvedValue(undefined);
     const onRenameDocument = vi.fn().mockResolvedValue(undefined);
+    const onDeleteDocument = vi.fn().mockResolvedValue(undefined);
+    const onDeleteFolder = vi.fn().mockResolvedValue(undefined);
     render(
       <HostProvider host={host}>
         <Documents
@@ -43,10 +45,20 @@ describe('Documents view', () => {
           onCreateDocument={onCreateDocument}
           onCreateFolder={onCreateFolder}
           onRenameDocument={onRenameDocument}
+          onDeleteDocument={onDeleteDocument}
+          onDeleteFolder={onDeleteFolder}
         />
       </HostProvider>,
     );
-    return { onSaveBody, onSaveProperties, onCreateDocument, onCreateFolder, onRenameDocument };
+    return {
+      onSaveBody,
+      onSaveProperties,
+      onCreateDocument,
+      onCreateFolder,
+      onRenameDocument,
+      onDeleteDocument,
+      onDeleteFolder,
+    };
   }
 
   it('shows the tree with stale badges and edits frontmatter through the properties panel only', async () => {
@@ -91,20 +103,11 @@ describe('Documents view', () => {
     expect(onSaveBody).not.toHaveBeenCalled();
   });
 
-  it('shows the root index.md as an editable title with a read-first hint', async () => {
+  it('shows the root index.md as an editable title', async () => {
     renderDocuments();
     const title = screen.getByLabelText('document filename') as HTMLInputElement;
     expect(title.value).toBe('index');
-    // Nothing is locked any more; the root index just carries an informational hint.
     expect(title.disabled).toBe(false);
-    expect(screen.getByText('Agents read this first')).toBeTruthy();
-  });
-
-  it('does not hint on ordinary documents', async () => {
-    renderDocuments(withPricing);
-    fireEvent.click(screen.getByText('pricing'));
-    expect((screen.getByLabelText('document filename') as HTMLInputElement).disabled).toBe(false);
-    expect(screen.queryByText('Agents read this first')).toBeNull();
   });
 
   it('renames a document through its title and follows the new path', async () => {
@@ -180,6 +183,42 @@ describe('Documents view', () => {
     await waitFor(() =>
       expect(onCreateDocument).toHaveBeenCalledWith('.lovelace/documentation/architecture', 'runbooks', 'How we operate.'),
     );
+  });
+
+  it('deletes a document only after the warning modal is confirmed', async () => {
+    const { onDeleteDocument } = renderDocuments(withPricing);
+    fireEvent.click(screen.getByRole('button', { name: 'delete document pricing' }));
+    // The warning modal opens; nothing is deleted yet.
+    expect(screen.getByText('Delete this document?')).toBeTruthy();
+    expect(onDeleteDocument).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Delete document'));
+    await waitFor(() =>
+      expect(onDeleteDocument).toHaveBeenCalledWith('.lovelace/documentation/domain/pricing.md'),
+    );
+    expect(screen.queryByText('Delete this document?')).toBeNull();
+  });
+
+  it('cancels a document delete without deleting', () => {
+    const { onDeleteDocument } = renderDocuments(withPricing);
+    fireEvent.click(screen.getByRole('button', { name: 'delete document pricing' }));
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(onDeleteDocument).not.toHaveBeenCalled();
+    expect(screen.queryByText('Delete this document?')).toBeNull();
+  });
+
+  it('deletes a folder after a warning that counts the documents inside it', async () => {
+    const { onDeleteFolder } = renderDocuments(withPricing);
+    fireEvent.click(screen.getByRole('button', { name: 'delete folder domain' }));
+    expect(screen.getByText('Delete this folder?')).toBeTruthy();
+    expect(screen.getByText(/permanently deletes the folder and the 2 documents inside it/)).toBeTruthy();
+    expect(onDeleteFolder).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Delete folder'));
+    await waitFor(() => expect(onDeleteFolder).toHaveBeenCalledWith('.lovelace/documentation/domain'));
+  });
+
+  it('does not offer a delete on the documentation root', () => {
+    renderDocuments();
+    expect(screen.queryByRole('button', { name: 'delete folder /' })).toBeNull();
   });
 });
 

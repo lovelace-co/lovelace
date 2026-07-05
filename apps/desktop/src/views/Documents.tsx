@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DatePicker } from '../components/DatePicker';
 import { Toast } from '../components/Toast';
-import { CaretIcon, EditIcon, FileIcon, FolderIcon, NewFileIcon, NewFolderIcon } from '../components/icons';
+import {
+  CaretIcon,
+  EditIcon,
+  FileIcon,
+  FolderIcon,
+  NewFileIcon,
+  NewFolderIcon,
+  TrashIcon,
+} from '../components/icons';
 import { BlockEditor } from '../editor/BlockEditor';
 import type { LinkResolver, OpenLink, ReferenceCandidate } from '../lib/links';
 import { Markdown } from '../lib/markdown';
@@ -15,6 +23,8 @@ interface DocumentsProps {
   onCreateDocument: (dir: string, name: string, summary: string) => Promise<void>;
   onCreateFolder: (dir: string, name: string) => Promise<void>;
   onRenameDocument: (path: string, name: string) => Promise<void>;
+  onDeleteDocument: (path: string) => Promise<void>;
+  onDeleteFolder: (path: string) => Promise<void>;
   /** A path to open on entry (e.g. when arriving from search). */
   focusPath?: string | null;
   /** Wiki-link plumbing for the editor. */
@@ -84,6 +94,8 @@ export function Documents({
   onCreateDocument,
   onCreateFolder,
   onRenameDocument,
+  onDeleteDocument,
+  onDeleteFolder,
   focusPath,
   candidates,
   resolveLink,
@@ -101,6 +113,8 @@ export function Documents({
   // an inline new-folder input is open under.
   const [newFileFor, setNewFileFor] = useState<string | null>(null);
   const [newFolderFor, setNewFolderFor] = useState<string | null>(null);
+  // The file or folder a delete has been requested for (opens the warning modal).
+  const [deleteTarget, setDeleteTarget] = useState<{ kind: 'file' | 'folder'; path: string } | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [newName, setNewName] = useState('');
   const [newSummary, setNewSummary] = useState('');
@@ -209,6 +223,19 @@ export function Documents({
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   };
 
+  const confirmDelete = () => {
+    const target = deleteTarget;
+    if (!target) return;
+    setDeleteTarget(null);
+    const gone = target.kind === 'folder' ? selected.startsWith(`${target.path}/`) : selected === target.path;
+    void (target.kind === 'folder' ? onDeleteFolder(target.path) : onDeleteDocument(target.path))
+      .then(() => {
+        setError(null);
+        if (gone) setSelected(INDEX_PATH);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  };
+
   // The body is view-only until Edit is pressed; editing works on a local
   // draft, and Save writes once and returns to the rendered view. This mirrors
   // the ticket body, so a save never re-syncs the editor or moves the cursor.
@@ -233,19 +260,29 @@ export function Documents({
 
   const renderNode = (node: TreeNode, depth: number) => {
     if (node.documentPath) {
+      const title = node.name.replace(/\.md$/, '');
       return (
-        <button
-          key={node.path}
-          className={`tree-item${selected === node.documentPath ? ' active' : ''}`}
-          style={{ paddingLeft: `${14 + depth * 16}px` }}
-          onClick={() => setSelected(node.documentPath!)}
-        >
-          <FileIcon style={{ color: 'var(--mist)', flexShrink: 0 }} />
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {node.name.replace(/\.md$/, '')}
+        <div key={node.path} className="tree-dir-row">
+          <button
+            className={`tree-item${selected === node.documentPath ? ' active' : ''}`}
+            style={{ paddingLeft: `${14 + depth * 16}px` }}
+            onClick={() => setSelected(node.documentPath!)}
+          >
+            <FileIcon style={{ color: 'var(--mist)', flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+            {stale(node.documentPath) && <span className="badge-stale">stale</span>}
+          </button>
+          <span className="tree-actions">
+            <button
+              className="tree-action"
+              aria-label={`delete document ${title}`}
+              title="Delete document"
+              onClick={() => setDeleteTarget({ kind: 'file', path: node.documentPath! })}
+            >
+              <TrashIcon />
+            </button>
           </span>
-          {stale(node.documentPath) && <span className="badge-stale">stale</span>}
-        </button>
+        </div>
       );
     }
     const isOpen = !collapsed.has(node.path);
@@ -280,6 +317,16 @@ export function Documents({
             >
               <NewFileIcon />
             </button>
+            {node.path !== DOCS_ROOT && (
+              <button
+                className="tree-action"
+                aria-label={`delete folder ${label}`}
+                title="Delete folder"
+                onClick={() => setDeleteTarget({ kind: 'folder', path: node.path })}
+              >
+                <TrashIcon />
+              </button>
+            )}
           </span>
         </div>
         {newFolderFor === node.path && (
@@ -311,7 +358,6 @@ export function Documents({
     <>
       <header className="view-header">
         <h1 className="view-title">Documentation</h1>
-        <span className="subtle">The project's knowledge tree; hover a folder to add to it.</span>
       </header>
       {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
       <div className="detail-grid" style={{ gridTemplateColumns: '15rem minmax(0, 1fr)' }}>
@@ -352,16 +398,6 @@ export function Documents({
                   });
               }}
             />
-            {selected === INDEX_PATH && (
-              <span
-                className="subtle"
-                style={{ whiteSpace: 'nowrap' }}
-                title="Agents start reading here. You can rename it, but the convention is to keep an index.md at the root."
-              >
-                Agents read this first
-              </span>
-            )}
-            {selectedDocument && <span className="id-chip">{selectedDocument.id}</span>}
           </div>
           <div className="panel" style={{ padding: '16px 18px 18px' }}>
             {content === null ? (
@@ -496,6 +532,39 @@ export function Documents({
               </button>
               <button className="btn btn-primary" disabled={!newName.trim()} onClick={submitNewFile}>
                 Create document
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteTarget !== null && (
+        <div className="modal-backdrop" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>{deleteTarget.kind === 'folder' ? 'Delete this folder?' : 'Delete this document?'}</h2>
+            <p style={{ color: 'var(--slate)', fontSize: '0.8125rem' }}>
+              <span className="mono">{deleteTarget.path.replace('.lovelace/', '')}</span>
+            </p>
+            {(() => {
+              const inside =
+                deleteTarget.kind === 'folder'
+                  ? documents.filter((b) => b.path.startsWith(`${deleteTarget.path}/`)).length
+                  : 0;
+              return (
+                <p style={{ color: 'var(--bad-fg)', fontSize: '0.8125rem' }}>
+                  {deleteTarget.kind === 'folder'
+                    ? `This permanently deletes the folder${
+                        inside > 0 ? ` and the ${inside === 1 ? 'document' : `${inside} documents`} inside it` : ''
+                      }. It cannot be undone.`
+                    : 'This permanently deletes the document. It cannot be undone.'}
+                </p>
+              );
+            })()}
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </button>
+              <button className="btn btn-danger" onClick={confirmDelete}>
+                {deleteTarget.kind === 'folder' ? 'Delete folder' : 'Delete document'}
               </button>
             </div>
           </div>

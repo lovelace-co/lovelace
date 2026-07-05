@@ -12,11 +12,14 @@
  *   lovelace-agent guard           PreToolUse: read the tool call JSON from
  *                                  stdin; exit 2 when it edits files under
  *                                  .lovelace/tickets/.
+ *   lovelace-agent presence-start  UserPromptSubmit: mark the agent as
+ *                                  processing (state/presence.json).
+ *   lovelace-agent presence-clear  Stop and SessionEnd: remove the marker.
  *
  * Errors to stderr, data to stdout. The repo root comes from LOVELACE_ROOT
  * or the working directory.
  */
-import { buildDigest, getActiveTicket, loadProject } from '@lovelace/core';
+import { buildDigest, clearPresence, getActiveTicket, loadProject, writePresence } from '@lovelace/core';
 import { drainAgentInstructions } from './actions.js';
 
 function root(): string {
@@ -101,6 +104,36 @@ async function guard(): Promise<number> {
   return 0;
 }
 
+/**
+ * The turn has begun processing: write the live marker. Quiet on every
+ * failure path; presence is a display signal, never worth blocking a turn.
+ */
+function presenceStart(): number {
+  try {
+    const r = root();
+    const project = loadProject(r);
+    const actor = project.actors.find((a) => a.kind === 'agent')?.id ?? null;
+    writePresence(r, {
+      ticket: getActiveTicket(r),
+      actor,
+      started_at: `${new Date().toISOString().slice(0, 19)}Z`,
+    });
+  } catch {
+    // Not a Lovelace project, or unreadable: nothing to mark.
+  }
+  return 0;
+}
+
+/** The turn or session has ended: remove the live marker. */
+function presenceClear(): number {
+  try {
+    clearPresence(root());
+  } catch {
+    // Same stance as presence-start: never block an ending turn.
+  }
+  return 0;
+}
+
 const command = process.argv[2];
 (async () => {
   switch (command) {
@@ -113,8 +146,14 @@ const command = process.argv[2];
     case 'guard':
       process.exitCode = await guard();
       break;
+    case 'presence-start':
+      process.exitCode = presenceStart();
+      break;
+    case 'presence-clear':
+      process.exitCode = presenceClear();
+      break;
     default:
-      process.stderr.write('usage: lovelace-agent <digest|session-check|guard>\n');
+      process.stderr.write('usage: lovelace-agent <digest|session-check|guard|presence-start|presence-clear>\n');
       process.exitCode = 64;
   }
 })();

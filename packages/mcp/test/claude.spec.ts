@@ -43,6 +43,11 @@ describe('installClaudeAssets', () => {
     expect(flat).toContain('digest');
     expect(flat).toContain('session-check');
     expect(flat).toContain('guard');
+    expect(flat).toContain('presence-start');
+    expect(flat).toContain('presence-clear');
+    expect(settings.hooks.UserPromptSubmit).toBeDefined();
+    expect(settings.hooks.SessionEnd).toBeDefined();
+    expect(JSON.stringify(settings.hooks.Stop)).toContain('presence-clear');
     expect(settings.hooks.PreToolUse[0].matcher).toBe('Edit|Write');
 
     expect(readFileSync(join(root, '.claude/commands/ticket.md'), 'utf8')).toContain('active_ticket');

@@ -392,6 +392,12 @@ export function ProjectView({ root }: ProjectViewProps) {
             onRenameDocument={async (path, name) => {
               await apply((h) => h.renameDocument(root, path, name));
             }}
+            onDeleteDocument={async (path) => {
+              await apply((h) => h.deleteDocument(root, path));
+            }}
+            onDeleteFolder={async (path) => {
+              await apply((h) => h.deleteFolder(root, path));
+            }}
           />
         ) : nav === 'graph' ? (
           <Graph
@@ -425,6 +431,9 @@ export function ProjectView({ root }: ProjectViewProps) {
             }}
             onRenameProject={async (name) => {
               await apply((h) => h.writeManifest(root, { name }));
+            }}
+            onSavePresenceTimeout={async (minutes) => {
+              await apply((h) => h.writeManifest(root, { presence_timeout_minutes: minutes }));
             }}
             onSaveActors={async (actors) => {
               await apply((h) => h.writeActors(root, actors));

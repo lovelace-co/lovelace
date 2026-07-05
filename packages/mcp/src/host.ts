@@ -20,6 +20,7 @@ import {
   logSession,
   readBoardOrder,
   readGraphLayout,
+  readPresence,
   search,
   setActiveTicket,
   setColumnOrder,
@@ -36,7 +37,16 @@ import {
   ProjectError,
 } from '@lovelace/core';
 import type { Workflow, WorkflowEdit } from '@lovelace/core';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, statSync, readdirSync } from 'node:fs';
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  readdirSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { parseDocument } from 'yaml';
 import {
@@ -85,6 +95,7 @@ function snapshot(root: string): Json {
     issues,
     digest: buildDigest(project),
     activeTicket: getActiveTicket(root),
+    agentPresence: readPresence(root),
     boardOrder: readBoardOrder(project.dir),
     graphLayout: readGraphLayout(project.dir, project.manifest.paths.state),
   };
@@ -438,6 +449,34 @@ export async function handle(request: HostRequest): Promise<Json> {
       if (existsSync(join(root, next))) throw new Error(`${next} already exists`);
       renameSync(join(root, rel), join(root, next));
       return { renamed: next, ...snapshot(root) };
+    }
+    case 'delete_document': {
+      const rel = String(request.path);
+      const project = loadProject(root);
+      const documentsPrefix = `.lovelace/${project.manifest.paths.documentation}/`;
+      if (!rel.startsWith(documentsPrefix) || rel.includes('..') || !rel.endsWith('.md')) {
+        throw new Error('delete_document only deletes files under the documentation root');
+      }
+      const abs = join(root, rel);
+      if (!existsSync(abs) || !statSync(abs).isFile()) {
+        throw new Error(`${rel} does not exist`);
+      }
+      rmSync(abs);
+      return { deleted: rel, ...snapshot(root) };
+    }
+    case 'delete_folder': {
+      const rel = String(request.path);
+      const project = loadProject(root);
+      const documentsPrefix = `.lovelace/${project.manifest.paths.documentation}/`;
+      if (!rel.startsWith(documentsPrefix) || rel.includes('..') || rel.endsWith('/')) {
+        throw new Error('delete_folder only deletes folders under the documentation root');
+      }
+      const abs = join(root, rel);
+      if (!existsSync(abs) || !statSync(abs).isDirectory()) {
+        throw new Error(`${rel} does not exist`);
+      }
+      rmSync(abs, { recursive: true });
+      return { deleted: rel, ...snapshot(root) };
     }
     case 'commits_for_ticket': {
       const id = String(request.id);

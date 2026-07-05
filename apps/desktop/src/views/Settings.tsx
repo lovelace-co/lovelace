@@ -16,6 +16,8 @@ interface SettingsProps {
   onSaveWorkflow: (edit: WorkflowEdit) => Promise<void>;
   onSaveAutomations: (rules: AutomationRule[]) => Promise<void>;
   onRenameProject: (name: string) => Promise<void>;
+  /** Persist the presence stale cap in minutes; null returns to the default. */
+  onSavePresenceTimeout: (minutes: number | null) => Promise<void>;
   onSaveActors: (actors: Actor[]) => Promise<void>;
   onInstallClaude: (gitHook: boolean) => Promise<InstallClaudeResult>;
   /** Reports whether any section has unsaved edits, so leaving Settings can prompt. */
@@ -53,6 +55,7 @@ export function Settings({
   onSaveWorkflow,
   onSaveAutomations,
   onRenameProject,
+  onSavePresenceTimeout,
   onSaveActors,
   onInstallClaude,
   onDirtyChange,
@@ -100,7 +103,7 @@ export function Settings({
           {hint}
         </p>
 
-        {tab === 'general' && <GeneralSettings snapshot={snapshot} onRename={onRenameProject} />}
+        {tab === 'general' && <GeneralSettings snapshot={snapshot} onRename={onRenameProject} onSavePresenceTimeout={onSavePresenceTimeout} />}
         {tab === 'statuses' && <StatusesSection draft={wf} />}
         {tab === 'fields' && <TypesFieldsSection draft={wf} />}
         {tab === 'automations' && (

@@ -10,9 +10,11 @@ _Empty._
 
 _Empty._
 
-## in_progress (0)
+## in_progress (1)
 
-_Empty._
+| ID | Title | Type | Assignee |
+| --- | --- | --- | --- |
+| T-0069 | Hook-driven agent presence: turn boundaries replace the decay engine | task | claude |
 
 ## in_review (0)
 

@@ -9,15 +9,7 @@ import {
 } from 'react';
 import type { HostClient } from '../lib/host';
 import type { Snapshot } from '../lib/types';
-import {
-  STILL,
-  changedTicketIds,
-  decay,
-  glowFor,
-  isAwake,
-  observeChange,
-  type PresenceState,
-} from '../lib/presence';
+import { STILL, derivePresence, type LivePresence } from '../lib/presence';
 
 const HostContext = createContext<HostClient | null>(null);
 
@@ -48,22 +40,11 @@ export interface ProjectState {
     optimistic?: (current: Snapshot) => Snapshot,
   ) => Promise<Snapshot>;
   dismissExternalChange: () => void;
-  /** The living presence: derived from real external file activity. */
+  /** The live agent presence, read from the hooks' marker file. */
   presence: ProjectPresence;
 }
 
-export interface ProjectPresence {
-  /** 0 still, 1 fully awake. */
-  energy: number;
-  /** True while external activity is recent. */
-  awake: boolean;
-  /** The ticket the activity centres on, when known. */
-  focus: string | null;
-  /** Glow strength for one ticket right now, 0 to 1. */
-  glow: (id: string) => number;
-  /** Whole minutes since the current activity began; null when still. */
-  elapsedMinutes: number | null;
-}
+export type ProjectPresence = LivePresence;
 
 /**
  * Loads a project snapshot, keeps it fresh through the watcher, and routes
@@ -75,21 +56,14 @@ export function useProject(root: string): ProjectState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [externalChange, setExternalChange] = useState(false);
-  const [presenceState, setPresenceState] = useState<PresenceState>(STILL);
   const mutating = useRef(false);
+  /** The optimistic baseline: the last snapshot known to match the files. */
   const previous = useRef<Snapshot | null>(null);
 
   const reload = useCallback(
-    async (external = false) => {
+    async (_external = false) => {
       try {
         const fresh = await host.snapshot(root);
-        const prev = previous.current;
-        if (external && prev) {
-          // Presence is fed only by external activity: agents and hand edits,
-          // never the app's own mutations.
-          const changed = changedTicketIds(prev, fresh);
-          setPresenceState((s) => observeChange(s, changed, fresh, prev, Date.now()));
-        }
         previous.current = fresh;
         setSnapshot(fresh);
         setError(null);
@@ -124,15 +98,18 @@ export function useProject(root: string): ProjectState {
     };
   }, [host, root, reload]);
 
-  // The heartbeat: while anything is awake or glowing, decay once a second.
+  // Presence is a marker file plus a clock: re-read the clock every 15
+  // seconds while a marker exists, so elapsed minutes tick over and a
+  // stale marker eventually falls out, and reset it whenever a new turn
+  // begins. No marker, no timer.
+  const [presenceNow, setPresenceNow] = useState(() => Date.now());
+  const markerStartedAt = snapshot?.agentPresence?.started_at;
   useEffect(() => {
-    const timer = setInterval(() => {
-      setPresenceState((s) =>
-        s.energy === 0 && Object.keys(s.recent).length === 0 ? s : decay(s, 1000, Date.now()),
-      );
-    }, 1000);
+    if (markerStartedAt === undefined) return;
+    setPresenceNow(Date.now());
+    const timer = setInterval(() => setPresenceNow(Date.now()), 15000);
     return () => clearInterval(timer);
-  }, []);
+  }, [markerStartedAt]);
 
   const apply = useCallback(
     async (
@@ -167,24 +144,9 @@ export function useProject(root: string): ProjectState {
     [host],
   );
 
-  const awake = isAwake(presenceState);
-  const awakeSince = useRef<number | null>(null);
-  if (awake && awakeSince.current === null) {
-    awakeSince.current = Date.now();
-  } else if (!awake) {
-    awakeSince.current = null;
-  }
-
-  const presence: ProjectPresence = {
-    energy: presenceState.energy,
-    awake,
-    focus: presenceState.focus,
-    glow: (id: string) => glowFor(presenceState, id, Date.now()),
-    elapsedMinutes:
-      awake && awakeSince.current !== null
-        ? Math.floor((Date.now() - awakeSince.current) / 60000)
-        : null,
-  };
+  const presence: ProjectPresence = snapshot
+    ? derivePresence(snapshot.agentPresence, snapshot.manifest.presence_timeout_minutes, presenceNow)
+    : STILL;
 
   return {
     snapshot,

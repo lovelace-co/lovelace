@@ -17,6 +17,7 @@ import { matchRules } from './automation.js';
 import { loadProject } from './project.js';
 import { writeIndex } from './index-gen.js';
 import type {
+  AgentPresence,
   Actor,
   AutomationRule,
   FieldDef,
@@ -506,7 +507,7 @@ export async function writeWorkflow(
  */
 export async function writeManifest(
   root: string,
-  changes: { name?: string },
+  changes: { name?: string; presence_timeout_minutes?: number | null },
   ctx: MutationContext = {},
 ): Promise<void> {
   const project = loadProject(root);
@@ -516,6 +517,18 @@ export async function writeManifest(
     const name = String(changes.name).trim();
     if (name === '') throw new MutationError('project name cannot be empty');
     doc.set('name', name);
+  }
+  if (changes.presence_timeout_minutes !== undefined) {
+    // null clears the key back to the tooling default, keeping files clean.
+    if (changes.presence_timeout_minutes === null) {
+      doc.delete('presence_timeout_minutes');
+    } else {
+      const minutes = Number(changes.presence_timeout_minutes);
+      if (!Number.isInteger(minutes) || minutes <= 0) {
+        throw new MutationError('presence timeout must be a positive whole number of minutes');
+      }
+      doc.set('presence_timeout_minutes', minutes);
+    }
   }
   writeFileSync(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
   if (!ctx.skipReindex) reindex(root, ctx);
@@ -703,6 +716,40 @@ export function setActiveTicket(root: string, id: string | null): void {
     throw new MutationError(`ticket "${id}" does not exist`);
   }
   writeFileSync(file, `${id}\n`);
+}
+
+/** Writes the live agent marker; the hooks call this at turn start. */
+export function writePresence(root: string, presence: AgentPresence): void {
+  const project = loadProject(root);
+  const stateDir = join(project.dir, project.manifest.paths.state);
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(join(stateDir, 'presence.json'), `${JSON.stringify(presence, null, 2)}\n`);
+}
+
+/** Removes the live agent marker; the hooks call this when a turn or session ends. */
+export function clearPresence(root: string): void {
+  const project = loadProject(root);
+  const file = join(project.dir, project.manifest.paths.state, 'presence.json');
+  if (existsSync(file)) rmSync(file);
+}
+
+/** The live agent marker, or null when no agent is processing. */
+export function readPresence(root: string): AgentPresence | null {
+  const project = loadProject(root);
+  const file = join(project.dir, project.manifest.paths.state, 'presence.json');
+  if (!existsSync(file)) return null;
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8')) as Partial<AgentPresence>;
+    if (typeof raw.started_at !== 'string') return null;
+    return {
+      ticket: typeof raw.ticket === 'string' ? raw.ticket : null,
+      actor: typeof raw.actor === 'string' ? raw.actor : null,
+      started_at: raw.started_at,
+    };
+  } catch {
+    // A torn write is not an error state; the marker simply is not live.
+    return null;
+  }
 }
 
 export function getActiveTicket(root: string): string | null {

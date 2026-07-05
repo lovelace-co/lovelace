@@ -25,6 +25,23 @@ export interface Manifest {
   name: string;
   created: string;
   paths: ProjectPaths;
+  /**
+   * How long a live agent presence stays believable without its Stop hook
+   * having fired, in minutes. Guards against sessions that die without
+   * cleaning up. Optional; tooling defaults to 120.
+   */
+  presence_timeout_minutes?: number;
+}
+
+/**
+ * The live agent marker in state/presence.json: written when an agent
+ * begins processing a turn, removed when the turn or session ends.
+ * Machine-local and gitignored, like the active ticket pointer.
+ */
+export interface AgentPresence {
+  ticket: string | null;
+  actor: string | null;
+  started_at: string;
 }
 
 export interface TypeDef {
@@ -159,5 +176,5 @@ export interface Project {
 
 export const SESSION_OUTCOMES = ['completed', 'partial', 'abandoned'] as const;
 
-export const SPEC_VERSION = '2.0.0';
+export const SPEC_VERSION = '2.1.0';
 export const SUPPORTED_SPEC_MAJOR = 2;
