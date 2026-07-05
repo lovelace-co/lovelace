@@ -7,6 +7,7 @@ import { formatDateShort } from '../lib/datetime';
 import { statusLabel, titleCase, typeLabel } from '../lib/format';
 import { STATUS_HUE_CSS, priorityFamily, statusHue } from '../lib/loom';
 import { punch, release } from '../lib/punch';
+import { formatElapsed } from '../lib/presence';
 import type { ProjectPresence } from '../state/store';
 import type { IndexTicket, Snapshot } from '../lib/types';
 
@@ -118,7 +119,7 @@ export function List({
           <span className="list-updated num">{formatDateShort(ticket.updated)}</span>
           <span className={`id${live ? ' live' : ''}`}>
             {ticket.id}
-            {live && presence?.elapsedMinutes !== null ? ` · ${presence.elapsedMinutes}m` : ''}
+            {live && presence?.elapsedSeconds !== null ? ` · ${formatElapsed(presence.elapsedSeconds)}` : ''}
           </span>
         </span>
       </div>

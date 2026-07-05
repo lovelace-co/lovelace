@@ -98,16 +98,16 @@ export function useProject(root: string): ProjectState {
     };
   }, [host, root, reload]);
 
-  // Presence is a marker file plus a clock: re-read the clock every 15
-  // seconds while a marker exists, so elapsed minutes tick over and a
-  // stale marker eventually falls out, and reset it whenever a new turn
-  // begins. No marker, no timer.
+  // Presence is a marker file plus a clock: tick once a second while a
+  // marker exists, so the elapsed readout counts and a stale marker
+  // eventually falls out, and reset whenever a new turn begins. No
+  // marker, no timer.
   const [presenceNow, setPresenceNow] = useState(() => Date.now());
   const markerStartedAt = snapshot?.agentPresence?.started_at;
   useEffect(() => {
     if (markerStartedAt === undefined) return;
     setPresenceNow(Date.now());
-    const timer = setInterval(() => setPresenceNow(Date.now()), 15000);
+    const timer = setInterval(() => setPresenceNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [markerStartedAt]);
 

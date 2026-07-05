@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PRESENCE_TIMEOUT_MINUTES, STILL, derivePresence } from '../src/lib/presence';
+import { DEFAULT_PRESENCE_TIMEOUT_MINUTES, STILL, derivePresence, formatElapsed } from '../src/lib/presence';
 
 const NOW = Date.parse('2026-07-05T10:00:00Z');
 const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString();
@@ -14,7 +14,7 @@ describe('presence from the hooks marker', () => {
     const p = derivePresence({ ticket: 'T-0142', actor: 'claude', started_at: minutesAgo(4) }, undefined, NOW);
     expect(p.awake).toBe(true);
     expect(p.focus).toBe('T-0142');
-    expect(p.elapsedMinutes).toBe(4);
+    expect(p.elapsedSeconds).toBe(240);
   });
 
   it('a marker can be ticketless: awake with no focus', () => {
@@ -47,11 +47,21 @@ describe('presence from the hooks marker', () => {
   it('treats clock skew from the future as just started', () => {
     const p = derivePresence({ ticket: 'T-0142', actor: null, started_at: minutesAgo(-2) }, undefined, NOW);
     expect(p.awake).toBe(true);
-    expect(p.elapsedMinutes).toBe(0);
+    expect(p.elapsedSeconds).toBe(0);
   });
 
   it('ignores an unreadable marker rather than guessing', () => {
     const p = derivePresence({ ticket: 'T-0142', actor: null, started_at: 'not a date' }, undefined, NOW);
     expect(p).toEqual(STILL);
+  });
+});
+
+describe('formatElapsed', () => {
+  it('shows plain seconds under a minute, then minutes and seconds', () => {
+    expect(formatElapsed(0)).toBe('0s');
+    expect(formatElapsed(42)).toBe('42s');
+    expect(formatElapsed(60)).toBe('1m 0s');
+    expect(formatElapsed(83)).toBe('1m 23s');
+    expect(formatElapsed(3700)).toBe('61m 40s');
   });
 });

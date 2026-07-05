@@ -15,11 +15,17 @@ export interface LivePresence {
   awake: boolean;
   /** The ticket the work centres on, when the marker names one. */
   focus: string | null;
-  /** Whole minutes since the current turn began, when awake. */
-  elapsedMinutes: number | null;
+  /** Whole seconds since the current turn began, when awake. */
+  elapsedSeconds: number | null;
 }
 
-export const STILL: LivePresence = { awake: false, focus: null, elapsedMinutes: null };
+export const STILL: LivePresence = { awake: false, focus: null, elapsedSeconds: null };
+
+/** Elapsed working time the way agents show it: 42s, then 1m 23s. */
+export function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
 
 /** The default stale cap when the manifest does not set one, in minutes. */
 export const DEFAULT_PRESENCE_TIMEOUT_MINUTES = 120;
@@ -39,6 +45,6 @@ export function derivePresence(
   return {
     awake: true,
     focus: marker.ticket,
-    elapsedMinutes: Math.max(0, Math.floor(age / 60_000)),
+    elapsedSeconds: Math.max(0, Math.floor(age / 1000)),
   };
 }

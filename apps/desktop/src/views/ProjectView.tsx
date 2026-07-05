@@ -19,6 +19,7 @@ import { FilePreviewModal } from '../components/FilePreviewModal';
 import { Toast } from '../components/Toast';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { rememberRecent, useHost, useProject } from '../state/store';
+import { formatElapsed } from '../lib/presence';
 import { buildLinkResolver, referenceCandidates, type LinkResolver, type OpenLink } from '../lib/links';
 import type { IndexTicket, SearchHit, Snapshot } from '../lib/types';
 import { Actions } from './Actions';
@@ -283,7 +284,7 @@ export function ProjectView({ root }: ProjectViewProps) {
               <span className="seat-name">{agentActor}</span>
               <span className={`seat-state${presence.awake ? ' live' : ''}`}>
                 {presence.awake
-                  ? `weaving${presence.elapsedMinutes !== null ? ` · ${presence.elapsedMinutes}m` : ''}`
+                  ? `weaving${presence.elapsedSeconds !== null ? ` · ${formatElapsed(presence.elapsedSeconds)}` : ''}`
                   : 'idle'}
               </span>
             </div>
