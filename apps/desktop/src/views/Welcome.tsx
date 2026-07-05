@@ -2,6 +2,7 @@ import { useState } from 'react';
 import logo from '../assets/logo.svg';
 import logoWhite from '../assets/logo-white.svg';
 import { InitWizard } from '../components/InitWizard';
+import { Toast } from '../components/Toast';
 import { useTheme } from '../state/theme';
 import { forgetRecent, loadRecents, useHost } from '../state/store';
 import type { Workflow } from '../lib/types';
@@ -49,7 +50,7 @@ export function Welcome({ onOpenProject, onInitialised }: WelcomeProps) {
           Open a project
         </button>
       </div>
-      {error && <div className="banner">{error}</div>}
+      {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
       {recents.length > 0 && (
         <div className="recents">
           <p className="label" style={{ margin: '0.2rem 0 0.3rem', padding: '0 0.7rem' }}>

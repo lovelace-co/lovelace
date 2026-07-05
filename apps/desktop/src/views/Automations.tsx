@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AutomationModal } from '../components/AutomationModal';
 import { EmptyState } from '../components/EmptyState';
 import { AddIcon, AgentIcon, CommandIcon } from '../components/icons';
+import { Toast } from '../components/Toast';
 import { statusLabel, titleCase, typeLabel } from '../lib/format';
 import { STATUS_HUE_CSS, statusHue, type StatusHue } from '../lib/loom';
 import type { AutomationRule, Snapshot } from '../lib/types';
@@ -234,7 +235,7 @@ export function Automations({ snapshot, onSaveAutomations }: AutomationsProps) {
         <div className="modal-backdrop">
           <div className="modal">
             <h2>Delete this automation?</h2>
-            {deleteError && <div className="banner">{deleteError}</div>}
+            {deleteError && <Toast onDismiss={() => setDeleteError(null)}>{deleteError}</Toast>}
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
               The rule on <span className="id-chip">{summarise(snapshot, rules[deleting])}</span> will be
               removed. It cannot be undone.

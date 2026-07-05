@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Dropdown } from './Dropdown';
+import { Toast } from './Toast';
 import { AgentIcon, CommandIcon } from './icons';
 import { statusLabel, titleCase, typeLabel } from '../lib/format';
 import { STATUS_HUE_CSS, statusHue } from '../lib/loom';
@@ -104,7 +105,7 @@ export function AutomationModal({ snapshot, rule, onSave, onClose }: AutomationM
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal automation-modal" role="dialog" aria-label="automation" onClick={(e) => e.stopPropagation()}>
         <h2>{rule ? 'Edit automation' : 'New automation'}</h2>
-        {error && <div className="banner">{error}</div>}
+        {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
 
         {/* The live rail: the automation as the workflow edge it fires on. */}
         <div className={`flow-preview ${isAgent ? 'is-agent' : 'is-run'}`} aria-hidden>

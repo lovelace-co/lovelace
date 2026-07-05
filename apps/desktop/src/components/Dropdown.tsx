@@ -147,7 +147,6 @@ export function Dropdown({
                   }
                 }}
               >
-                {option.value === value && <span className="dropdown-punch" aria-hidden />}
                 {option.label}
               </button>
             ))}

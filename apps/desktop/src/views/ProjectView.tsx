@@ -17,6 +17,7 @@ import { formatDate } from '../lib/datetime';
 import { EmptyState } from '../components/EmptyState';
 import { NewTicketModal } from '../components/NewTicketModal';
 import { SearchPalette } from '../components/SearchPalette';
+import { Toast } from '../components/Toast';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { rememberRecent, useProject } from '../state/store';
 import { buildLinkResolver, wikiCandidates, type LinkResolver, type OpenLink } from '../lib/links';
@@ -184,7 +185,7 @@ export function ProjectView({ root }: ProjectViewProps) {
   if (error && !snapshot) {
     return (
       <div style={{ padding: '1.5rem' }}>
-        <div className="banner">{error}</div>
+        <div className="problem-note">{error}</div>
       </div>
     );
   }
@@ -311,12 +312,9 @@ export function ProjectView({ root }: ProjectViewProps) {
       </nav>
       <main className="main-pane">
         {externalChange && (
-          <div className="banner" role="status">
+          <Toast kind="notice" onDismiss={dismissExternalChange}>
             Files changed on disk; the view has been refreshed.
-            <button className="btn btn-ghost" onClick={dismissExternalChange}>
-              Dismiss
-            </button>
-          </div>
+          </Toast>
         )}
         {openTicket ? (
           <TicketDetail

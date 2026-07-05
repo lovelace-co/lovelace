@@ -1496,8 +1496,9 @@ input[type='checkbox'] {
   max-height: 85vh;
   overflow-y: auto;
   background: var(--bg-0);
-  border-radius: var(--radius-region);
-  padding: 30px 32px;
+  border-radius: var(--radius-float);
+  padding: var(--sp-5);
+  animation: pop-rise var(--dur-glide) var(--swift);
 }
 
 .modal h2 {
@@ -1522,8 +1523,9 @@ input[type='checkbox'] {
   max-height: 85vh;
   overflow-y: auto;
   background: var(--bg-0);
-  border-radius: var(--radius-region);
+  border-radius: var(--radius-float);
   padding: 26px 28px 28px;
+  animation: pop-rise var(--dur-glide) var(--swift);
 }
 
 .info-card-head {
@@ -1698,17 +1700,108 @@ input[type='checkbox'] {
   color: var(--warn-fg);
 }
 
-/* ---------- banner ---------- */
+/* ---------- toasts: messages float in the corner ---------- */
 
-.banner {
+/* The layout never moves for a message. Problems persist until dismissed;
+   notices drain away on their own. */
+#toast-root {
+  position: fixed;
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 16px 56px 0;
-  padding: 10px 16px;
-  border-radius: var(--radius-card);
-  background: var(--warn-bg);
-  color: var(--warn-fg);
+  gap: var(--sp-2);
+  max-width: 26rem;
+  padding: var(--sp-3);
+  background: var(--bg-0);
+  border-radius: var(--radius-float);
+  box-shadow: var(--pop-shadow);
+  font-size: 13px;
+  color: var(--ink);
+  overflow: hidden;
+  animation: pop-rise var(--dur-glide) var(--swift);
+}
+
+/* The kind dot, in the priorities' dot vocabulary. */
+.toast::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.toast.problem::before {
+  background: var(--bad-fg);
+}
+
+.toast.notice::before {
+  background: var(--slate);
+}
+
+/* A notice's remaining life drains along its foot. */
+.toast.notice::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--slate);
+  opacity: 0.4;
+  transform-origin: left;
+  animation: toast-drain 6s linear forwards;
+}
+
+@keyframes toast-drain {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.toast-body {
+  min-width: 0;
+}
+
+.toast-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: var(--mist);
+  flex-shrink: 0;
+  transition: color var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift);
+}
+
+.toast-close:hover {
+  color: var(--ink);
+  background: var(--raise);
+}
+
+.toast-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* A page that cannot load states its problem inline, where the page was. */
+.problem-note {
+  padding: 10px var(--sp-3);
+  border-radius: var(--radius-well);
+  background: var(--bad-bg);
+  color: var(--bad-fg);
   font-size: 13px;
 }
 
@@ -1830,6 +1923,17 @@ input[type='checkbox'] {
   }
   .type-caret {
     animation: none;
+  }
+  /* Floating surfaces appear in place; a notice still dismisses itself. */
+  .dropdown-panel,
+  .datepicker-panel,
+  .palette,
+  .modal,
+  .info-card,
+  .digest-card,
+  .toast,
+  .toast.notice::after {
+    animation: none !important;
   }
   * {
     transition: none !important;
@@ -2701,16 +2805,27 @@ input[type='checkbox'] {
   flex-shrink: 0;
 }
 
+/* Every floating surface shares one recipe: the float radius, the deep
+   soft shadow, and a short rise into place from its origin. */
+@keyframes pop-rise {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
+
 .dropdown-panel {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 6px;
+  padding: var(--sp-2);
   background: var(--pop-bg);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-float);
   overflow-y: auto;
   z-index: 70;
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--pop-shadow);
+  transform-origin: top;
+  animation: pop-rise var(--dur-glide) var(--swift);
 }
 
 .dropdown-option {
@@ -2719,8 +2834,8 @@ input[type='checkbox'] {
   gap: 8px;
   text-align: left;
   font-weight: 500;
-  padding: 8px 14px;
-  border-radius: 4px;
+  padding: 9px var(--sp-3);
+  border-radius: var(--radius-seat);
   font-size: 13px;
   color: var(--pop-ink);
   white-space: nowrap;
@@ -2737,14 +2852,6 @@ input[type='checkbox'] {
 
 .dropdown-option.selected {
   color: var(--pop-current);
-}
-
-.dropdown-punch {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--pop-current);
-  flex-shrink: 0;
 }
 
 /* ---------- the datepicker ---------- */
@@ -2801,10 +2908,12 @@ input[type='checkbox'] {
   z-index: 70;
   background: var(--pop-bg);
   color: var(--pop-ink);
-  border-radius: var(--radius-region);
-  padding: 22px;
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
+  border-radius: var(--radius-float);
+  padding: var(--sp-4);
+  box-shadow: var(--pop-shadow);
   user-select: none;
+  transform-origin: top;
+  animation: pop-rise var(--dur-glide) var(--swift);
 }
 
 .datepicker-head {
@@ -3661,6 +3770,13 @@ input[type='checkbox'] {
   z-index: 60;
 }
 
+@keyframes pop-rise-centred {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(5px);
+  }
+}
+
 .palette {
   position: fixed;
   top: 12vh;
@@ -3672,9 +3788,10 @@ input[type='checkbox'] {
   display: flex;
   flex-direction: column;
   background: var(--pop-bg);
-  border-radius: var(--radius-region);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+  border-radius: var(--radius-float);
+  box-shadow: var(--pop-shadow);
   overflow: hidden;
+  animation: pop-rise-centred var(--dur-glide) var(--swift);
 }
 
 .palette-input {
@@ -3705,8 +3822,8 @@ input[type='checkbox'] {
   gap: 10px;
   width: 100%;
   text-align: left;
-  padding: 9px 14px;
-  border-radius: var(--radius-card);
+  padding: 9px var(--sp-3);
+  border-radius: var(--radius-seat);
   color: var(--pop-ink);
 }
 
@@ -3752,8 +3869,9 @@ input[type='checkbox'] {
   display: flex;
   flex-direction: column;
   background: var(--bg-0);
-  border-radius: var(--radius-region);
+  border-radius: var(--radius-float);
   padding: 26px 28px 28px;
+  animation: pop-rise var(--dur-glide) var(--swift);
 }
 
 .digest-well {

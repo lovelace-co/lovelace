@@ -68,6 +68,7 @@
   --pop-soft: #5d6873;
   --pop-wash: rgba(11, 165, 201, 0.12);
   --pop-current: #0ba5c9;
+  --pop-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
 }
 
 [data-theme='light'] {
@@ -120,6 +121,7 @@
   --pop-soft: #97a1ad;
   --pop-wash: rgba(34, 211, 238, 0.14);
   --pop-current: #22d3ee;
+  --pop-shadow: 0 24px 70px rgba(42, 49, 59, 0.28);
 }
 
 :root {

@@ -3,6 +3,7 @@ import type { Snapshot } from '../lib/types';
 import { fieldsFor } from '../lib/types';
 import { fieldLabel, typeLabel } from '../lib/format';
 import { Dropdown } from './Dropdown';
+import { Toast } from './Toast';
 import { FieldInput } from './FieldInput';
 
 interface NewTicketModalProps {
@@ -75,7 +76,7 @@ export function NewTicketModal({ snapshot, initialStatus, onClose, onCreate }: N
             />
           </div>
         ))}
-        {error && <div className="banner" style={{ margin: '0.8rem 0 0' }}>{error}</div>}
+        {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onClose} disabled={busy}>
             Cancel

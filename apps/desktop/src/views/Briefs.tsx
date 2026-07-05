@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DatePicker } from '../components/DatePicker';
+import { Toast } from '../components/Toast';
 import { Dropdown } from '../components/Dropdown';
 import { AddIcon, CaretIcon, EditIcon, FileIcon, FolderIcon } from '../components/icons';
 import { BlockEditor } from '../editor/BlockEditor';
@@ -221,7 +222,7 @@ export function Briefs({
           New brief
         </button>
       </header>
-      {error && <div className="banner">{error}</div>}
+      {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
       <div className="detail-grid" style={{ gridTemplateColumns: '15rem minmax(0, 1fr)' }}>
         <aside className="panel tree" style={{ alignSelf: 'start' }}>
           <button

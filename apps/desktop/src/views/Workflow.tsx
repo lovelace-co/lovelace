@@ -3,6 +3,7 @@ import { titleCase } from '../lib/format';
 import { STATUS_HUE_CSS, statusHue } from '../lib/loom';
 import { FieldsEditor } from '../components/FieldsEditor';
 import { HoleCheck } from '../components/HoleCheck';
+import { Toast } from '../components/Toast';
 import {
   applyHuman,
   blankStatus,
@@ -281,11 +282,7 @@ export function Workflow({ snapshot, onSave }: WorkflowProps) {
         </div>
       </header>
 
-      {error && (
-        <div className="banner" role="alert" style={{ margin: '0 0 1rem' }}>
-          {error}
-        </div>
-      )}
+      {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
 
       <div className="view-body">
         <p className="subtle" style={{ marginBottom: 18, maxWidth: '58ch' }}>

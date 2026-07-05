@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
 import { FieldInput } from '../components/FieldInput';
+import { Toast } from '../components/Toast';
 import { AddIcon, ArrowLeftIcon, EditIcon } from '../components/icons';
 import { BlockEditor } from '../editor/BlockEditor';
 import { formatDateTime, formatDateTimeShort } from '../lib/datetime';
@@ -267,7 +268,7 @@ export function TicketDetail({
           />
         </div>
       </header>
-      {error && <div className="banner">{error}</div>}
+      {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
       <div className="detail-grid">
         <div>
           <div className="panel" style={{ padding: '16px 18px 18px' }}>

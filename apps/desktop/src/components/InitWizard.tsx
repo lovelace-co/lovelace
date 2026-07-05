@@ -3,6 +3,7 @@ import { titleCase } from '../lib/format';
 import { useHost } from '../state/store';
 import { FieldsEditor } from './FieldsEditor';
 import { HoleCheck } from './HoleCheck';
+import { Toast } from './Toast';
 import {
   applyHuman,
   blankStatus,
@@ -275,7 +276,7 @@ export function InitWizard({ initTarget, defaults, initialName, onCancel, onDone
           </>
         )}
 
-        {error && <div className="banner" style={{ margin: '0.8rem 0 0' }}>{error}</div>}
+        {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
 
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>
