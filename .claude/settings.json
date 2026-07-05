@@ -1,0 +1,63 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js digest"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js session-check"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js presence-clear"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js guard"
+          }
+        ],
+        "matcher": "Edit|Write"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js presence-start"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js presence-clear"
+          }
+        ]
+      }
+    ]
+  }
+}
