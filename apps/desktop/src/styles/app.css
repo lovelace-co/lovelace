@@ -429,9 +429,25 @@ input[type='checkbox'] {
 .tab-bar-tools {
   margin-left: auto;
   display: flex;
-  align-items: center;
-  padding-right: var(--sp-2);
+  align-items: stretch;
   -webkit-app-region: no-drag;
+}
+
+/* In the strip the toggle is one of the strip's own controls: full
+   height, flat corners, centred glyph, the same quiet lift as the
+   new-tab button. */
+.tab-bar-tools .seat-tool {
+  width: 40px;
+  min-width: 0;
+  height: auto;
+  align-self: stretch;
+  padding: 0;
+  border-radius: 0;
+}
+
+.tab-bar-tools .seat-tool:hover {
+  background: var(--raise);
+  color: var(--ink);
 }
 
 .tab-bar-brand {
