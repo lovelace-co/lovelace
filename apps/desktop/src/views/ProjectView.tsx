@@ -3,7 +3,6 @@ import {
   AutomationsIcon,
   BoardIcon,
   CloseIcon,
-  DigestIcon,
   DocsIcon,
   GraphIcon,
   ListIcon,
@@ -45,7 +44,6 @@ export function ProjectView({ root }: ProjectViewProps) {
   const [creating, setCreating] = useState<{ status?: string } | null>(null);
   const [deleting, setDeleting] = useState<IndexTicket | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [digestOpen, setDigestOpen] = useState(false);
   const [docsFocus, setDocsFocus] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<string | null>(null);
   // Settings reports unsaved edits so navigating away can prompt; pendingNav
@@ -83,16 +81,6 @@ export function ProjectView({ root }: ProjectViewProps) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-
-  // Escape closes the digest.
-  useEffect(() => {
-    if (!digestOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDigestOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [digestOpen]);
 
   const humanActor = useMemo(
     () => snapshot?.actors.find((a) => a.kind === 'human')?.id ?? 'me',
@@ -307,21 +295,13 @@ export function ProjectView({ root }: ProjectViewProps) {
               <SettingsIcon />
               Settings
             </button>
-            <div className="footer-tools">
-              <ThemeToggle />
-              <button
-                className="seat-tool tip tip--end"
-                data-tip="Digest"
-                aria-label="Open digest: what an agent sees at session start"
-                onClick={() => setDigestOpen(true)}
-              >
-                <DigestIcon />
-              </button>
-            </div>
           </div>
         </div>
       </nav>
       <main className="main-pane">
+        <div className="pane-theme">
+          <ThemeToggle />
+        </div>
         {externalChange && (
           <Toast kind="notice" onDismiss={dismissExternalChange}>
             Files changed on disk; the view has been refreshed.
@@ -399,6 +379,9 @@ export function ProjectView({ root }: ProjectViewProps) {
             onDeleteFolder={async (path) => {
               await apply((h) => h.deleteFolder(root, path));
             }}
+            onFixDocument={async (path) => {
+              await apply((h) => h.fixDocument(root, path));
+            }}
           />
         ) : nav === 'graph' ? (
           <Graph
@@ -436,6 +419,7 @@ export function ProjectView({ root }: ProjectViewProps) {
             onSavePresenceTimeout={async (minutes) => {
               await apply((h) => h.writeManifest(root, { presence_timeout_minutes: minutes }));
             }}
+            onOpenProject={() => void host.revealProject(root)}
             onSaveActors={async (actors) => {
               await apply((h) => h.writeActors(root, actors));
             }}
@@ -474,35 +458,6 @@ export function ProjectView({ root }: ProjectViewProps) {
       )}
       {previewFile && (
         <FilePreviewModal root={root} path={previewFile} onClose={() => setPreviewFile(null)} />
-      )}
-      {digestOpen && (
-        <div className="modal-backdrop" onClick={() => setDigestOpen(false)}>
-          <div className="modal-shell">
-            <button
-              className="modal-close"
-              aria-label="Close digest"
-              onClick={() => setDigestOpen(false)}
-            >
-              <CloseIcon />
-            </button>
-            <div
-              className="digest-card"
-              role="dialog"
-              aria-label="digest"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="info-card-head">
-                <div className="info-card-titles">
-                  <h2 className="info-card-name">Digest</h2>
-                  <span className="info-card-sub">what an agent sees at session start</span>
-                </div>
-              </div>
-              <div className="digest-well">
-                <pre className="digest-pre">{snapshot.digest}</pre>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
       {pendingNav !== null && (
         <div className="modal-backdrop">

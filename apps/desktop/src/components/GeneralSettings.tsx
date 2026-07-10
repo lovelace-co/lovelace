@@ -9,6 +9,8 @@ interface GeneralSettingsProps {
   onRename: (name: string) => Promise<void>;
   /** Persist the presence stale cap in minutes; null returns to the default. */
   onSavePresenceTimeout: (minutes: number | null) => Promise<void>;
+  /** Open the project folder in the operating system's file manager. */
+  onOpenProject: () => void;
 }
 
 /* The stale cap choices; the default stays out of the file so manifests
@@ -26,7 +28,7 @@ const PRESENCE_CHOICES = [
  * tooling-managed facts (id, path, spec version, creation date) shown
  * read-only.
  */
-export function GeneralSettings({ snapshot, onRename, onSavePresenceTimeout }: GeneralSettingsProps) {
+export function GeneralSettings({ snapshot, onRename, onSavePresenceTimeout, onOpenProject }: GeneralSettingsProps) {
   const m = snapshot.manifest;
   const homePath = snapshot.root.replace(/^\/Users\/[^/]+/, '~');
   const timeout = m.presence_timeout_minutes ?? DEFAULT_PRESENCE_TIMEOUT_MINUTES;
@@ -91,6 +93,17 @@ export function GeneralSettings({ snapshot, onRename, onSavePresenceTimeout }: G
       <p className="subtle" style={{ marginTop: 14 }}>
         The ID, location and spec version are managed by the tooling and cannot be changed here.
       </p>
+      <button className="btn btn-secondary" style={{ marginTop: 18 }} onClick={onOpenProject}>
+        Open project folder
+      </button>
+
+      <h2 className="section-heading" style={{ marginTop: 44 }}>Digest</h2>
+      <p className="subtle" style={{ margin: '0 0 12px' }}>
+        What an agent sees at session start.
+      </p>
+      <div className="digest-well">
+        <pre className="digest-pre">{snapshot.digest}</pre>
+      </div>
     </div>
   );
 }

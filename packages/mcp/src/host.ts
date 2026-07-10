@@ -33,6 +33,7 @@ import {
   writeActors,
   writeIndex,
   parseFrontmatter,
+  FrontmatterError,
   MutationError,
   ProjectError,
 } from '@lovelace/core';
@@ -477,6 +478,34 @@ export async function handle(request: HostRequest): Promise<Json> {
       }
       rmSync(abs, { recursive: true });
       return { deleted: rel, ...snapshot(root) };
+    }
+    case 'fix_document': {
+      const rel = String(request.path);
+      const project = loadProject(root);
+      const documentsPrefix = `.lovelace/${project.manifest.paths.documentation}/`;
+      if (!rel.startsWith(documentsPrefix) || rel.includes('..') || !rel.endsWith('.md')) {
+        throw new Error('fix_document only fixes files under the documentation root');
+      }
+      const abs = join(root, rel);
+      if (!existsSync(abs) || !statSync(abs).isFile()) {
+        throw new Error(`${rel} does not exist`);
+      }
+      const original = readFileSync(abs, 'utf8');
+      try {
+        parseFrontmatter(original);
+        // Already valid: never rewrite a file that already round-trips.
+        return snapshot(root);
+      } catch (e) {
+        if (!(e instanceof FrontmatterError)) throw e;
+      }
+      const filename = rel.slice(rel.lastIndexOf('/') + 1).replace(/\.md$/, '');
+      const slug = filename.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'doc';
+      const stamp = `${new Date().toISOString().slice(0, 19)}Z`;
+      writeFileSync(
+        abs,
+        `---\nid: ${slug}\ntype: document\nsummary: (to be written)\nupdated: ${stamp}\n---\n\n${original}`,
+      );
+      return { fixed: rel, ...snapshot(root) };
     }
     case 'commits_for_ticket': {
       const id = String(request.id);

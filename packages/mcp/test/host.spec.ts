@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultWorkflow } from '@lovelace/core';
@@ -187,6 +187,84 @@ describe('host op: delete_folder', () => {
     ).rejects.toThrow(/only deletes folders under the documentation root/);
     await expect(
       handle({ op: 'delete_folder', root, path: '.lovelace/documentation/missing' }),
+    ).rejects.toThrow(/does not exist/);
+  });
+});
+
+interface IndexDocument {
+  id: string;
+  path: string;
+}
+
+interface Issue {
+  file: string;
+  rule: string;
+}
+
+describe('host op: fix_document', () => {
+  it('repairs a frontmatter-less file, preserving its text and reindexing it', async () => {
+    const root = fixture();
+    const path = join(root, '.lovelace/documentation/domain/notes.md');
+    writeFileSync(path, '# Notes\n\nSome text.\n');
+
+    const before = await handle({ op: 'snapshot', root });
+    expect(
+      (before.issues as Issue[]).some(
+        (i) => i.file === '.lovelace/documentation/domain/notes.md' && i.rule === 'parse',
+      ),
+    ).toBe(true);
+    expect(
+      (before.index as { documents: IndexDocument[] }).documents.some(
+        (d) => d.path === '.lovelace/documentation/domain/notes.md',
+      ),
+    ).toBe(false);
+
+    const res = await handle({ op: 'fix_document', root, path: '.lovelace/documentation/domain/notes.md' });
+    expect(res.fixed).toBe('.lovelace/documentation/domain/notes.md');
+    const fixed = readFileSync(path, 'utf8');
+    expect(fixed.startsWith('---\n')).toBe(true);
+    expect(fixed).toContain('# Notes\n\nSome text.\n');
+    const document = (res.index as { documents: IndexDocument[] }).documents.find(
+      (d) => d.path === '.lovelace/documentation/domain/notes.md',
+    );
+    expect(document?.id).toBe('notes');
+    expect(
+      (res.issues as Issue[]).some(
+        (i) => i.file === '.lovelace/documentation/domain/notes.md' && i.rule === 'parse',
+      ),
+    ).toBe(false);
+  });
+
+  it('is lossless on broken frontmatter: the original broken text survives the rewrite', async () => {
+    const root = fixture();
+    const path = join(root, '.lovelace/documentation/domain/broken.md');
+    writeFileSync(path, '---\nid: [broken\n');
+
+    const res = await handle({ op: 'fix_document', root, path: '.lovelace/documentation/domain/broken.md' });
+    expect(res.fixed).toBe('.lovelace/documentation/domain/broken.md');
+    const fixed = readFileSync(path, 'utf8');
+    expect(fixed).toContain('---\nid: [broken\n');
+  });
+
+  it('is idempotent on a valid file: it never rewrites it', async () => {
+    const root = fixture();
+    const path = join(root, '.lovelace/documentation/domain/OVERVIEW.md');
+    const before = readFileSync(path);
+    await handle({ op: 'fix_document', root, path: '.lovelace/documentation/domain/OVERVIEW.md' });
+    const after = readFileSync(path);
+    expect(after.equals(before)).toBe(true);
+  });
+
+  it('refuses paths outside documentation, traversal and missing files', async () => {
+    const root = fixture();
+    await expect(
+      handle({ op: 'fix_document', root, path: '.lovelace/tickets/T-0002.md' }),
+    ).rejects.toThrow(/only fixes files under the documentation root/);
+    await expect(
+      handle({ op: 'fix_document', root, path: '.lovelace/documentation/../tickets/T-0002.md' }),
+    ).rejects.toThrow(/only fixes files under the documentation root/);
+    await expect(
+      handle({ op: 'fix_document', root, path: '.lovelace/documentation/domain/missing.md' }),
     ).rejects.toThrow(/does not exist/);
   });
 });

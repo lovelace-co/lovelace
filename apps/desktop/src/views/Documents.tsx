@@ -25,6 +25,8 @@ interface DocumentsProps {
   onRenameDocument: (path: string, name: string) => Promise<void>;
   onDeleteDocument: (path: string) => Promise<void>;
   onDeleteFolder: (path: string) => Promise<void>;
+  /** Rewrite a corrupt documentation file into valid format, preserving its content. */
+  onFixDocument: (path: string) => Promise<void>;
   /** A path to open on entry (e.g. when arriving from search). */
   focusPath?: string | null;
   /** Wiki-link plumbing for the editor. */
@@ -96,6 +98,7 @@ export function Documents({
   onRenameDocument,
   onDeleteDocument,
   onDeleteFolder,
+  onFixDocument,
   focusPath,
   candidates,
   resolveLink,
@@ -120,7 +123,19 @@ export function Documents({
   const [newSummary, setNewSummary] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const tree = useMemo(() => buildTree(documents.map((b) => b.path)), [documents]);
+  // Files that failed frontmatter parsing never reach the index, so they carry
+  // no document record; the message comes from the validation issue instead.
+  const corrupt = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const issue of snapshot.issues) {
+      if (issue.rule === 'parse' && issue.file.startsWith(`${DOCS_ROOT}/`)) map.set(issue.file, issue.message);
+    }
+    return map;
+  }, [snapshot.issues]);
+  const tree = useMemo(
+    () => buildTree([...new Set([...documents.map((b) => b.path), ...corrupt.keys()])]),
+    [documents, corrupt],
+  );
   const selectedDocument = documents.find((b) => b.path === selected);
   const stale = (path: string) => {
     const document = documents.find((b) => b.path === path);
@@ -270,7 +285,11 @@ export function Documents({
           >
             <FileIcon style={{ color: 'var(--mist)', flexShrink: 0 }} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
-            {stale(node.documentPath) && <span className="badge-stale">stale</span>}
+            {corrupt.has(node.documentPath) ? (
+              <span className="badge-corrupt">corrupt</span>
+            ) : (
+              stale(node.documentPath) && <span className="badge-stale">stale</span>
+            )}
           </button>
           <span className="tree-actions">
             <button
@@ -442,12 +461,32 @@ export function Documents({
                     <Markdown source={content} resolveLink={resolveLink} onOpenLink={onOpenLink} />
                   </div>
                 )}
-                <div className="comment-compose body-edit-bar">
-                  <button type="button" className="btn btn-primary comment-add" onClick={startEdit}>
-                    <EditIcon />
-                    Edit
-                  </button>
-                </div>
+                {corrupt.has(selected) ? (
+                  <div className="comment-compose body-edit-bar">
+                    <p className="subtle body-prose">
+                      This file is not a valid Lovelace document: {corrupt.get(selected)}. Fixing it wraps the
+                      existing content in valid frontmatter; nothing is removed.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary comment-add"
+                      onClick={() =>
+                        void onFixDocument(selected)
+                          .then(() => setError(null))
+                          .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+                      }
+                    >
+                      Fix Corrupt File
+                    </button>
+                  </div>
+                ) : (
+                  <div className="comment-compose body-edit-bar">
+                    <button type="button" className="btn btn-primary comment-add" onClick={startEdit}>
+                      <EditIcon />
+                      Edit
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

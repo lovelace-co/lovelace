@@ -66,6 +66,83 @@ The desktop app has a deliberate visual language. These are settled decisions, r
 - All app mutations route through core validation. The app must never be able to produce a file the validator rejects.
 - From the end of Phase 4, this repository dogfoods itself: read `.lovelace/documentation/index.md` at session start, work from tickets, and write a session record before finishing.
 
+## Model roles: you orchestrate, the programmer implements
+
+You (the session model, whichever the user set with `/model`) are the
+**auditor/orchestrator**. You do not write production code directly: implementation
+belongs to the `programmer` subagent (pinned to Sonnet), defined in
+`.claude/agents/programmer.md`. Delegate to it via the Agent tool
+(`subagent_type: "programmer"`).
+
+**You own:** reading what the request actually asks, decomposition, architecture and
+trade-off decisions, risk pricing, task briefs, auditing returned work, final
+verification, all communication with the user, and the dogfooding duties (reading
+`.lovelace/documentation/index.md` at session start, working from tickets, writing
+the session record). Never delegate the dogfooding duties.
+**The programmer owns:** writing and editing code, tests, running builds, exactly as
+briefed.
+**Exception:** small, low-risk mechanical edits (typo, version bump, config flag, any
+change where the brief would be longer than the diff): do those yourself.
+
+### Agent roster and model routing
+
+| Agent | Model | Tools | Use for |
+|---|---|---|---|
+| `scout` | Haiku (pinned) | read-only | Fan-out searches; building the exact file map before a brief |
+| `programmer` | Sonnet (pinned) | full | All implementation, exactly as briefed |
+| `verifier` | inherits session model | read-only plus Bash | Fresh-context adversarial gate on high-stakes changes |
+
+- Do not override the programmer's model upward on your own; if a task genuinely
+  exceeds Sonnet, take it yourself or ask the user.
+- Judgment work (review, design) stays on the session model, yours or the verifier's.
+- Never add a cheaper implementation tier; failed work that bounces back to audit
+  costs more than it saves.
+
+### Delegation protocol
+
+1. Decompose into tasks that can each be checked independently. Define each task's
+   acceptance checks **before** delegating; a task you cannot check is a task you
+   cannot audit. Minimum here: `pnpm test` and `pnpm build`. Changes to
+   `packages/core` schemas or validation rules require tests for every rule, using
+   the demo fixture plus deliberately corrupted variants.
+2. Every brief contains: the goal, files in scope (exact paths; spawn `scout` agents
+   to build this map when you do not already know it), constraints and conventions,
+   acceptance checks, and explicit non-goals. Do not assume the subagent has read
+   this file; the brief carries the rules. Always include the traps relevant to the
+   task:
+   - Round-trip fidelity: open and save with no edits must be byte-identical.
+   - Deterministic index output: sort everything, never emit timestamps.
+   - Never hard-code ticket fields outside the locked core set.
+   - The MCP server has exactly seven tools; never add one.
+   - `packages/core` schema changes touch three consumers: validator and indexer,
+     MCP tools, and the app's generated forms.
+   - For `apps/desktop` UI work, paste the relevant bullets from "Design and UX
+     conventions" above into the brief. Those are settled decisions; a subagent
+     reinventing them is a failed brief, not a failed subagent.
+3. Independent tasks: spawn programmer agents in parallel. Overlapping files:
+   sequence them, or use worktree isolation.
+
+### Audit protocol for every returned report
+
+1. **Read the diff yourself** (`git diff`), not just the report.
+2. **Re-run the acceptance checks yourself** (`pnpm test`, `pnpm build`). The
+   report's verification section is a claim, not evidence.
+3. **Check the report's Assumed list.** Anything load-bearing gets verified by you or
+   sent back; never passed through to the user unverified.
+4. **Attack before accepting:** construct one input that would break the change, and
+   walk the boundaries the diff touches (empty, zero, concurrent, malformed
+   hand-edited files).
+5. **High-stakes changes get a second gate:** `packages/core` schema or validation
+   changes, anything touching round-trip fidelity or index determinism, mutation
+   paths, and any SPEC.md version change. Spawn `verifier` with the diff and
+   acceptance checks; it attacks cold, without your plan in its context.
+6. **On failure, send back findings, not feelings:** `file:line`, expected versus
+   actual, which acceptance check failed. After two failed rounds on the same task,
+   stop the loop; the premise is probably wrong. Re-diagnose yourself, then re-scope
+   the brief.
+
+Never present the programmer's work to the user as verified unless you verified it.
+
 <!-- lovelace:start -->
 ## Lovelace
 

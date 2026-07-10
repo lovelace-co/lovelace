@@ -63,6 +63,7 @@ This project's tickets, documentation and session history live in \`.lovelace/\`
 
 ## Working with tickets
 - Mutate tickets only through the Lovelace MCP tools (create_ticket, update_ticket); never edit files in \`.lovelace/tickets/\` directly. Documents under \`.lovelace/documentation/\` may be edited directly.
+- Every document must start with a YAML frontmatter block between \`---\` lines carrying \`id\` (a unique kebab-case slug), \`type: document\` and \`summary\` (one or two sentences). A file without this block fails validation and stays out of the project's documentation.
 - Include the active ticket ID in every commit message.
 
 ## Resolving a ticket

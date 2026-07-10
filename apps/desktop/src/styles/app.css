@@ -631,6 +631,15 @@ input[type='checkbox'] {
   padding-top: 24px;
 }
 
+/* The theme toggle rides the header band, far right, in the gutter beyond
+   the content rail so it never collides with a view's own actions. */
+.pane-theme {
+  position: fixed;
+  top: 46px;
+  right: var(--sp-3);
+  z-index: 5;
+}
+
 .main-pane {
   flex: 1;
   min-width: 0;
@@ -1379,6 +1388,14 @@ input[type='checkbox'] {
   font-size: var(--size-util);
   color: var(--warn-fg);
   background: var(--warn-bg);
+  border-radius: var(--radius-pill);
+  padding: 2px 9px;
+}
+
+.badge-corrupt {
+  font-size: var(--size-util);
+  color: var(--bad-fg);
+  background: var(--bad-bg);
   border-radius: var(--radius-pill);
   padding: 2px 9px;
 }
@@ -3933,12 +3950,6 @@ input[type='checkbox'] {
   background: var(--raise-2);
 }
 
-.footer-tools {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 /* The theme and digest buttons: exact squares, the same height as the Settings
    row. A fixed width and height (not aspect-ratio, which a flex row ignores on
    the main axis) guarantees the square. */
@@ -4160,18 +4171,6 @@ input[type='checkbox'] {
 /* The digest as a centred modal, matching the project info card: the same
    tonal surface and head treatment, with the preformatted record in a
    recessed well that scrolls while the head stays put. */
-.digest-card {
-  width: 36rem;
-  max-width: 92vw;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-0);
-  border-radius: var(--radius-float);
-  padding: 26px 28px 28px;
-  animation: pop-rise var(--dur-glide) var(--swift);
-}
-
 .digest-well {
   flex: 1;
   min-height: 0;

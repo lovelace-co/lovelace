@@ -94,9 +94,13 @@ export interface HostClient {
   deleteDocument(root: string, path: string): Promise<Snapshot>;
   /** Delete a folder under the documentation root, including everything in it. */
   deleteFolder(root: string, path: string): Promise<Snapshot>;
+  /** Rewrite a corrupt documentation file into valid format, preserving its content. */
+  fixDocument(root: string, path: string): Promise<Snapshot>;
   commitsForTicket(root: string, id: string): Promise<Array<{ sha: string; subject: string }>>;
   search(root: string, query: string): Promise<SearchHit[]>;
   pickDirectory(): Promise<string | null>;
+  /** Open the project folder in the operating system's file manager. */
+  revealProject(root: string): Promise<void>;
   /** Watch for external changes; returns an unsubscribe function. */
   watch(root: string, onChange: () => void): Promise<() => void>;
 }
@@ -277,6 +281,10 @@ export class TauriHost implements HostClient {
     return tauriRequest({ op: 'delete_folder', root, path }) as Promise<Snapshot>;
   }
 
+  fixDocument(root: string, path: string): Promise<Snapshot> {
+    return tauriRequest({ op: 'fix_document', root, path }) as Promise<Snapshot>;
+  }
+
   async commitsForTicket(root: string, id: string): Promise<Array<{ sha: string; subject: string }>> {
     const data = (await tauriRequest({ op: 'commits_for_ticket', root, id })) as {
       commits: Array<{ sha: string; subject: string }>;
@@ -287,6 +295,12 @@ export class TauriHost implements HostClient {
   async search(root: string, query: string): Promise<SearchHit[]> {
     const data = (await tauriRequest({ op: 'search', root, query })) as { hits: SearchHit[] };
     return data.hits;
+  }
+
+  async revealProject(root: string): Promise<void> {
+    assertShell();
+    const { openPath } = await import('@tauri-apps/plugin-opener');
+    await openPath(root);
   }
 
   async pickDirectory(): Promise<string | null> {

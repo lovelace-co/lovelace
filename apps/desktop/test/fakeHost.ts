@@ -170,12 +170,21 @@ export class FakeHost implements HostClient {
     return this.snapshotData;
   }
 
+  async fixDocument(root: string, path: string): Promise<Snapshot> {
+    this.record('fixDocument', [root, path]);
+    return this.snapshotData;
+  }
+
   async commitsForTicket(_root: string, _id: string): Promise<Array<{ sha: string; subject: string }>> {
     return [{ sha: '4e7aa10', subject: 'feat: forecast endpoint (T-0002)' }];
   }
 
   async search(_root: string, _query: string): Promise<SearchHit[]> {
     return [];
+  }
+
+  async revealProject(root: string): Promise<void> {
+    this.record('revealProject', [root]);
   }
 
   async pickDirectory(): Promise<string | null> {

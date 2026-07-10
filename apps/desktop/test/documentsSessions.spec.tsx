@@ -36,6 +36,7 @@ describe('Documents view', () => {
     const onRenameDocument = vi.fn().mockResolvedValue(undefined);
     const onDeleteDocument = vi.fn().mockResolvedValue(undefined);
     const onDeleteFolder = vi.fn().mockResolvedValue(undefined);
+    const onFixDocument = vi.fn().mockResolvedValue(undefined);
     render(
       <HostProvider host={host}>
         <Documents
@@ -47,6 +48,7 @@ describe('Documents view', () => {
           onRenameDocument={onRenameDocument}
           onDeleteDocument={onDeleteDocument}
           onDeleteFolder={onDeleteFolder}
+          onFixDocument={onFixDocument}
         />
       </HostProvider>,
     );
@@ -58,6 +60,7 @@ describe('Documents view', () => {
       onRenameDocument,
       onDeleteDocument,
       onDeleteFolder,
+      onFixDocument,
     };
   }
 
@@ -219,6 +222,46 @@ describe('Documents view', () => {
   it('does not offer a delete on the documentation root', () => {
     renderDocuments();
     expect(screen.queryByRole('button', { name: 'delete folder /' })).toBeNull();
+  });
+
+  describe('corrupt files', () => {
+    const withBroken: Snapshot = {
+      ...snapshot,
+      issues: [
+        ...snapshot.issues,
+        {
+          severity: 'error',
+          file: '.lovelace/documentation/domain/broken.md',
+          line: 1,
+          rule: 'parse',
+          message: 'file must start with a --- frontmatter block',
+        },
+      ],
+    };
+
+    it('shows a corrupt badge in the tree for a file that failed frontmatter parsing', () => {
+      renderDocuments(withBroken);
+      expect(screen.getByText('broken')).toBeTruthy();
+      expect(screen.getByText('corrupt')).toBeTruthy();
+    });
+
+    it('offers Fix Corrupt File instead of Edit when a corrupt file is selected, and wires the callback', async () => {
+      const { onFixDocument } = renderDocuments(withBroken);
+      fireEvent.click(screen.getByText('broken'));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Fix Corrupt File' })).toBeTruthy());
+      expect(screen.queryByRole('button', { name: /Edit/ })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Fix Corrupt File' }));
+      await waitFor(() =>
+        expect(onFixDocument).toHaveBeenCalledWith('.lovelace/documentation/domain/broken.md'),
+      );
+    });
+
+    it('still shows Edit and no Fix Corrupt File button for a valid selected document', async () => {
+      renderDocuments(withBroken);
+      await waitFor(() => expect(screen.getByText('Intro paragraph.')).toBeTruthy());
+      expect(screen.getByRole('button', { name: /Edit/ })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Fix Corrupt File' })).toBeNull();
+    });
   });
 });
 

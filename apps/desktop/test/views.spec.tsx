@@ -53,6 +53,7 @@ describe('Settings view', () => {
       onSaveAutomations: vi.fn().mockResolvedValue(undefined),
       onRenameProject: vi.fn().mockResolvedValue(undefined),
       onSavePresenceTimeout: vi.fn().mockResolvedValue(undefined),
+      onOpenProject: vi.fn(),
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
       onDirtyChange: vi.fn(),
