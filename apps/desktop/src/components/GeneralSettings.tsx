@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { CloseIcon } from './icons';
 import { Dropdown } from './Dropdown';
 import { formatDate } from '../lib/datetime';
 import { DEFAULT_PRESENCE_TIMEOUT_MINUTES } from '../lib/presence';
@@ -29,6 +31,15 @@ const PRESENCE_CHOICES = [
  * read-only.
  */
 export function GeneralSettings({ snapshot, onRename, onSavePresenceTimeout, onOpenProject }: GeneralSettingsProps) {
+  const [digestOpen, setDigestOpen] = useState(false);
+  useEffect(() => {
+    if (!digestOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDigestOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [digestOpen]);
   const m = snapshot.manifest;
   const homePath = snapshot.root.replace(/^\/Users\/[^/]+/, '~');
   const timeout = m.presence_timeout_minutes ?? DEFAULT_PRESENCE_TIMEOUT_MINUTES;
@@ -93,17 +104,40 @@ export function GeneralSettings({ snapshot, onRename, onSavePresenceTimeout, onO
       <p className="subtle" style={{ marginTop: 14 }}>
         The ID, location and spec version are managed by the tooling and cannot be changed here.
       </p>
-      <button className="btn btn-secondary" style={{ marginTop: 18 }} onClick={onOpenProject}>
-        Open project folder
-      </button>
-
-      <h2 className="section-heading" style={{ marginTop: 44 }}>Digest</h2>
-      <p className="subtle" style={{ margin: '0 0 12px' }}>
-        What an agent sees at session start.
-      </p>
-      <div className="digest-well">
-        <pre className="digest-pre">{snapshot.digest}</pre>
+      <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+        <button className="btn btn-secondary" onClick={onOpenProject}>
+          Open project folder
+        </button>
+        <button className="btn btn-secondary" onClick={() => setDigestOpen(true)}>
+          View digest
+        </button>
       </div>
+
+      {digestOpen && (
+        <div className="modal-backdrop" onClick={() => setDigestOpen(false)}>
+          <div className="modal-shell">
+            <button className="modal-close" aria-label="Close digest" onClick={() => setDigestOpen(false)}>
+              <CloseIcon />
+            </button>
+            <div
+              className="digest-card"
+              role="dialog"
+              aria-label="digest"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="info-card-head">
+                <div className="info-card-titles">
+                  <h2 className="info-card-name">Digest</h2>
+                  <span className="info-card-sub">what an agent sees at session start</span>
+                </div>
+              </div>
+              <div className="digest-well">
+                <pre className="digest-pre">{snapshot.digest}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

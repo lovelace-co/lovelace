@@ -16,7 +16,6 @@ import { NewTicketModal } from '../components/NewTicketModal';
 import { SearchPalette } from '../components/SearchPalette';
 import { FilePreviewModal } from '../components/FilePreviewModal';
 import { Toast } from '../components/Toast';
-import { ThemeToggle } from '../components/ThemeToggle';
 import { rememberRecent, useHost, useProject } from '../state/store';
 import { formatElapsed } from '../lib/presence';
 import { buildLinkResolver, referenceCandidates, type LinkResolver, type OpenLink } from '../lib/links';
@@ -299,9 +298,6 @@ export function ProjectView({ root }: ProjectViewProps) {
         </div>
       </nav>
       <main className="main-pane">
-        <div className="pane-theme">
-          <ThemeToggle />
-        </div>
         {externalChange && (
           <Toast kind="notice" onDismiss={dismissExternalChange}>
             Files changed on disk; the view has been refreshed.

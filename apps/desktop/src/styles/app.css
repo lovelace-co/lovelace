@@ -424,6 +424,16 @@ input[type='checkbox'] {
   transition: background var(--dur-glide) var(--swift);
 }
 
+/* The far right of the tab strip, past where tabs can grow: the one
+   spot every window state shares. */
+.tab-bar-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  padding-right: var(--sp-2);
+  -webkit-app-region: no-drag;
+}
+
 .tab-bar-brand {
   display: flex;
   align-items: center;
@@ -629,15 +639,6 @@ input[type='checkbox'] {
 .side-nav .nav-footer {
   margin-top: auto;
   padding-top: 24px;
-}
-
-/* The theme toggle rides the header band, far right, in the gutter beyond
-   the content rail so it never collides with a view's own actions. */
-.pane-theme {
-  position: fixed;
-  top: 46px;
-  right: var(--sp-3);
-  z-index: 5;
 }
 
 .main-pane {
@@ -4171,6 +4172,18 @@ input[type='checkbox'] {
 /* The digest as a centred modal, matching the project info card: the same
    tonal surface and head treatment, with the preformatted record in a
    recessed well that scrolls while the head stays put. */
+.digest-card {
+  width: 36rem;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-0);
+  border-radius: var(--radius-float);
+  padding: 26px 28px 28px;
+  animation: pop-rise var(--dur-glide) var(--swift);
+}
+
 .digest-well {
   flex: 1;
   min-height: 0;

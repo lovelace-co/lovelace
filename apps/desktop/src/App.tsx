@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import symbol from './assets/symbol.svg';
 import { ThemeProvider } from './state/theme';
+import { ThemeToggle } from './components/ThemeToggle';
 import { ProjectView } from './views/ProjectView';
 import { Welcome } from './views/Welcome';
 
@@ -308,6 +309,9 @@ export function App() {
           <button className="btn-ghost tab-new" aria-label="new tab" title="Open another project" onClick={newTab}>
             +
           </button>
+          <div className="tab-bar-tools">
+            <ThemeToggle />
+          </div>
         </div>
         {tabs.map((tab) => (
           <div key={tab.id} style={{ display: tab.id === active?.id ? 'contents' : 'none' }}>
