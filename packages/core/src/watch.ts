@@ -28,12 +28,20 @@ export function watchProject(
   const debounceMs = options.debounceMs ?? 200;
   const dir = join(root, '.lovelace');
   const project = loadProject(root);
-  const indexDirPlain = join(dir, project.manifest.paths.index);
-  const stateDirPlain = join(dir, project.manifest.paths.state);
-  const indexDir = indexDirPlain + sep;
-  const stateDir = stateDirPlain + sep;
-  const presenceDirPlain = join(stateDirPlain, 'presence');
-  const presenceDir = presenceDirPlain + sep;
+  // Every comparison in the ignore filter happens on forward-slash form:
+  // on Windows the paths chokidar hands the ignored callback do not use
+  // native separators, so a prefix check against join()-built backslash
+  // strings silently never matches. That let the watcher's own index write
+  // retrigger it (observed on Windows CI as a doubled onChange per external
+  // change); normalising both sides makes the filter hold on any platform.
+  const slashes = (p: string) => p.split(sep).join('/');
+  const indexDirPlain = slashes(join(dir, project.manifest.paths.index));
+  const stateDirPlain = slashes(join(dir, project.manifest.paths.state));
+  const indexDir = `${indexDirPlain}/`;
+  const stateDir = `${stateDirPlain}/`;
+  const presenceDirPlain = `${stateDirPlain}/presence`;
+  const presenceDir = `${presenceDirPlain}/`;
+  const presenceFile = `${stateDirPlain}/presence.json`;
 
   let pending = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -53,15 +61,7 @@ export function watchProject(
 
   const watcher: FSWatcher = watch(dir, {
     ignoreInitial: true,
-    // Windows delivers a second modify notification for one logical write
-    // (data, then metadata), often far enough apart to straddle the
-    // debounce window and double-fire onChange. Waiting for the file size
-    // to settle collapses the pair into one event; scoped to Windows so
-    // the other platforms keep their current latency.
-    ...(process.platform === 'win32'
-      ? { awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 20 } }
-      : {}),
-    ignored: (path: string) =>
+    ignored: (rawPath: string) => {
       // The live-agent markers are the state/ paths watchers react to: the
       // legacy singleton file, and the per-session presence directory
       // (and everything in it). Unlike index/, state/ itself is deliberately
@@ -69,10 +69,14 @@ export function watchProject(
       // directory, so ignoring state/ outright would keep it from ever
       // descending far enough to see these exceptions. The startsWith(stateDir)
       // rule below still ignores everything else inside state/.
-      path !== join(stateDirPlain, 'presence.json') &&
-      path !== presenceDirPlain &&
-      !path.startsWith(presenceDir) &&
-      (path === indexDirPlain || path.startsWith(indexDir) || path.startsWith(stateDir)),
+      const path = slashes(rawPath);
+      return (
+        path !== presenceFile &&
+        path !== presenceDirPlain &&
+        !path.startsWith(presenceDir) &&
+        (path === indexDirPlain || path.startsWith(indexDir) || path.startsWith(stateDir))
+      );
+    },
   });
   watcher.on('all', (_event, path) => {
     pending.add(path);
