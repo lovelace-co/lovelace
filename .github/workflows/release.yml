@@ -118,16 +118,28 @@ jobs:
             librsvg2-dev \
             libfuse2
 
-      # linuxdeploy sets an rpath on every ELF in the AppDir with whichever
-      # patchelf is on PATH. Ubuntu 22.04's patchelf 0.14 corrupts the Bun
-      # compiled sidecars doing that (they segfault afterwards; proven on a
-      # branch probe run), so a current patchelf release goes first on PATH.
-      - name: Install patchelf 0.18 (linuxdeploy uses it for rpaths)
+      # linuxdeploy rpath-patches every ELF in the AppDir using a patchelf
+      # embedded inside its own AppImage (PATH is never consulted). Both the
+      # tauri-pinned linuxdeploy and upstream continuous (patchelf 0.15)
+      # corrupt Bun compiled sidecars doing that: the binaries segfault
+      # afterwards. patchelf 0.18 patches them cleanly (all three proven by
+      # probe runs against a real sidecar). Graft 0.18 into the pinned
+      # linuxdeploy, repack it as a genuine AppImage, and prime tauri's tool
+      # cache so the build uses it.
+      - name: Prime linuxdeploy with patchelf 0.18 (Linux)
         if: matrix.os_family == 'linux'
         run: |
-          curl -sL https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz \
-            | sudo tar -xz -C /usr/local ./bin/patchelf
-          patchelf --version
+          mkdir -p ~/.cache/tauri
+          cd "$(mktemp -d)"
+          curl -sL -o pinned.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
+          chmod +x pinned.AppImage
+          ./pinned.AppImage --appimage-extract > /dev/null
+          curl -sL https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz | tar -xz ./bin/patchelf
+          cp bin/patchelf squashfs-root/usr/bin/patchelf
+          curl -sL -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run squashfs-root ~/.cache/tauri/linuxdeploy-x86_64.AppImage
+          file ~/.cache/tauri/linuxdeploy-x86_64.AppImage
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -229,6 +241,17 @@ jobs:
           hdiutil create -volname "Lovelace" -srcfolder dmg-stage -ov -format UDZO \
             "$BUNDLE_DIR/dmg/Lovelace_${VERSION}_${{ matrix.arch_suffix }}.dmg"
           rm -rf dmg-stage
+
+      # A corrupted sidecar can survive bundling; executing one from inside
+      # the assembled AppDir is the only honest check.
+      - name: Verify bundled sidecar integrity (Linux)
+        if: matrix.os_family == 'linux'
+        run: |
+          SIDE=apps/desktop/src-tauri/target/release/bundle/appimage/Lovelace.AppDir/usr/bin/lovelace-host
+          ldd "$SIDE" > /dev/null
+          OUT=$(timeout 10 "$SIDE" '{"op":"probe"}' || true)
+          echo "$OUT" | grep -q "unknown op" || { echo "bundled sidecar is corrupted"; exit 1; }
+          echo "bundled sidecar healthy"
 
       - name: Collect release assets
         run: |
