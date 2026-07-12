@@ -33,6 +33,17 @@ function fixture() {
 
 const ctx = { now: FIXED_NOW };
 
+/**
+ * Splits a ticket file's raw text on its frontmatter delimiter. `before` is
+ * read straight off disk, unlike `after` (always rebuilt with LF delimiters
+ * by updateTicket regardless of what the file started as), so a CRLF-
+ * checked-out fixture would otherwise make the literal '---\n' split miss
+ * the delimiter entirely. Same class of fix as `corrupt` in helpers.ts.
+ */
+function splitFrontmatter(text: string): string[] {
+  return text.replace(/\r\n/g, '\n').split('---\n');
+}
+
 describe('ID assignment', () => {
   it('continues from the highest existing ID by scanning', async () => {
     const root = fixture();
@@ -195,7 +206,7 @@ describe('updateTicket', () => {
     expect(result.ticket.updated).toBe('2026-06-10T12:00:00Z');
     const after = readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8');
     expect(after).toContain('depends_on: [T-0001]'); // flow style untouched
-    expect(after.split('---\n')[2]).toBe(before.split('---\n')[2]); // body identical, since input.body was undefined
+    expect(splitFrontmatter(after)[2]).toBe(splitFrontmatter(before)[2]); // body identical, since input.body was undefined
   });
 
   it('removes a field when set to null', async () => {
@@ -223,19 +234,19 @@ describe('updateTicket', () => {
     );
     expect(result.ticket.body.trim()).toBe('## New description\n\nReplaced entirely.');
     const after = readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8');
-    const beforeFm = before.split('---\n')[1]!.replace(/updated: .*/, 'updated: STAMP');
-    const afterFm = after.split('---\n')[1]!.replace(/updated: .*/, 'updated: STAMP');
+    const beforeFm = splitFrontmatter(before)[1]!.replace(/updated: .*/, 'updated: STAMP');
+    const afterFm = splitFrontmatter(after)[1]!.replace(/updated: .*/, 'updated: STAMP');
     expect(afterFm).toBe(beforeFm); // untouched keys keep their bytes
-    expect(after).toBe(`---\n${after.split('---\n')[1]}---\n\n## New description\n\nReplaced entirely.\n`);
+    expect(after).toBe(`---\n${splitFrontmatter(after)[1]}---\n\n## New description\n\nReplaced entirely.\n`);
   });
 
   it('leaves fields alone when only the body is set: fields stay byte-identical', async () => {
     const root = fixture();
     const before = readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8');
-    const beforeFields = before.split('---\n')[1]!.replace(/updated: .*/, 'updated: STAMP');
+    const beforeFields = splitFrontmatter(before)[1]!.replace(/updated: .*/, 'updated: STAMP');
     await updateTicket(root, 'T-0002', { fields: {}, body: 'Replaced.\n' }, ctx);
     const after = readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8');
-    const afterFields = after.split('---\n')[1]!.replace(/updated: .*/, 'updated: STAMP');
+    const afterFields = splitFrontmatter(after)[1]!.replace(/updated: .*/, 'updated: STAMP');
     expect(afterFields).toBe(beforeFields);
   });
 
@@ -254,7 +265,7 @@ describe('updateTicket', () => {
     const before = readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8');
     await updateTicket(root, 'T-0002', { fields: { priority: 'low' } }, ctx);
     const after = readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8');
-    expect(after.split('---\n')[2]).toBe(before.split('---\n')[2]);
+    expect(splitFrontmatter(after)[2]).toBe(splitFrontmatter(before)[2]);
   });
 
   it('accepts a body-only update with fields omitted entirely', async () => {

@@ -16,7 +16,12 @@ export function tempFixture(): { root: string; cleanup: () => void } {
 
 export function corrupt(root: string, rel: string, fn: (text: string) => string): void {
   const abs = join(root, rel);
-  writeFileSync(abs, fn(readFileSync(abs, 'utf8')));
+  // Normalise to LF before applying fn: fn's patterns are written as LF
+  // literals, and a CRLF-checked-out fixture (Windows, or a local clone
+  // that predates .gitattributes) would otherwise make an exact-string
+  // match silently miss, leaving the intended corruption unapplied.
+  const text = readFileSync(abs, 'utf8').replace(/\r\n|\r/g, '\n');
+  writeFileSync(abs, fn(text));
 }
 
 export const FIXED_NOW = () => new Date('2026-06-10T12:00:00Z');

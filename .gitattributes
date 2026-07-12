@@ -1,0 +1,28 @@
+# Pins line endings on checkout for the text formats this repo defines
+# byte-identical round-trip fidelity over, regardless of a contributor's
+# platform or local core.autocrlf setting. Without this, a Windows checkout
+# converts these files to CRLF (T-0125): the fixture stops parsing as
+# frontmatter, test corruption helpers stop matching, and round-trip
+# comparisons against the on-disk fixture stop being byte-for-byte.
+*.md eol=lf
+*.yaml eol=lf
+*.yml eol=lf
+*.json eol=lf
+*.ts eol=lf
+*.tsx eol=lf
+*.mjs eol=lf
+*.css eol=lf
+*.html eol=lf
+*.rs eol=lf
+*.sh eol=lf
+*.toml eol=lf
+
+# Sidecar binaries and image/icon assets are never diffed or line-ended.
+apps/desktop/src-tauri/binaries/** binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.webp binary

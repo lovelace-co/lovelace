@@ -22,11 +22,40 @@ export class FrontmatterError extends Error {
 }
 
 /**
+ * Splits text into lines on LF, CRLF or bare CR, alongside the character
+ * offset each line starts at in the original string. Hand-edited files (and
+ * fixtures checked out on Windows) are not guaranteed to be LF; a caller
+ * that needs exact bytes back slices the original text at a `starts` offset
+ * rather than rejoining this function's line array, which would normalise
+ * whatever line ending the source actually used.
+ */
+function splitLinesWithOffsets(text: string): { lines: string[]; starts: number[] } {
+  const lines: string[] = [];
+  const starts: number[] = [0];
+  let lineStart = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '\n' || ch === '\r') {
+      lines.push(text.slice(lineStart, i));
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      lineStart = i + 1;
+      starts.push(lineStart);
+    }
+  }
+  lines.push(text.slice(lineStart));
+  return { lines, starts };
+}
+
+/**
  * Splits a Markdown file into YAML frontmatter and body, with line
- * information so validation errors can point at the offending line.
+ * information so validation errors can point at the offending line. Line
+ * endings are read tolerantly (LF, CRLF and bare CR all delimit a line the
+ * same way), but the body is recovered by slicing the original text at a
+ * computed offset rather than rejoining split lines, so a CRLF body comes
+ * back with its \r\n intact instead of being silently normalised to \n.
  */
 export function parseFrontmatter(text: string): ParsedFrontmatter {
-  const lines = text.split('\n');
+  const { lines, starts } = splitLinesWithOffsets(text);
   if (lines[0] !== '---') {
     throw new FrontmatterError('file must start with a --- frontmatter block', 1);
   }
@@ -66,7 +95,9 @@ export function parseFrontmatter(text: string): ParsedFrontmatter {
       keyLines.set(keyText, lineCounter.linePos(offset).line + 1);
     }
   }
-  const body = lines.slice(end + 1).join('\n');
+  // Sliced from the original text, not rejoined from `lines`, so a CRLF
+  // body's bytes (including every \r\n) survive untouched.
+  const body = end + 1 < starts.length ? text.slice(starts[end + 1]) : '';
   return {
     data: parsed as Record<string, unknown>,
     keyLines,

@@ -1,0 +1,47 @@
+name: test
+
+# Runs the pure Node test suite on Windows and Linux. Triggered by hand or by
+# pushing to a ci/** branch, so portability fixes can be iterated on cheaply
+# without waiting on a release. No macOS (cost), no Rust, no Bun and no
+# Tauri: the suite under test is packages/*, which needs only Node.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "ci/**"
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: false
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      # Serial on purpose: parallel vitest flakes on watcher timing in this
+      # repo (see release.yml).
+      - name: Test
+        run: pnpm -r --workspace-concurrency=1 test

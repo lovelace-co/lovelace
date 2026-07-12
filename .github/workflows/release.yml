@@ -115,7 +115,9 @@ jobs:
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            libfuse2 \
+            patchelf
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -185,6 +187,11 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
 
       - name: Build with Tauri
+        env:
+          # linuxdeploy strips every executable it deploys by default, and
+          # stripping corrupts Bun-compiled binaries (the three sidecars).
+          # Only set on Linux; the other platforms ignore it.
+          NO_STRIP: ${{ matrix.os_family == 'linux' && 'true' || '' }}
         run: |
           ARGS=()
           # tauri_extra_args is a matrix literal we control (space-separated

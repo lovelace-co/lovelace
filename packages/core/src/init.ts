@@ -1,10 +1,30 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
+import { stringify } from 'yaml';
 import { validateSchema } from './config.js';
 import { serializeSchema } from './schema-config.js';
 import { SPEC_VERSION } from './version.js';
 import type { Schema } from './types.js';
+
+/**
+ * Renders a single scalar the way the hand-assembled templates below embed
+ * it: quoted only when the plain form would round-trip as something other
+ * than this exact string (a number, a boolean, null, and so on). A folder
+ * named "2048" or a user named "true" must not turn into a YAML number or
+ * boolean once it lands in manifest.yaml or actors.yaml. Unambiguous values
+ * keep exactly today's bytes, since `yaml`'s stringifier only quotes when
+ * the plain scalar would not read back as the same string. A value holding
+ * a line break cannot be embedded plain at all (the templates splice the
+ * scalar into a single line), so it becomes a double-quoted one-line JSON
+ * string, which YAML reads with the escapes intact.
+ */
+function yamlScalar(value: string): string {
+  if (/[\r\n]/.test(value)) {
+    return JSON.stringify(value);
+  }
+  return stringify(value).replace(/\n$/, '');
+}
 
 export interface InitOptions {
   name: string;
@@ -140,6 +160,15 @@ export function initProject(root: string, options: InitOptions): string[] {
   if (existsSync(dir)) {
     throw new Error('.lovelace already exists in this directory');
   }
+  // The manifest schema requires a non-empty name; refuse up front rather
+  // than scaffold a project that can never load. Same for an explicitly
+  // provided but blank user name in actors.yaml.
+  if (options.name.trim() === '') {
+    throw new Error('project name must not be empty');
+  }
+  if (options.userName !== undefined && options.userName.trim() === '') {
+    throw new Error('user name must not be empty when provided');
+  }
   // Validate a custom schema before writing anything, so a rejected
   // configuration never leaves a half-scaffolded project on disk.
   if (options.schema) {
@@ -163,12 +192,12 @@ export function initProject(root: string, options: InitOptions): string[] {
 
   write(
     'manifest.yaml',
-    `spec_version: ${SPEC_VERSION}\nproject_id: ${randomBytes(6).toString('hex')}\nname: ${options.name}\ncreated: ${date}\n`,
+    `spec_version: ${SPEC_VERSION}\nproject_id: ${yamlScalar(randomBytes(6).toString('hex'))}\nname: ${yamlScalar(options.name)}\ncreated: ${date}\n`,
   );
   write('schema.yaml', options.schema ? serializeSchema(options.schema) : DEFAULT_SCHEMA);
   write(
     'actors.yaml',
-    `actors:\n  - id: me\n    name: ${options.userName ?? 'Developer'}\n    kind: human\n  - id: claude\n    name: Claude Code\n    kind: agent\n`,
+    `actors:\n  - id: me\n    name: ${yamlScalar(options.userName ?? 'Developer')}\n    kind: human\n  - id: claude\n    name: Claude Code\n    kind: agent\n`,
   );
   write(
     'documentation/index.md',

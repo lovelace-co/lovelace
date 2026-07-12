@@ -236,6 +236,24 @@ describe('host ops: init configuration', () => {
     expect(statuses.map((s) => s.name)).toEqual(['inbox', 'shipped']);
   });
 
+  it('init scaffolds a loadable project when the target folder name is entirely digits', async () => {
+    // Regression for a real CI failure: a project name that is a
+    // YAML-ambiguous scalar (all digits, "true", "null", "1e3", ...) used to
+    // be spliced unquoted into manifest.yaml, so it read back as a number
+    // and the project could never load again. The app prefills the project
+    // name from the target folder's basename, so a folder like "2048" hits
+    // this directly; build the scenario without relying on mkdtempSync's
+    // random suffix, which is not guaranteed to contain a letter.
+    const parent = mkdtempSync(join(tmpdir(), 'lovelace-init-host-'));
+    cleanups.push(() => rmSync(parent, { recursive: true, force: true }));
+    const root = join(parent, '2048');
+    mkdirSync(root);
+
+    await handle({ op: 'init', root, name: '2048', userName: 'Me' });
+    const snapshot = await handle({ op: 'snapshot', root });
+    expect((snapshot.manifest as { name: string }).name).toBe('2048');
+  });
+
   it('write_schema saves an edit and returns the updated schema in the snapshot', async () => {
     const root = fixture();
     const before = await handle({ op: 'snapshot', root });
