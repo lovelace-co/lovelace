@@ -53,6 +53,14 @@ export function watchProject(
 
   const watcher: FSWatcher = watch(dir, {
     ignoreInitial: true,
+    // Windows delivers a second modify notification for one logical write
+    // (data, then metadata), often far enough apart to straddle the
+    // debounce window and double-fire onChange. Waiting for the file size
+    // to settle collapses the pair into one event; scoped to Windows so
+    // the other platforms keep their current latency.
+    ...(process.platform === 'win32'
+      ? { awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 20 } }
+      : {}),
     ignored: (path: string) =>
       // The live-agent markers are the state/ paths watchers react to: the
       // legacy singleton file, and the per-session presence directory

@@ -355,7 +355,9 @@ describe('logSession and addComment', () => {
   it('writes comments under the ticket directory following the convention', async () => {
     const root = fixture();
     const { path } = await addComment(root, { ticket: 'T-0003', actor: 'ada', body: 'Park this until July.' }, ctx);
-    expect(path).toContain('comments/T-0003/');
+    // The returned path is native to the platform; normalise the
+    // separators so the convention check holds on Windows too.
+    expect(path.replaceAll('\\', '/')).toContain('comments/T-0003/');
     expect(path).toContain('2026-06-10T1200-ada.md');
     const issues = validateProject(loadProject(root), { now: FIXED_NOW });
     expect(issues.filter((i) => i.severity === 'error')).toEqual([]);
