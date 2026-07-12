@@ -328,6 +328,9 @@ input[type='checkbox'] {
   border-radius: 50%;
   box-shadow: inset 0 0 0 1.5px var(--hole-rim);
   transition: box-shadow var(--dur-colour) var(--swift);
+  /* The mark paints above the invisible input; clicks must fall through to
+     the input, or they land on the mark and bubble to the row instead. */
+  pointer-events: none;
 }
 
 .hole-check .hole-mark::after {
@@ -457,6 +460,14 @@ input[type='checkbox'] {
   color: var(--ink);
 }
 
+/* The update capsule keeps its own species (a press, not a seat), so it just
+   centres in the strip's fixed height with a little breathing room from the
+   theme toggle beside it. */
+.tab-bar-tools .btn {
+  align-self: center;
+  margin-right: var(--sp-2);
+}
+
 .tab-bar-brand {
   display: flex;
   align-items: center;
@@ -518,6 +529,11 @@ input[type='checkbox'] {
   align-self: stretch;
   font-size: 16px;
   color: var(--mist);
+}
+
+/* Tab strip is native chrome: full-height rectangle hover, no capsule. */
+.tab-new::before {
+  content: none;
 }
 
 .tab-new:hover {
@@ -729,17 +745,23 @@ input[type='checkbox'] {
   color: var(--ink);
 }
 
-/* The ticket title, editable inline in the header. */
+/* The ticket title, editable inline in the header. A textarea so a long
+   title wraps and grows in place instead of scrolling or truncating; height
+   is set from script (see the title auto-grow effect), never a fixed rows. */
 .view-title-input {
+  display: block;
   flex: 1;
+  width: 100%;
   min-width: 0;
   font-family: var(--font-sans);
+  line-height: 1.25;
   background: transparent;
   border: 0;
   border-radius: var(--radius-card);
   padding: 4px 8px;
   margin-left: -8px;
-  text-overflow: ellipsis;
+  resize: none;
+  overflow: hidden;
   transition: background var(--dur-colour) var(--swift);
 }
 
@@ -761,6 +783,14 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   gap: 22px;
+}
+
+/* The live-work readout in the ticket detail header, matching the cyan
+   elapsed prefix on the board and list. */
+.view-header .id.live {
+  font-size: var(--size-util);
+  color: var(--current);
+  white-space: nowrap;
 }
 
 /* ---------- board: warp bands, no lines ---------- */
@@ -884,8 +914,12 @@ input[type='checkbox'] {
   overflow-y: auto;
 }
 
-/* The thin line marking where a dragged card will land between cards. */
+/* The thin line marking where a dragged card will land between cards. An
+   empty flex child has a min-content height of 0, so in the one column long
+   enough to overflow it would be shrunk to nothing; flex: none keeps its
+   2px under overflow pressure (as .tab-drop-line does). */
 .drop-line {
+  flex: none;
   height: 2px;
   margin: 1px 2px;
   border-radius: 2px;
@@ -916,6 +950,12 @@ input[type='checkbox'] {
   opacity: 0.45;
 }
 
+/* Selection is carried by the card surface brightening, never a mark,
+   matching the List view's rows. */
+.ticket-card.selected {
+  background: var(--wash);
+}
+
 /* The punch: a quick mechanical depress in discrete steps. */
 .ticket-card.pressing,
 .pressing {
@@ -923,30 +963,10 @@ input[type='checkbox'] {
   transition: transform var(--dur-press) var(--punch-step);
 }
 
-.punch-mark {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1px solid var(--current);
-  transform: translate(-50%, -50%) scale(0.4);
-  opacity: 0;
-  pointer-events: none;
-  animation: punch 420ms steps(4, jump-end) forwards;
-  z-index: 2;
-}
-
-@keyframes punch {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
-  25% { opacity: 0.9; transform: translate(-50%, -50%) scale(1); }
-  60% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.15); }
-}
-
 .ticket-card-top {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 14px;
 }
 
 .priority-dot {
@@ -955,6 +975,60 @@ input[type='checkbox'] {
   border-radius: 50%;
   flex-shrink: 0;
   margin-top: 7px;
+}
+
+/* The card's lead slot holds either the status dot or the selection
+   checkbox, stacked in the same box so swapping between them never shifts
+   the title's shared left edge, mirroring the List view's row lead slot.
+   At rest the dot shows; on hover, or once any card is selected (the
+   board's .selecting class), the checkbox takes over for every card. The
+   slot is centred vertically on the title's first line and centred
+   horizontally between the card edge and the title text, bleeding into
+   the card's left padding so the title's own left edge does not move. */
+.card-lead {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: calc((var(--size-body) * 1.5 - 18px) / 2);
+  margin-left: -4px;
+}
+
+.card-lead .priority-dot {
+  margin-top: 0;
+  opacity: 1;
+  transition: opacity var(--dur-colour) var(--swift), transform var(--dur-glide) var(--swift);
+}
+
+.card-lead .card-check {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.5);
+  transition: opacity var(--dur-colour) var(--swift), transform var(--dur-glide) var(--swift);
+}
+
+.ticket-card:hover .card-lead .priority-dot,
+.board.selecting .card-lead .priority-dot {
+  opacity: 0;
+  transform: scale(0.4);
+}
+
+.ticket-card:hover .card-lead .card-check,
+.board.selecting .card-lead .card-check {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+/* As on the List: unchecked rims strengthen in checkbox mode so the
+   change-over reads. */
+.board.selecting .card-lead .hole-mark {
+  box-shadow: inset 0 0 0 1.5px var(--slate);
 }
 
 .ticket-card-title {
@@ -995,33 +1069,60 @@ input[type='checkbox'] {
 
 .ticket-card.live {
   background: var(--raise-2);
+  /* Matches .ticket-card's own border-radius, which is the surface token,
+     not the card token; the ring must hug the host's real corners. */
+  --live-ring-radius: var(--radius-surface);
 }
 
-.ticket-card.live::after {
-  content: '';
+.list-row.live {
+  --live-ring-radius: var(--radius-seat);
+}
+
+/* The ring is an SVG rounded-rect traced by two dashes rather than a conic
+   gradient. A conic gradient sweeps by angle, so on a non-square card it
+   moves unevenly: fast across short edges and corners, slow through
+   long-edge middles. pathLength={1} normalises the rect's traced path to
+   arc length 0-1 regardless of its real size, so animating
+   stroke-dashoffset moves the comet at constant speed for any aspect
+   ratio. See LiveRing.tsx for the markup this styles. */
+.live-ring {
   position: absolute;
   inset: 0;
-  border-radius: var(--radius-card);
-  padding: 1.25px;
-  background: conic-gradient(
-    from var(--orbit),
-    transparent 0turn 0.8turn,
-    rgba(34, 211, 238, 0) 0.8turn,
-    var(--current) 0.92turn,
-    var(--current-soft) 0.96turn,
-    transparent 1turn
-  );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  animation: orbit 7s linear infinite;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
 
+.live-ring rect {
+  fill: none;
+  stroke-width: 1.25px;
+  x: 0.625px;
+  y: 0.625px;
+  width: calc(100% - 1.25px);
+  height: calc(100% - 1.25px);
+  rx: var(--live-ring-radius, var(--radius-card));
+  stroke-linecap: round;
+  stroke-dashoffset: 0;
+  animation: orbit 7s linear infinite;
+}
+
+/* Both dashes share the same start position on the path, so one animation
+   drives both: the bright head leads, the soft tail trails behind it. */
+.live-ring-tail {
+  stroke: var(--current-soft);
+  stroke-dasharray: 0.2 0.8;
+}
+
+.live-ring-head {
+  stroke: var(--current);
+  stroke-dasharray: 0.07 0.93;
+}
+
+/* An increasing dashoffset moves the pattern against the path direction;
+   an SVG rect's path runs clockwise, so this travels anticlockwise. */
 @keyframes orbit {
   to {
-    --orbit: -1turn;
+    stroke-dashoffset: 1;
   }
 }
 
@@ -1152,6 +1253,9 @@ input[type='checkbox'] {
 }
 
 .props-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 10px;
 }
 
@@ -1599,6 +1703,12 @@ input[type='checkbox'] {
   margin-top: 26px;
 }
 
+/* A destructive footer action (for example Edit type's "Remove type")
+   stands alone on the left, away from Cancel/Save on the right. */
+.modal-actions-left {
+  margin-right: auto;
+}
+
 /* ---------- project info card ---------- */
 
 .info-card {
@@ -1889,6 +1999,42 @@ input[type='checkbox'] {
   font-size: 13px;
 }
 
+/* ---------- spec gate: dedicated screens for a spec-version mismatch ---------- */
+
+.spec-gate {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+  background: var(--bg-1);
+}
+
+.spec-gate .section-heading {
+  margin: 0;
+}
+
+.spec-gate-body {
+  max-width: 30rem;
+  font-size: var(--size-body);
+  color: var(--slate);
+  line-height: 1.6;
+}
+
+/* The migration plan reads as a left-aligned block within the otherwise
+   centred gate, the same width as the body copy above it. */
+.spec-gate-plan {
+  width: 100%;
+  max-width: 30rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
 /* ---------- block editor ---------- */
 
 .block-editor {
@@ -2008,12 +2154,16 @@ input[type='checkbox'] {
 /* ---------- motion floor ---------- */
 
 @media (prefers-reduced-motion: reduce) {
-  .ticket-card.live::after {
+  .live-ring rect {
     animation: none;
-    background: conic-gradient(from 0deg, rgba(34, 211, 238, 0.25) 0turn 1turn);
+    stroke-dasharray: none;
   }
-  .punch-mark {
-    animation-duration: 1ms;
+  .live-ring-head {
+    display: none;
+  }
+  .live-ring-tail {
+    stroke: var(--current);
+    opacity: 0.25;
   }
   .type-caret {
     animation: none;
@@ -2026,6 +2176,7 @@ input[type='checkbox'] {
   .modal,
   .info-card,
   .digest-card,
+  .records-card,
   .toast,
   .toast.notice::after,
   .view-header,
@@ -2240,6 +2391,20 @@ input[type='checkbox'] {
 .comment-editor .lexical-toolbar {
   padding-left: 0;
   padding-right: 0;
+}
+
+/* With the rail removed, only the content's own 16px inset offsets the first
+   character, so the placeholder follows it to keep the glyph-exact overlap. */
+.body-editor .lexical-placeholder,
+.comment-editor .lexical-placeholder {
+  left: 16px;
+}
+
+/* Without the rail the block drag handle (translated 4px in by Lexical) would
+   sit on top of the first character; pull it left into the card gutter. */
+.body-editor .drag-handle,
+.comment-editor .drag-handle {
+  margin-left: -10px;
 }
 
 /* ---------- empty regions: the unpunched card ---------- */
@@ -2566,11 +2731,12 @@ input[type='checkbox'] {
 
 .lexical-placeholder {
   position: absolute;
-  top: 64px;
+  top: 14px;
   left: 42px;
   pointer-events: none;
   color: var(--mist);
   font-size: var(--size-body);
+  line-height: 1.6;
 }
 
 .read-only .lexical-placeholder {
@@ -3411,13 +3577,13 @@ input[type='checkbox'] {
 }
 
 .dropdown-option.danger {
-  color: var(--bad-fg);
+  color: var(--pop-bad);
 }
 
 .dropdown-option.danger:hover,
 .dropdown-option.danger.highlight {
-  background: var(--bad-bg);
-  color: var(--bad-fg);
+  background: var(--pop-bad-wash);
+  color: var(--pop-bad);
 }
 
 /* ---------- project init wizard ---------- */
@@ -3603,17 +3769,6 @@ input[type='checkbox'] {
   color: var(--current);
 }
 
-.wizard-field.locked {
-  background: var(--bg-1);
-}
-
-.wizard-locked-name {
-  font-size: var(--size-body);
-  font-weight: 600;
-  color: var(--ink);
-  min-width: 60px;
-}
-
 /* Remove-from-recents button on a recent-row. */
 .recent-row {
   position: relative;
@@ -3650,14 +3805,6 @@ input[type='checkbox'] {
   width: 52rem;
 }
 
-.wizard-section-title {
-  font-size: var(--size-anchor);
-  font-weight: 600;
-  letter-spacing: -0.012em;
-  color: var(--ink);
-  margin: 40px 0 16px;
-}
-
 .wizard-table {
   display: flex;
   flex-direction: column;
@@ -3685,13 +3832,14 @@ input[type='checkbox'] {
 }
 
 .cols-status {
-  grid-template-columns: minmax(0, 1fr) 150px 64px 80px 34px;
-}
-.cols-type {
-  grid-template-columns: minmax(0, 1fr) 150px 150px 84px 34px;
+  grid-template-columns: minmax(0, 1fr) 150px 380px 34px;
 }
 .cols-priority {
   grid-template-columns: minmax(0, 1fr) 34px;
+}
+/* The selected type's properties: one concise row, sized to its content. */
+.cols-type-props {
+  grid-template-columns: minmax(0, 1fr) 150px minmax(0, 1fr) 76px;
 }
 .cols-field {
   grid-template-columns: minmax(0, 1fr) 150px 140px 76px 34px;
@@ -3704,7 +3852,7 @@ input[type='checkbox'] {
 }
 
 /* Settings sections: forms sit at a comfortable measure, and the Team section's
-   own Save bar mirrors the shared workflow one. */
+   own Save bar mirrors the shared schema one. */
 .settings-section {
   max-width: 760px;
 }
@@ -3716,6 +3864,113 @@ input[type='checkbox'] {
 }
 .info-card-actions {
   margin-top: 18px;
+}
+
+/* The status row's agent-role choice: None / Ready / In Progress / Complete,
+   a radio group sharing the punchcard-hole language with the checkbox (a
+   rimmed circle that punches in when selected) rather than a new species. */
+.role-radios {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.role-radio {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--size-util);
+  color: var(--slate);
+  cursor: pointer;
+}
+
+.role-radio input {
+  position: absolute;
+  inset: 0;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.role-radio-mark {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--hole-rim);
+  flex-shrink: 0;
+  transition: box-shadow var(--dur-colour) var(--swift);
+}
+
+.role-radio-mark::after {
+  content: '';
+  position: absolute;
+  inset: 3.5px;
+  border-radius: 50%;
+  background: var(--current);
+  transform: scale(0);
+  transition: transform var(--dur-colour) var(--swift);
+}
+
+.role-radio:hover .role-radio-mark {
+  box-shadow: inset 0 0 0 1.5px var(--slate);
+}
+
+.role-radio input:checked ~ .role-radio-mark::after {
+  transform: scale(1);
+}
+
+.role-radio input:focus-visible ~ .role-radio-mark {
+  outline: 1.5px solid var(--current);
+  outline-offset: 2px;
+}
+
+.role-radio-label {
+  transition: color var(--dur-colour) var(--swift);
+}
+
+.role-radio input:checked ~ .role-radio-label {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* "Add type" sits at the end of the type tab strip; a tertiary action stays
+   typographic rather than boxed. */
+.type-tab-add {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mist);
+  padding: 8px 6px;
+  transition: color var(--dur-colour) var(--swift);
+}
+
+.type-tab-add:hover {
+  color: var(--ink);
+}
+
+/* The type tab strip and its "+ Add type" action sit together on the open
+   canvas, above the selected type's card. */
+.type-tabs-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.type-id-example {
+  margin-top: var(--sp-2);
+}
+
+.type-editor {
+  margin-top: var(--sp-3);
+}
+
+/* Priorities sits at the far edge of the type tabs row, balancing the seats. */
+.type-tabs-row .btn {
+  margin-left: auto;
 }
 
 .wizard-handle {
@@ -3745,28 +4000,90 @@ input[type='checkbox'] {
 .wizard-fields {
   display: flex;
   flex-direction: column;
+  gap: 4px;
+}
+
+/* The fields list: quiet read-only rows, one per field, that expand in
+   place into the editor below (Documents/TicketDetail's read-first pattern
+   applied to the schema editor). Locked defaults (Title, Body) share the
+   same grid and seat shape but never open: there is nothing to edit. */
+.field-row-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 84px;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: 11px var(--sp-3);
+  border-radius: var(--radius-seat);
+}
+
+.field-row {
+  text-align: left;
+  transition: background var(--dur-colour) var(--swift);
+}
+
+.field-row:hover {
+  background: var(--wash);
+}
+
+.field-row-lead {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
+  min-width: 0;
 }
 
-.wizard-field-head {
-  padding: 0 6px 4px;
-  margin-top: 4px;
+.field-row-name {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.wizard-frow {
-  background: var(--raise);
-  border-radius: var(--radius-card);
-  padding: 8px 6px;
+.field-row-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-row-note {
+  justify-self: end;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The open row materialises a raised surface to carry "this is open"; its
+   own padding keeps the header and wells aligned with the read rows' text. */
+.field-row-open {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  background: var(--raise);
+  border-radius: var(--radius-surface);
+}
+
+.field-row-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  border-radius: var(--radius-seat);
+}
+
+.field-row-collapse {
+  margin-left: auto;
+}
+
+.wizard-field-head {
+  padding-bottom: 4px;
 }
 
 .wizard-fsub {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 0 6px 2px;
 }
 
 .wizard-enum-list {
@@ -3774,14 +4091,6 @@ input[type='checkbox'] {
   flex-direction: column;
   gap: 6px;
   padding-left: 24px;
-}
-
-.wizard-locked-tag {
-  justify-self: center;
-  font-size: 0.625rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--mist);
 }
 
 .btn-small {
@@ -3802,7 +4111,7 @@ input[type='checkbox'] {
 }
 
 /* ============================================================
-   Sidebar groups, search, the agent seat, and the new views.
+   Sidebar groups, search, and the new views.
    Separation between nav groups stays whitespace, never a line.
    ============================================================ */
 
@@ -3837,94 +4146,6 @@ input[type='checkbox'] {
 .nav-sep {
   height: 22px;
   flex-shrink: 0;
-}
-
-/* ---------- the agent's seat: a small resting card ---------- */
-
-.agent-seat {
-  background: var(--raise);
-  border-radius: var(--radius-region);
-  /* Bleed into the gutter like the nav rows above (their -10px bleed) so the
-     card's edges line up with them; 10px padding keeps the content on the same
-     28px rail as the nav items. */
-  margin: 0 -10px;
-  padding: 12px 10px;
-}
-
-.seat-top {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: var(--size-util);
-}
-
-.seat-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--mist);
-  transition: background var(--dur-glide) var(--swift), box-shadow var(--dur-glide) var(--swift);
-}
-
-/* Awake: the one electric signal, breathing slowly like the thread. */
-.seat-dot.awake {
-  background: var(--current);
-  box-shadow: 0 0 0 3px var(--wash);
-  animation: seat-breathe 2.6s ease-in-out infinite;
-}
-
-@keyframes seat-breathe {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.seat-name {
-  color: var(--ink);
-}
-
-.seat-state {
-  margin-left: auto;
-  color: var(--slate);
-}
-
-.seat-state.live {
-  color: var(--current);
-}
-
-.seat-task {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 10px;
-  font-size: var(--size-util);
-}
-
-.seat-task .key {
-  color: var(--mist);
-}
-
-.seat-link {
-  color: var(--slate);
-  font: inherit;
-  background: transparent;
-  transition: color var(--dur-colour) var(--swift);
-}
-
-.seat-link:hover {
-  color: var(--current);
-}
-
-.seat-idle {
-  color: var(--mist);
-}
-
-.seat-tools {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  /* Same -10px gutter bleed as the card and nav rows. */
-  margin: 12px -10px 0;
 }
 
 /* The footer bar: Settings pinned bottom-left (styled like a nav row), with the
@@ -3974,29 +4195,11 @@ input[type='checkbox'] {
   background: var(--raise-2);
 }
 
-/* The theme and digest buttons: exact squares, the same height as the Settings
-   row. A fixed width and height (not aspect-ratio, which a flex row ignores on
-   the main axis) guarantees the square. */
-.footer-tools .seat-tool {
-  width: var(--footer-h);
-  height: var(--footer-h);
-  min-width: 0;
-  padding: 0;
-  border-radius: var(--radius-seat);
-}
-
 .count-note.snag-error {
   color: var(--bad-fg);
 }
 .count-note.snag-warning {
   color: var(--warn-fg);
-}
-
-.seat-tools-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 /* Icon-only utility controls: a quiet square that lifts on hover, the icon
@@ -4219,6 +4422,29 @@ input[type='checkbox'] {
   padding: 16px 18px;
 }
 
+/* Sessions and Problems, moved into Settings, share the digest modal's
+   surface treatment: a wider card since their rows carry more columns. */
+.records-card {
+  width: 56rem;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-0);
+  border-radius: var(--radius-float);
+  padding: 26px 28px 28px;
+  animation: pop-rise var(--dur-glide) var(--swift);
+}
+
+.records-well {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--well);
+  border-radius: var(--radius-card);
+  padding: 6px;
+}
+
 /* ---------- file preview modal ---------- */
 
 .file-preview-card {
@@ -4311,12 +4537,6 @@ input[type='checkbox'] {
   height: auto !important;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .seat-dot.awake {
-    animation: none;
-  }
-}
-
 /* ---------- shared: a real section heading inside a view ---------- */
 
 .section-heading {
@@ -4396,8 +4616,61 @@ input[type='checkbox'] {
   background: var(--wash);
 }
 
+/* Selection is carried by the seat surface brightening, never a mark. */
+.list-row.selected {
+  background: var(--wash);
+}
+
 .list-row .priority-dot {
   margin-top: 0;
+}
+
+/* The leading slot holds either the status dot or the selection checkbox,
+   stacked in the same box so swapping between them never shifts the
+   title's shared left edge. At rest the dot shows; on hover, or once any
+   row is selected (the .selecting container class), the checkbox takes
+   over for every row. */
+.list-row-lead {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.list-row-lead .priority-dot {
+  opacity: 1;
+  transition: opacity var(--dur-colour) var(--swift), transform var(--dur-glide) var(--swift);
+}
+
+.list-row-lead .list-row-check {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.5);
+  transition: opacity var(--dur-colour) var(--swift), transform var(--dur-glide) var(--swift);
+}
+
+.list-row:hover .list-row-lead .priority-dot,
+.list-scroll.selecting .list-row-lead .priority-dot {
+  opacity: 0;
+  transform: scale(0.4);
+}
+
+.list-row:hover .list-row-lead .list-row-check,
+.list-scroll.selecting .list-row-lead .list-row-check {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+/* An unchecked hole is only a faint rim, so the swap would be invisible;
+   in checkbox mode the rims strengthen so the change-over reads. */
+.list-scroll.selecting .list-row-lead .hole-mark {
+  box-shadow: inset 0 0 0 1.5px var(--slate);
 }
 
 .list-row-title {
@@ -4462,7 +4735,76 @@ input[type='checkbox'] {
   padding: 11px 14px;
 }
 
-/* ---------- the Automations view ---------- */
+/* The bulk-action bar: a pop-palette floating panel centred at the bottom
+   of the view while one or more rows are selected. Stays under the modal
+   backdrop's z-index (50). */
+.bulk-bar {
+  position: fixed;
+  left: 50%;
+  bottom: var(--sp-5);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--pop-bg);
+  color: var(--pop-ink);
+  border-radius: var(--radius-float);
+  box-shadow: var(--pop-shadow);
+  z-index: 40;
+  animation: pop-rise-centred var(--dur-glide) var(--swift);
+}
+
+.bulk-count {
+  font-size: var(--size-body);
+  white-space: nowrap;
+}
+
+/* The bulk bar is an inverted pop surface, so the controls on it take the
+   pop palette; their usual app-surface tokens disappear against it. */
+.bulk-bar .btn-ghost {
+  color: var(--pop-soft);
+}
+
+.bulk-bar .btn-ghost::before {
+  background: var(--pop-wash);
+}
+
+.bulk-bar .btn-ghost:hover:not(:disabled) {
+  color: var(--pop-ink);
+}
+
+.bulk-bar .btn-secondary {
+  background: var(--pop-wash);
+  color: var(--pop-soft);
+}
+
+.bulk-bar .btn-secondary:hover:not(:disabled) {
+  background: var(--pop-wash);
+  color: var(--pop-ink);
+}
+
+.bulk-bar .btn-danger {
+  background: var(--pop-bad-wash);
+  color: var(--pop-bad);
+}
+
+.bulk-bar .dropdown-trigger {
+  color: var(--pop-soft);
+  background: var(--pop-wash);
+}
+
+.bulk-bar .dropdown-trigger:hover:not(:disabled) {
+  background: var(--pop-wash);
+  color: var(--pop-ink);
+}
+
+.bulk-bar .dropdown-trigger.open {
+  background: var(--pop-wash);
+  color: var(--pop-current);
+}
+
+/* ---------- tabbed views (Settings, and any nested tab strip) ---------- */
 
 /* Tabbed views stack the title over the tab bar, so the tabs sit under the
    title rather than competing with it alongside. */
@@ -4525,446 +4867,32 @@ input[type='checkbox'] {
   color: var(--ink);
 }
 
-.transition-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 18px;
-  border-radius: var(--radius-card);
-}
-
-.transition-row:nth-child(odd) {
-  background: var(--band);
-}
-
-.transition-from {
+/* A tab that carries a trailing action (the active type tab's edit pencil)
+   splits into two sibling controls, since a button cannot nest inside a
+   button; together they still read as one seat capsule. The seat is
+   measured from this wrapper (see ViewTabs) so it covers both. */
+.view-tab-group {
   display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-size: var(--size-body);
-  color: var(--ink);
-  width: 9rem;
-  flex-shrink: 0;
+  align-items: stretch;
 }
 
-.transition-from .priority-dot {
-  margin-top: 0;
+.view-tab-group .view-tab {
+  padding-right: var(--sp-1);
 }
 
-.transition-arrow {
-  color: var(--mist);
-  flex-shrink: 0;
-}
-
-.transition-targets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-}
-
-.transition-target {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: var(--size-body);
-  color: var(--slate);
-}
-
-.transition-target .priority-dot {
-  margin-top: 0;
-  width: 6px;
-  height: 6px;
-}
-
-/* ---------- automations as wired workflow rails ----------
-   An automation is a transition with a reaction tied to it: it reads as the
-   workflow edge it fires on (the same status hues the Workflow and Board
-   views use), a loom thread carrying the work across, then the action.
-   Agent threads run the cyan signal; shell commands run warm. */
-
-.flow-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.flow-rail {
-  background: var(--raise);
-  border-radius: var(--radius-region);
-  padding: 18px 22px;
-  transition: background var(--dur-colour) var(--swift);
-}
-
-.flow-rail:hover {
-  background: var(--raise-2);
-}
-
-.flow-rail-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1.4fr);
-  align-items: center;
-  gap: 4px;
-}
-
-.flow-eyebrow {
-  display: block;
-  font-size: 11px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--mist);
-  margin-bottom: 10px;
-}
-
-/* The move: a real workflow edge, dots in the status hues. */
-.flow-move {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex-wrap: wrap;
-}
-
-.flow-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-/* "Any status" is an open, unpunched hole. */
-.flow-dot.any {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--hole-rim);
-}
-
-.flow-status {
-  font-size: var(--size-body);
-  color: var(--slate);
-  white-space: nowrap;
-}
-
-.flow-status.to {
-  color: var(--ink);
-  font-weight: 500;
-}
-
-.flow-status.pending {
-  color: var(--mist);
-}
-
-.flow-arrow {
-  color: var(--mist);
-  flex-shrink: 0;
-  margin: 0 1px;
-}
-
-.flow-quals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 11px;
-}
-
-.flow-qual {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: var(--size-util);
-  padding: 3px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--band);
-  color: var(--ink);
-}
-
-.flow-qual-key {
-  color: var(--mist);
-}
-
-/* The loom thread: links the landing status to the reaction. */
-.flow-thread {
+.view-tab-action {
   position: relative;
-  align-self: center;
-  height: 2px;
-}
-
-.flow-thread::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 2px;
-  background: var(--raise-2);
-}
-
-.flow-thread::after {
-  /* the arrowhead landing on the action */
-  content: '';
-  position: absolute;
-  right: -1px;
-  top: 50%;
-  width: 5px;
-  height: 5px;
-  border-top: 1.5px solid var(--mist);
-  border-right: 1.5px solid var(--mist);
-  transform: translateY(-50%) rotate(45deg);
-}
-
-.flow-knot {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--slate);
-  transform: translate(-50%, -50%);
-}
-
-.is-agent .flow-thread::before {
-  background: linear-gradient(90deg, var(--wash-2), var(--current));
-}
-
-.is-agent .flow-thread::after {
-  border-color: var(--current);
-}
-
-.is-agent .flow-knot {
-  background: var(--current);
-  box-shadow: 0 0 7px -1px var(--current);
-}
-
-.is-run .flow-thread::before {
-  background: linear-gradient(90deg, var(--raise-2), var(--warn-fg));
-  opacity: 0.7;
-}
-
-.flow-response {
-  min-width: 0;
-}
-
-.flow-response-head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.flow-response-head .flow-eyebrow {
-  flex: 1;
-  min-width: 0;
-  margin-bottom: 10px;
-}
-
-.flow-rail-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-/* Edit and Delete stay quiet until the rail is touched. */
-.flow-rail-actions .btn-ghost {
-  opacity: 0;
-  padding: 4px 9px;
-  transition: opacity var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
-}
-
-.flow-rail:hover .flow-rail-actions .btn-ghost,
-.flow-rail:focus-within .flow-rail-actions .btn-ghost {
-  opacity: 1;
-}
-
-.flow-action-kind {
+  z-index: 1;
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  font-size: var(--size-util);
-  color: var(--slate);
+  padding: 0 var(--sp-2) 0 2px;
+  color: var(--mist);
+  border-radius: var(--radius-seat);
+  transition: color var(--dur-colour) var(--swift);
 }
 
-.flow-action-glyph {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-card);
-  flex-shrink: 0;
-}
-
-.is-agent .flow-action-glyph {
-  color: var(--current);
-  background: var(--wash);
-}
-
-.is-run .flow-action-glyph {
-  color: var(--warn-fg);
-  background: var(--warn-bg);
-}
-
-.flow-action-glyph svg {
-  width: 14px;
-  height: 14px;
-}
-
-.flow-payload {
-  font-size: var(--size-body);
-  line-height: 1.55;
+.view-tab-action:hover {
   color: var(--ink);
-  margin-top: 9px;
-}
-
-.flow-payload.mono {
-  font-size: var(--size-util);
-  line-height: 1.7;
-}
-
-/* ---------- automations CRUD ---------- */
-
-.section-head-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-
-.section-head-row .section-heading {
-  margin: 0;
-}
-
-.section-head-row .btn {
-  margin-left: auto;
-}
-
-.automation-modal {
-  width: 40rem;
-}
-
-/* The live rail: the automation as the workflow edge it builds, in a
-   recessed well so it reads as a preview rather than another input. */
-.flow-preview {
-  display: grid;
-  grid-template-columns: minmax(0, auto) 56px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  background: var(--well);
-  border-radius: var(--radius-region);
-  padding: 16px 20px;
-  margin-bottom: 26px;
-}
-
-.flow-preview-action {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-.flow-preview-payload {
-  min-width: 0;
-  font-size: var(--size-body);
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.flow-preview-payload.mono {
-  font-size: var(--size-util);
-}
-
-.flow-preview-payload.pending {
-  color: var(--mist);
-}
-
-/* The builder, grouped as the same two halves the rail reads in. */
-.flow-form-section {
-  margin-bottom: 22px;
-}
-
-.flow-section-eyebrow {
-  font-size: 11px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--mist);
-  margin: 0 0 12px;
-}
-
-/* From -> to, the move stated as the edge it is. */
-.flow-build-move {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  margin-bottom: 4px;
-}
-
-.flow-build-field {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.flow-build-arrow {
-  color: var(--mist);
-  flex-shrink: 0;
-  padding-bottom: 9px;
-}
-
-/* A full-width segmented control for the run/agent choice. */
-.kind-toggle {
-  display: flex;
-  gap: 4px;
-  background: var(--raise);
-  border-radius: var(--radius-card);
-  padding: 3px;
-  margin-bottom: 12px;
-}
-
-.kind-option {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--slate);
-  padding: 9px 12px;
-  border-radius: 4px;
-  transition: background var(--dur-colour) var(--swift), color var(--dur-colour) var(--swift);
-}
-
-.kind-option svg {
-  width: 14px;
-  height: 14px;
-}
-
-.kind-option:hover {
-  color: var(--ink);
-}
-
-.kind-option.active {
-  background: var(--wash);
-  color: var(--current);
-}
-
-.cond-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.cond-edit-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.cond-edit-row .form-input {
-  flex: 1;
-}
-
-.cond-add {
-  align-self: flex-start;
-  color: var(--mist);
 }
 
 /* ---------- the documentation graph ---------- */

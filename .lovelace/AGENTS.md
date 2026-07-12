@@ -13,7 +13,7 @@ This project's tickets, documentation and session history live in `.lovelace/` a
 - Include the active ticket ID in every commit message.
 
 ## Resolving a ticket
-When you finish or pause work, move the ticket with update_ticket to the status that reflects what happened. You may only use the transitions the project's workflow allows out of the current status; the session-start digest lists those legal next statuses for each in-progress ticket. Choose from that list, and never invent a status or attempt a move the workflow does not allow. When a move needs explaining (for example you are handing the ticket back because you are blocked), add a comment saying what you need. Follow any direction the project gives for a transition in documentation/index.md or its automations.
+When you finish or pause work, move the ticket with update_ticket to the status that reflects what happened: the status tagged `agent: in_progress` while you are actively working it, the status tagged `agent: complete` once it is done, or any other status defined in schema.yaml if you are pausing or handing it back. Call describe_schema to see the statuses and their agent roles; any status defined there is a legal move, there is no configured flow gating it. When a move needs explaining (for example you are handing the ticket back because you are blocked), add a comment saying what you need.
 
 ## Before you finish
 - Write a session record with the log_session tool: approach, what happened, the outcome, commit SHAs, and any open questions.

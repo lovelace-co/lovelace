@@ -98,6 +98,11 @@ describe('BlockEditor component (Lexical)', () => {
     expect(screen.getByLabelText('block type')).toBeTruthy();
   });
 
+  it('renders the placeholder inside the scroller so it lines up with typed text (T-0113)', () => {
+    renderEditor('');
+    expect(document.querySelector('.lexical-scroller .lexical-placeholder')).not.toBeNull();
+  });
+
   it('read-only mode renders formatted without an editable surface or toolbar', () => {
     render(<BlockEditor source={'A paragraph.\n'} onChange={vi.fn()} readOnly />);
     expect(screen.getByText('A paragraph.')).toBeTruthy();

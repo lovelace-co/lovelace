@@ -11,7 +11,7 @@ function renderField(def: FieldDef, value: unknown, onChange = vi.fn()) {
     <FieldInput
       def={def}
       value={value}
-      workflow={snapshot.workflow}
+      schema={snapshot.schema}
       index={snapshot.index}
       actors={snapshot.actors}
       onChange={onChange}
@@ -37,7 +37,7 @@ describe('FieldInput renders from the schema, not hard-coded fields', () => {
     expect(onChange).toHaveBeenCalledWith('production');
   });
 
-  it('enum with values_from priorities uses workflow priorities', () => {
+  it('enum with values_from priorities uses schema priorities', () => {
     renderField({ name: 'priority', type: 'enum', values_from: 'priorities' }, 'high');
     fireEvent.click(screen.getByLabelText('priority'));
     const listbox = screen.getByRole('listbox', { name: 'priority' });

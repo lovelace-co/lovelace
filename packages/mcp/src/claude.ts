@@ -67,7 +67,7 @@ This project's tickets, documentation and session history live in \`.lovelace/\`
 - Include the active ticket ID in every commit message.
 
 ## Resolving a ticket
-When you finish or pause work, move the ticket with update_ticket to the status that reflects what happened. You may only use the transitions the project's workflow allows out of the current status; the session-start digest lists those legal next statuses for each in-progress ticket. Choose from that list, and never invent a status or attempt a move the workflow does not allow. When a move needs explaining (for example you are handing the ticket back because you are blocked), add a comment saying what you need. Follow any direction the project gives for a transition in documentation/index.md or its automations.
+When you finish or pause work, move the ticket with update_ticket to the status that reflects what happened: the status tagged \`agent: in_progress\` while you are actively working it, the status tagged \`agent: complete\` once it is done, or any other status defined in schema.yaml if you are pausing or handing it back. Call describe_schema to see the statuses and their agent roles; any status defined there is a legal move, there is no configured flow gating it. When a move needs explaining (for example you are handing the ticket back because you are blocked), add a comment saying what you need.
 
 ## Before you finish
 - Write a session record with the log_session tool: approach, what happened, the outcome, commit SHAs, and any open questions.
@@ -178,14 +178,31 @@ function writeHooks(root: string, options: ClaudeAssetOptions, result: ClaudeAss
     }
     hooks[event] = list;
   };
+  // Migration (ADR-0012): older installs also fired presence-clear on Stop.
+  // session-check now folds that clear in when a stop passes, so a
+  // leftover Stop entry is stale; strip it, leaving any other Stop hook
+  // (including one a user added by hand) untouched. SessionEnd keeps its
+  // own presence-clear entry below. Idempotent: nothing to strip once
+  // removed.
+  if (Array.isArray(hooks.Stop)) {
+    hooks.Stop = (hooks.Stop as Array<{ matcher?: string; hooks: Array<{ command: string }> }>).filter(
+      (entry) => !entry.hooks?.every((h) => h.command?.endsWith(' presence-clear')),
+    );
+  }
   ensure('SessionStart', undefined, `${helper} digest`);
   ensure('Stop', undefined, `${helper} session-check`);
   ensure('PreToolUse', 'Edit|Write', `${helper} guard`);
-  // The live-agent marker: on while a turn is processing, off between turns
-  // and when the session ends for any reason.
+  // The live-agent marker: written at turn start, cleared when a passing
+  // stop lets the turn end or the session ends outright (ADR-0012).
   ensure('UserPromptSubmit', undefined, `${helper} presence-start`);
-  ensure('Stop', undefined, `${helper} presence-clear`);
   ensure('SessionEnd', undefined, `${helper} presence-clear`);
+  // Per-session active-ticket marker, so concurrent sessions do not share
+  // the singleton slot that session-check enforces on Stop.
+  ensure('PostToolUse', 'mcp__lovelace__set_active_ticket', `${helper} track-active`);
+  // The heartbeat: refreshes every session's presence entry on every tool
+  // call, so the ring survives between prompts without relying on a
+  // started_at that never moves.
+  ensure('PostToolUse', undefined, `${helper} presence-beat`);
   settings.hooks = hooks;
   writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`);
   result.written.push('.claude/settings.json');
@@ -206,7 +223,7 @@ Work Lovelace ticket $ARGUMENTS:
 2. Use read_document on .lovelace/documentation/index.md and any documents the ticket references.
 3. Use search to find the last two session records referencing this ticket and read their open questions.
 4. Call set_active_ticket with the ticket ID.
-5. If the ticket is not already in progress, transition it with update_ticket.
+5. If the ticket is not already in progress, move it with update_ticket to the status tagged \`agent: in_progress\`.
 6. Summarise the ticket, its acceptance criteria and any open questions, then begin.
 `,
   );
@@ -220,7 +237,7 @@ Finish the active Lovelace ticket:
 
 1. Read .lovelace/state/active_ticket for the active ticket ID; if empty, ask which ticket to close.
 2. Re-read the ticket's acceptance criteria and check each one against what you actually did.
-3. Move the ticket with update_ticket to the status that reflects the outcome, choosing only from the legal transitions out of its current status (the digest lists them). If you are handing it back, add a comment explaining what you need. If the update response includes automation instructions, follow them.
+3. Move the ticket with update_ticket to the status tagged \`agent: complete\` if the work is done, or another status defined in schema.yaml that reflects the outcome. If you are handing it back, add a comment explaining what you need.
 4. Write the session record with log_session: approach, what happened, outcome, commit SHAs, open questions.
 5. Call set_active_ticket with null to clear it.
 `,

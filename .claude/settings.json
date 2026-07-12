@@ -18,14 +18,6 @@
             "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js session-check"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js presence-clear"
-          }
-        ]
       }
     ],
     "PreToolUse": [
@@ -55,6 +47,25 @@
           {
             "type": "command",
             "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js presence-clear"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js track-active"
+          }
+        ],
+        "matcher": "mcp__lovelace__set_active_ticket"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js presence-beat"
           }
         ]
       }

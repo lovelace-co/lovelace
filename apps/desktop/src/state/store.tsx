@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { HostClient } from '../lib/host';
+import { HostError, type HostClient } from '../lib/host';
 import type { Snapshot } from '../lib/types';
 import { STILL, derivePresence, type LivePresence } from '../lib/presence';
 
@@ -23,10 +23,20 @@ export function useHost(): HostClient {
   return host;
 }
 
+/** A failure loading the project; code/declared/supported ride along for a
+ * spec-version mismatch so the UI can render a dedicated screen instead of
+ * pattern-matching the message text. */
+export interface ProjectLoadError {
+  message: string;
+  code?: string;
+  declared?: string;
+  supported?: string;
+}
+
 export interface ProjectState {
   snapshot: Snapshot | null;
   loading: boolean;
-  error: string | null;
+  error: ProjectLoadError | null;
   /** Set when the files changed under an open editor. */
   externalChange: boolean;
   reload: () => Promise<void>;
@@ -54,7 +64,7 @@ export function useProject(root: string): ProjectState {
   const host = useHost();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ProjectLoadError | null>(null);
   const [externalChange, setExternalChange] = useState(false);
   const mutating = useRef(false);
   /** The optimistic baseline: the last snapshot known to match the files. */
@@ -68,7 +78,11 @@ export function useProject(root: string): ProjectState {
         setSnapshot(fresh);
         setError(null);
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        if (e instanceof HostError) {
+          setError({ message: e.message, code: e.code, declared: e.declared, supported: e.supported });
+        } else {
+          setError({ message: e instanceof Error ? e.message : String(e) });
+        }
       } finally {
         setLoading(false);
       }
@@ -82,9 +96,11 @@ export function useProject(root: string): ProjectState {
     let cleanup: (() => void) | undefined;
     let cancelled = false;
     void host
-      .watch(root, () => {
+      .watch(root, (change) => {
         if (mutating.current) return;
-        setExternalChange(true);
+        // Presence heartbeats refresh the snapshot but never raise the
+        // toast; only a non-presence path counts as an external change.
+        if (!change.presenceOnly) setExternalChange(true);
         void reload(true);
       })
       .then((unsub) => {
@@ -98,18 +114,18 @@ export function useProject(root: string): ProjectState {
     };
   }, [host, root, reload]);
 
-  // Presence is a marker file plus a clock: tick once a second while a
-  // marker exists, so the elapsed readout counts and a stale marker
-  // eventually falls out, and reset whenever a new turn begins. No
-  // marker, no timer.
+  // Presence is per-session marker files plus a clock: tick once a second
+  // while any marker exists, so the elapsed readouts count and a stale
+  // marker eventually falls out. Keyed on the entry count, not a
+  // timestamp, so a heartbeat refreshing beat_at does not churn the timer.
   const [presenceNow, setPresenceNow] = useState(() => Date.now());
-  const markerStartedAt = snapshot?.agentPresence?.started_at;
+  const presenceCount = snapshot?.agentPresences?.length ?? 0;
   useEffect(() => {
-    if (markerStartedAt === undefined) return;
+    if (presenceCount === 0) return;
     setPresenceNow(Date.now());
     const timer = setInterval(() => setPresenceNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [markerStartedAt]);
+  }, [presenceCount]);
 
   const apply = useCallback(
     async (
@@ -145,7 +161,7 @@ export function useProject(root: string): ProjectState {
   );
 
   const presence: ProjectPresence = snapshot
-    ? derivePresence(snapshot.agentPresence, snapshot.manifest.presence_timeout_minutes, presenceNow)
+    ? derivePresence(snapshot.agentPresences, snapshot.manifest.presence_timeout_minutes, presenceNow)
     : STILL;
 
   return {

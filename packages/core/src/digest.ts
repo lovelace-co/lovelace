@@ -10,8 +10,9 @@ export interface DigestOptions {
 
 /**
  * A compact orientation summary for agent session starts: in-progress work,
- * recent sessions with their open questions, and validation warnings.
- * Plain text, designed to be injected into an agent's context.
+ * work ready to pick up, recent sessions with their open questions, and
+ * validation warnings. Plain text, designed to be injected into an agent's
+ * context.
  */
 export function buildDigest(project: Project, options: DigestOptions = {}): string {
   const maxChars = options.maxChars ?? 5500;
@@ -19,26 +20,39 @@ export function buildDigest(project: Project, options: DigestOptions = {}): stri
   lines.push(`Lovelace digest for ${project.manifest.name}`);
   lines.push('');
 
-  const wipStatuses = new Set(
-    project.workflow.statuses.filter((s) => s.active).map((s) => s.name),
-  );
-  const wip = project.tickets
-    .filter((t) => wipStatuses.has(t.status))
-    .sort((a, b) => a.id.localeCompare(b.id));
-  lines.push('In progress:');
-  if (wip.length === 0) {
-    lines.push('  (nothing in progress)');
-  }
-  for (const t of wip) {
+  const ticketLine = (t: Project['tickets'][number]) => {
     const title = typeof t.fields.title === 'string' ? t.fields.title : '';
     const assignee = typeof t.fields.assignee === 'string' ? ` @${t.fields.assignee}` : '';
-    lines.push(`  ${t.id} [${t.status}]${assignee} ${title}`);
-    // The legal next statuses, so the agent resolves to a real status rather
-    // than inventing one. Only these transitions will be accepted.
-    const moves = project.workflow.transitions.find((tr) => tr.from === t.status)?.to ?? [];
-    if (moves.length > 0) {
-      lines.push(`    moves to: ${moves.join(', ')}`);
-    }
+    return `  ${t.id} [${t.status}]${assignee} ${title}`;
+  };
+
+  const inProgressStatuses = new Set(
+    project.schema.statuses.filter((s) => s.agent === 'in_progress').map((s) => s.name),
+  );
+  const inProgress = project.tickets
+    .filter((t) => inProgressStatuses.has(t.status))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  lines.push('In progress:');
+  if (inProgress.length === 0) {
+    lines.push('  (nothing in progress)');
+  }
+  for (const t of inProgress) {
+    lines.push(ticketLine(t));
+  }
+  lines.push('');
+
+  const readyStatuses = new Set(
+    project.schema.statuses.filter((s) => s.agent === 'ready').map((s) => s.name),
+  );
+  const ready = project.tickets
+    .filter((t) => readyStatuses.has(t.status))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  lines.push('Ready to pick up:');
+  if (ready.length === 0) {
+    lines.push('  (nothing ready)');
+  }
+  for (const t of ready) {
+    lines.push(ticketLine(t));
   }
   lines.push('');
 

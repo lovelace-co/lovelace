@@ -112,7 +112,7 @@ export async function setColumnOrder(
   ctx: MutationContext = {},
 ): Promise<void> {
   const project = loadProject(root);
-  if (!project.workflow.statuses.some((s) => s.name === status)) {
+  if (!project.schema.statuses.some((s) => s.name === status)) {
     throw new MutationError(`unknown status "${status}"`);
   }
   const known = new Set(project.tickets.map((t) => t.id));

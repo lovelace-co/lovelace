@@ -44,14 +44,66 @@ describe('installClaudeAssets', () => {
     expect(flat).toContain('session-check');
     expect(flat).toContain('guard');
     expect(flat).toContain('presence-start');
+    expect(flat).toContain('presence-beat');
     expect(flat).toContain('presence-clear');
+    expect(flat).toContain('track-active');
     expect(settings.hooks.UserPromptSubmit).toBeDefined();
     expect(settings.hooks.SessionEnd).toBeDefined();
-    expect(JSON.stringify(settings.hooks.Stop)).toContain('presence-clear');
+    expect(JSON.stringify(settings.hooks.SessionEnd)).toContain('presence-clear');
+    // presence-clear no longer fires on Stop: session-check folds that clear
+    // in itself when a stop passes (ADR-0012).
+    expect(JSON.stringify(settings.hooks.Stop)).not.toContain('presence-clear');
     expect(settings.hooks.PreToolUse[0].matcher).toBe('Edit|Write');
+    expect(settings.hooks.PostToolUse[0].matcher).toBe('mcp__lovelace__set_active_ticket');
+    expect(settings.hooks.PostToolUse[0].hooks[0].command).toContain('track-active');
+    // The heartbeat runs on every tool call, so it carries no matcher.
+    expect(settings.hooks.PostToolUse[1].matcher).toBeUndefined();
+    expect(settings.hooks.PostToolUse[1].hooks[0].command).toContain('presence-beat');
 
     expect(readFileSync(join(root, '.claude/commands/ticket.md'), 'utf8')).toContain('active_ticket');
     expect(readFileSync(join(root, '.claude/commands/done.md'), 'utf8')).toContain('acceptance criteria');
+  });
+
+  it('is idempotent: writing the hooks twice does not duplicate any entry', () => {
+    const root = fixture();
+    installClaudeAssets(root, OPTS);
+    installClaudeAssets(root, OPTS);
+    const settings = JSON.parse(readFileSync(join(root, '.claude/settings.json'), 'utf8'));
+    expect(settings.hooks.Stop).toHaveLength(1);
+    expect(settings.hooks.PostToolUse).toHaveLength(2);
+    expect(settings.hooks.SessionEnd).toHaveLength(1);
+  });
+
+  it('drops a Stop presence-clear entry left by an older install, keeping SessionEnd\'s and any other Stop hook', () => {
+    const root = fixture();
+    mkdirSync(join(root, '.claude'), { recursive: true });
+    writeFileSync(
+      join(root, '.claude/settings.json'),
+      JSON.stringify({
+        hooks: {
+          Stop: [
+            { hooks: [{ type: 'command', command: `${OPTS.helperCommand} session-check` }] },
+            { hooks: [{ type: 'command', command: `${OPTS.helperCommand} presence-clear` }] },
+            { hooks: [{ type: 'command', command: 'my-own-hook' }] },
+          ],
+          SessionEnd: [{ hooks: [{ type: 'command', command: `${OPTS.helperCommand} presence-clear` }] }],
+        },
+      }),
+    );
+    installClaudeAssets(root, OPTS);
+    const settings = JSON.parse(readFileSync(join(root, '.claude/settings.json'), 'utf8'));
+    const stopCommands = settings.hooks.Stop.flatMap((e: { hooks: Array<{ command: string }> }) =>
+      e.hooks.map((h) => h.command),
+    );
+    expect(stopCommands).toContain(`${OPTS.helperCommand} session-check`);
+    expect(stopCommands).toContain('my-own-hook');
+    expect(stopCommands).not.toContain(`${OPTS.helperCommand} presence-clear`);
+    expect(JSON.stringify(settings.hooks.SessionEnd)).toContain('presence-clear');
+
+    // Idempotent: running again over the already-migrated file changes nothing more.
+    installClaudeAssets(root, OPTS);
+    const again = JSON.parse(readFileSync(join(root, '.claude/settings.json'), 'utf8'));
+    expect(again.hooks.Stop).toHaveLength(2);
   });
 
   it('appends a delimited section to an existing CLAUDE.md without overwriting', () => {

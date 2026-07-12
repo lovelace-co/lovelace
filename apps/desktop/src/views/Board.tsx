@@ -1,13 +1,15 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BulkActions } from '../components/BulkActions';
 import { ContextMenu } from '../components/ContextMenu';
 import { Dropdown } from '../components/Dropdown';
+import { LiveRing } from '../components/LiveRing';
 import { AddIcon, CaretIcon } from '../components/icons';
 import { statusLabel, titleCase, typeLabel } from '../lib/format';
 import { STATUS_HUE_CSS, priorityFamily, statusHue } from '../lib/loom';
 import { punch, release } from '../lib/punch';
 import { formatElapsed } from '../lib/presence';
 import type { ProjectPresence } from '../state/store';
-import type { IndexTicket, Snapshot } from '../lib/types';
+import type { FieldDef, IndexTicket, Snapshot } from '../lib/types';
 
 interface BoardProps {
   snapshot: Snapshot;
@@ -16,12 +18,14 @@ interface BoardProps {
   /**
    * A human drop: the target column and that column's full ordered ticket
    * ids (with the dragged card placed at its new position). When the column
-   * differs from the card's current status, this is also a transition.
+   * differs from the card's current status, this also moves the ticket.
    */
   onReorder: (id: string, status: string, orderedIds: string[]) => void;
   onNewTicket: (status?: string) => void;
   onQuickCreate: (status: string, title: string) => void;
   onRequestDelete: (ticket: IndexTicket) => void;
+  onBulkMove: (ids: string[], status: string) => Promise<void>;
+  onBulkDelete: (ids: string[]) => Promise<void>;
 }
 
 interface Filters {
@@ -40,21 +44,39 @@ export function Board({
   onNewTicket,
   onQuickCreate,
   onRequestDelete,
+  onBulkMove,
+  onBulkDelete,
 }: BoardProps) {
-  const { workflow, index } = snapshot;
+  const { schema, index } = snapshot;
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [dragging, setDragging] = useState<IndexTicket | null>(null);
   const [dropAt, setDropAt] = useState<{ status: string; index: number } | null>(null);
   const [quickAdd, setQuickAdd] = useState<{ status: string; title: string } | null>(null);
   const [menu, setMenu] = useState<{ ticket: IndexTicket; x: number; y: number } | null>(null);
+  // Selection mirrors the List view: hovering a card (or having anything
+  // selected) swaps its status dot for a checkbox in the same lead slot.
+  // Checking one toggles the card, shift-click on a later checkbox extends
+  // from the last-toggled card (the anchor) through the clicked card in
+  // visible order (columns in schema order, cards in column order). Once
+  // checkbox mode is active (anything selected), clicking anywhere on a
+  // card does the same toggle; only with nothing selected does a click
+  // open the ticket.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [anchor, setAnchor] = useState<string | null>(null);
 
-  const filterableCustom = useMemo(
-    () =>
-      workflow.fields.filter(
-        (f) => (f.type === 'enum' || f.type === 'string') && !['title'].includes(f.name),
-      ),
-    [workflow.fields],
-  );
+  // Fields are owned per type now; the filter bar offers the union across
+  // every type (deduplicated by name), matching the old flat-list behaviour.
+  const filterableCustom = useMemo(() => {
+    const seen = new Map<string, FieldDef>();
+    for (const t of schema.types) {
+      for (const f of t.fields) {
+        if ((f.type === 'enum' || f.type === 'string') && f.name !== 'title' && !seen.has(f.name)) {
+          seen.set(f.name, f);
+        }
+      }
+    }
+    return [...seen.values()];
+  }, [schema.types]);
 
   const visible = useMemo(
     () =>
@@ -84,6 +106,35 @@ export function Board({
         if (ib === -1) return -1;
         return ia - ib;
       });
+  };
+
+  // The flattened visible card order, across column boundaries, that
+  // shift-click ranges walk: columns in schema order, cards in column order.
+  const flatIds = schema.statuses.flatMap((status) => cardsFor(status.name).map((t) => t.id));
+
+  // Shared by the checkbox and, once checkbox mode is active, the card body
+  // itself: a plain toggle adds or removes the ticket and moves the anchor
+  // to it; a shift toggle extends the range from the anchor through the
+  // clicked ticket in flatIds order without moving the anchor.
+  const toggleSelect = (id: string, shiftKey: boolean) => {
+    if (shiftKey) {
+      const from = anchor ? flatIds.indexOf(anchor) : -1;
+      const to = flatIds.indexOf(id);
+      if (from === -1 || to === -1) {
+        setSelected(new Set([id]));
+      } else {
+        const [start, end] = from <= to ? [from, to] : [to, from];
+        setSelected(new Set(flatIds.slice(start, end + 1)));
+      }
+      return;
+    }
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setAnchor(id);
   };
 
   // The insertion point is the first card whose midpoint sits below the
@@ -139,7 +190,7 @@ export function Board({
       el.removeEventListener('scroll', updateEdges);
       observer.disconnect();
     };
-  }, [updateEdges, workflow.statuses.length]);
+  }, [updateEdges, schema.statuses.length]);
 
   const scrollByColumn = (direction: -1 | 1) => {
     const el = boardRef.current;
@@ -160,7 +211,7 @@ export function Board({
             aria-label="filter type"
             value={filters.type}
             placeholder="All Types"
-            options={workflow.types.map((t) => ({ value: t.name, label: typeLabel(t) }))}
+            options={schema.types.map((t) => ({ value: t.name, label: typeLabel(t) }))}
             onChange={(v) => setFilters({ ...filters, type: v })}
           />
           <Dropdown
@@ -178,7 +229,7 @@ export function Board({
                 aria-label={`filter ${f.name}`}
                 value={filters.custom[f.name] ?? ''}
                 placeholder={`Any ${titleCase(f.name)}`}
-                options={(f.values ?? (f.values_from === 'priorities' ? workflow.priorities : [])).map((v) => ({ value: v, label: titleCase(v) }))}
+                options={(f.values ?? (f.values_from === 'priorities' ? schema.priorities : [])).map((v) => ({ value: v, label: titleCase(v) }))}
                 onChange={(v) => setFilters({ ...filters, custom: { ...filters.custom, [f.name]: v } })}
               />
             ))}
@@ -211,10 +262,10 @@ export function Board({
         )}
         <div
           ref={boardRef}
-          className="board"
-          style={{ gridTemplateColumns: `repeat(${workflow.statuses.length}, minmax(298px, 1fr))` }}
+          className={`board${selected.size > 0 ? ' selecting' : ''}`}
+          style={{ gridTemplateColumns: `repeat(${schema.statuses.length}, minmax(298px, 1fr))` }}
         >
-          {workflow.statuses.map((status) => {
+          {schema.statuses.map((status) => {
           const cards = cardsFor(status.name);
           const isTarget = dragging !== null && dropAt?.status === status.name;
           return (
@@ -228,7 +279,14 @@ export function Board({
                 setDropAt({ status: status.name, index: dropIndexAt(e.currentTarget, e.clientY) });
               }}
               onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                // relatedTarget is unreliable across engines (frequently
+                // null when the pointer crosses from one card to a sibling
+                // card rather than truly leaving the column), which cleared
+                // the insertion line on every card boundary in a long
+                // column such as Done. Ask the DOM what is actually under
+                // the pointer at this position instead.
+                const under = document.elementFromPoint(e.clientX, e.clientY);
+                if (!(under && e.currentTarget.contains(under))) {
                   setDropAt((d) => (d?.status === status.name ? null : d));
                 }
               }}
@@ -243,20 +301,22 @@ export function Board({
               </header>
               <div className="board-cards">
                 {cards.map((ticket, cardIndex) => {
-                  const live = presence?.awake === true && presence.focus === ticket.id;
-                  const hue = STATUS_HUE_CSS[statusHue(workflow, ticket.status)];
-                  const isDone = workflow.statuses.find((s) => s.name === ticket.status)?.complete === true;
+                  const live = presence?.tickets.has(ticket.id) ?? false;
+                  const elapsed = live ? presence?.tickets.get(ticket.id) : undefined;
+                  const hue = STATUS_HUE_CSS[statusHue(schema, ticket.status)];
+                  const isDone = schema.statuses.find((s) => s.name === ticket.status)?.agent === 'complete';
                   const parentId = typeof ticket.fields.parent === 'string' ? ticket.fields.parent : null;
                   const epicTitle = parentId
                     ? (index.tickets.find((t) => t.id === parentId)?.title ?? parentId)
                     : null;
                   const priority = typeof ticket.fields.priority === 'string' ? ticket.fields.priority : null;
-                  const family = priority !== null ? priorityFamily(workflow, priority) : null;
+                  const family = priority !== null ? priorityFamily(schema, priority) : null;
+                  const isSelected = selected.has(ticket.id);
                   return (
                     <Fragment key={ticket.id}>
                       {isTarget && dropAt.index === cardIndex && <div className="drop-line" />}
                     <article
-                      className={`ticket-card${dragging?.id === ticket.id ? ' dragging' : ''}${live ? ' live' : ''}${isDone ? ' done-card' : ''}`}
+                      className={`ticket-card${dragging?.id === ticket.id ? ' dragging' : ''}${live ? ' live' : ''}${isDone ? ' done-card' : ''}${isSelected ? ' selected' : ''}`}
                       draggable
                       tabIndex={0}
                       onPointerDown={punch}
@@ -271,10 +331,37 @@ export function Board({
                         e.preventDefault();
                         setMenu({ ticket, x: e.clientX, y: e.clientY });
                       }}
-                      onClick={() => onOpenTicket(ticket.id)}
+                      onClick={(e) => {
+                        if (selected.size > 0) {
+                          toggleSelect(ticket.id, e.shiftKey);
+                        } else {
+                          onOpenTicket(ticket.id);
+                        }
+                      }}
                     >
+                      {live && <LiveRing />}
                       <div className="ticket-card-top">
-                        <span className="priority-dot" style={{ background: hue }} title={statusLabel(status)} />
+                        <span className="card-lead" draggable={false}>
+                          <span className="priority-dot" style={{ background: hue }} title={statusLabel(status)} />
+                          <span className="hole-check card-check">
+                            <input
+                              type="checkbox"
+                              aria-label={`select ${ticket.id}`}
+                              checked={isSelected}
+                              onChange={() => {}}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                // The card itself is draggable and, once
+                                // checkbox mode is active, also toggles on
+                                // click; the checkbox must not let this
+                                // click bubble or drag.
+                                e.stopPropagation();
+                                toggleSelect(ticket.id, e.shiftKey);
+                              }}
+                            />
+                            <span className="hole-mark" aria-hidden />
+                          </span>
+                        </span>
                         <div className="ticket-card-title">{ticket.title}</div>
                       </div>
                       <div className="ticket-card-meta">
@@ -283,9 +370,7 @@ export function Board({
                           <span className={`prio ${family}`}>{titleCase(priority)}</span>
                         )}
                         <span className={`id${live ? ' live' : ''}`}>
-                          {live && presence?.elapsedSeconds !== null
-                            ? `${formatElapsed(presence.elapsedSeconds)} · `
-                            : ''}
+                          {elapsed !== undefined ? `${formatElapsed(elapsed)} · ` : ''}
                           {ticket.id}
                         </span>
                       </div>
@@ -353,6 +438,25 @@ export function Board({
           ]}
         />
       )}
+      <BulkActions
+        selected={[...selected]}
+        statuses={schema.statuses}
+        index={index}
+        onMove={(ids, status) => {
+          setSelected(new Set());
+          setAnchor(null);
+          void onBulkMove(ids, status);
+        }}
+        onDelete={(ids) => {
+          setSelected(new Set());
+          setAnchor(null);
+          void onBulkDelete(ids);
+        }}
+        onClear={() => {
+          setSelected(new Set());
+          setAnchor(null);
+        }}
+      />
     </>
   );
 }

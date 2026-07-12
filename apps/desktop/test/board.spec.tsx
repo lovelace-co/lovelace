@@ -1,8 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Board } from '../src/views/Board';
-import { legalTargets } from '../src/lib/types';
+import { ProjectView } from '../src/views/ProjectView';
+import { HostProvider } from '../src/state/store';
 import type { Snapshot } from '../src/lib/types';
+import { FakeHost } from './fakeHost';
 import fixture from './fixtures/snapshot.json';
 
 const snapshot = fixture as unknown as Snapshot;
@@ -10,6 +12,8 @@ const snapshot = fixture as unknown as Snapshot;
 function renderBoard(overrides: Partial<Parameters<typeof Board>[0]> = {}) {
   const onReorder = vi.fn();
   const onOpenTicket = vi.fn();
+  const onBulkMove = vi.fn().mockResolvedValue(undefined);
+  const onBulkDelete = vi.fn().mockResolvedValue(undefined);
   render(
     <Board
       snapshot={snapshot}
@@ -18,10 +22,27 @@ function renderBoard(overrides: Partial<Parameters<typeof Board>[0]> = {}) {
       onNewTicket={() => undefined}
       onQuickCreate={() => undefined}
       onRequestDelete={() => undefined}
+      onBulkMove={onBulkMove}
+      onBulkDelete={onBulkDelete}
       {...overrides}
     />,
   );
-  return { onReorder, onOpenTicket };
+  return { onReorder, onOpenTicket, onBulkMove, onBulkDelete };
+}
+
+// The bulk bar's count shares digits with the column counts, so scope count
+// assertions to the bar itself (matches the List view's test helper).
+function bulkBar() {
+  return document.querySelector('.bulk-bar') as HTMLElement;
+}
+
+// Each card's checkbox is labelled by ticket id.
+function checkbox(id: string) {
+  return screen.getByLabelText(`select ${id}`) as HTMLInputElement;
+}
+
+function boardRoot() {
+  return document.querySelector('.board') as HTMLElement;
 }
 
 /** jsdom has no layout, so fake the board's scroll metrics. */
@@ -70,21 +91,13 @@ describe('Board edge scroll affordances', () => {
 });
 
 describe('Board', () => {
-  it('renders columns from workflow.yaml in order with ticket cards', () => {
+  it('renders columns from schema.yaml in order with ticket cards', () => {
     renderBoard();
     // Column headers display Title-Cased labels derived from the machine name.
     const labels = Array.from(document.querySelectorAll('.board-column-header .label')).map(
       (el) => el.textContent,
     );
-    expect(labels).toEqual([
-      'Backlog',
-      'Todo',
-      'In Progress',
-      'In Review',
-      'Staging',
-      'Done',
-      'Cancelled',
-    ]);
+    expect(labels).toEqual(['Backlog', 'Todo', 'In Progress', 'In Review', 'Done', 'Cancelled']);
     expect(screen.getByText('Forecast endpoint')).toBeTruthy();
     expect(screen.getByText('T-0004')).toBeTruthy();
   });
@@ -102,8 +115,8 @@ describe('Board', () => {
   it('dropping on another column reorders the card into it', () => {
     const { onReorder } = renderBoard();
     const card = screen.getByText('Location search endpoint').closest('.ticket-card');
-    // T-0003 is in todo; done was never a legal workflow move, but the
-    // human owns the board, and the drop carries the target column order.
+    // T-0003 is in todo; the human owns the board, and the drop carries the
+    // target column order regardless of any status's role.
     fireEvent.dragStart(card!);
     const done = document.querySelector('[data-status="done"]');
     fireEvent.dragOver(done!);
@@ -168,13 +181,202 @@ describe('Board', () => {
     // The menu closes after selection.
     expect(screen.queryByRole('menuitem', { name: 'Delete ticket' })).toBeNull();
   });
+
+  it('checking a card selects it into a bulk bar and enters checkbox mode, without opening the ticket', () => {
+    const { onOpenTicket } = renderBoard();
+    // Every card renders a checkbox labelled by ticket id.
+    expect(checkbox('T-0001')).toBeTruthy();
+
+    fireEvent.click(checkbox('T-0003'));
+    expect(onOpenTicket).not.toHaveBeenCalled();
+    expect(checkbox('T-0003').closest('.ticket-card')?.classList.contains('selected')).toBe(true);
+    expect(within(bulkBar()).getByText('1')).toBeTruthy();
+    expect(within(bulkBar()).getByText('selected')).toBeTruthy();
+    expect(boardRoot().classList.contains('selecting')).toBe(true);
+
+    // Unticking the last selected checkbox drops the bulk bar and checkbox mode.
+    fireEvent.click(checkbox('T-0003'));
+    expect(screen.queryByText('selected')).toBeNull();
+    expect(boardRoot().classList.contains('selecting')).toBe(false);
+  });
+
+  it('with a card checked, clicking another card body adds it to the selection instead of opening it', () => {
+    const { onOpenTicket } = renderBoard();
+    fireEvent.click(checkbox('T-0003'));
+    fireEvent.click(screen.getByText('Atomic cache writes'));
+    expect(onOpenTicket).not.toHaveBeenCalled();
+    expect(checkbox('T-0001').closest('.ticket-card')?.classList.contains('selected')).toBe(true);
+    expect(within(bulkBar()).getByText('2')).toBeTruthy();
+  });
+
+  it('clicking a selected card body deselects it, and once empty a card click opens the ticket again', () => {
+    const { onOpenTicket } = renderBoard();
+    fireEvent.click(checkbox('T-0003'));
+    fireEvent.click(screen.getByText('Location search endpoint'));
+    expect(onOpenTicket).not.toHaveBeenCalled();
+    expect(checkbox('T-0003').closest('.ticket-card')?.classList.contains('selected')).toBe(false);
+    expect(boardRoot().classList.contains('selecting')).toBe(false);
+
+    fireEvent.click(screen.getByText('Location search endpoint'));
+    expect(onOpenTicket).toHaveBeenCalledWith('T-0003');
+  });
+
+  it('shift-click on a checkbox extends the selection across columns in visible order', () => {
+    renderBoard();
+    // Visible order: Location search endpoint (todo), Public API v1 and
+    // Forecast endpoint (in progress), Wind gusts... (in review), Atomic
+    // cache writes (done).
+    fireEvent.click(checkbox('T-0003'));
+    fireEvent.click(checkbox('T-0004'), { shiftKey: true });
+    for (const id of ['T-0003', 'E-0001', 'T-0002', 'T-0004']) {
+      expect(checkbox(id).closest('.ticket-card')?.classList.contains('selected')).toBe(true);
+    }
+    expect(checkbox('T-0001').closest('.ticket-card')?.classList.contains('selected')).toBe(false);
+    expect(within(bulkBar()).getByText('4')).toBeTruthy();
+  });
+
+  it('shift-clicking a card body extends the selection across columns in visible order', () => {
+    renderBoard();
+    fireEvent.click(checkbox('T-0003'));
+    fireEvent.click(screen.getByText('Wind gusts reported as negative values'), { shiftKey: true });
+    for (const id of ['T-0003', 'E-0001', 'T-0002', 'T-0004']) {
+      expect(checkbox(id).closest('.ticket-card')?.classList.contains('selected')).toBe(true);
+    }
+    expect(checkbox('T-0001').closest('.ticket-card')?.classList.contains('selected')).toBe(false);
+    expect(within(bulkBar()).getByText('4')).toBeTruthy();
+  });
+
+  it('choosing a status in the bulk bar moves the selection and clears it', () => {
+    const { onBulkMove } = renderBoard();
+    fireEvent.click(checkbox('T-0003'));
+    fireEvent.click(checkbox('E-0001'));
+    fireEvent.click(screen.getByLabelText('move to'));
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'move to' })).getByText('Done'));
+    expect(onBulkMove).toHaveBeenCalledWith(['T-0003', 'E-0001'], 'done');
+    expect(screen.queryByText('selected')).toBeNull();
+  });
+
+  it('bulk delete confirms before calling onBulkDelete', () => {
+    const { onBulkDelete } = renderBoard();
+    fireEvent.click(checkbox('T-0003'));
+    fireEvent.click(checkbox('E-0001'));
+    fireEvent.click(screen.getByText('Delete'));
+    expect(screen.getByText('Delete 2 tickets?')).toBeTruthy();
+    expect(onBulkDelete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(screen.queryByText('Delete 2 tickets?')).toBeNull();
+    expect(onBulkDelete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Delete'));
+    fireEvent.click(screen.getByText('Delete tickets'));
+    expect(onBulkDelete).toHaveBeenCalledWith(['T-0003', 'E-0001']);
+    expect(screen.queryByText('selected')).toBeNull();
+  });
+
+  it('Escape clears the selection', () => {
+    renderBoard();
+    fireEvent.click(checkbox('T-0003'));
+    expect(screen.getByText('selected')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByText('selected')).toBeNull();
+    expect(checkbox('T-0003').closest('.ticket-card')?.classList.contains('selected')).toBe(false);
+  });
+
+  it('dragging still works once the checkbox has been added to the card', () => {
+    const { onReorder } = renderBoard();
+    const card = screen.getByText('Location search endpoint').closest('.ticket-card');
+    fireEvent.dragStart(card!);
+    const done = document.querySelector('[data-status="done"]');
+    fireEvent.dragOver(done!);
+    fireEvent.drop(done!);
+    expect(onReorder).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the card of a lit ticket live and renders its live ring, leaving other cards untouched', () => {
+    renderBoard({ presence: { awake: true, tickets: new Map([['T-0002', 42]]) } });
+    const liveCard = screen.getByText('Forecast endpoint').closest('.ticket-card') as HTMLElement;
+    expect(liveCard.classList.contains('live')).toBe(true);
+    expect(liveCard.querySelector('.live-ring')).toBeTruthy();
+    const otherCard = screen.getByText('Location search endpoint').closest('.ticket-card') as HTMLElement;
+    expect(otherCard.classList.contains('live')).toBe(false);
+    expect(otherCard.querySelector('.live-ring')).toBeNull();
+  });
 });
 
-describe('legalTargets', () => {
-  it('derives drop targets from workflow transitions', () => {
-    const targets = legalTargets(snapshot.workflow, 'in_review');
-    expect(targets.has('staging')).toBe(true);
-    expect(targets.has('in_progress')).toBe(true);
-    expect(targets.has('done')).toBe(false);
+describe('deleting a ticket from the board', () => {
+  async function openMenu(host: FakeHost) {
+    render(
+      <HostProvider host={host}>
+        <ProjectView root="/fake" />
+      </HostProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('Forecast endpoint')).toBeTruthy());
+    fireEvent.contextMenu(screen.getByText('Forecast endpoint').closest('.ticket-card')!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete ticket' }));
+    await waitFor(() => expect(screen.getByText('Delete this ticket?')).toBeTruthy());
+  }
+
+  it('confirms with a destructive warning, then calls the host', async () => {
+    const host = new FakeHost();
+    await openMenu(host);
+    expect(screen.getByText(/permanently deletes the ticket/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete ticket' }));
+    await waitFor(() => {
+      const call = host.calls.find((c) => c.method === 'deleteTicket');
+      expect(call).toBeDefined();
+      expect(call?.args[1]).toBe('T-0002');
+    });
+  });
+
+  it('cancelling the confirmation does not call the host', async () => {
+    const host = new FakeHost();
+    await openMenu(host);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(host.calls.some((c) => c.method === 'deleteTicket')).toBe(false);
+    expect(screen.queryByText('Delete this ticket?')).toBeNull();
+  });
+});
+
+describe('deleting a ticket from the detail view', () => {
+  // The header icon button and the modal's confirm button share the
+  // accessible name "Delete ticket" once both are on screen, so the modal's
+  // button is looked up scoped to the modal itself.
+  function modal() {
+    return screen.getByText('Delete this ticket?').closest('.modal') as HTMLElement;
+  }
+
+  async function openDetailAndModal(host: FakeHost) {
+    render(
+      <HostProvider host={host}>
+        <ProjectView root="/fake" />
+      </HostProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('Forecast endpoint')).toBeTruthy());
+    fireEvent.click(screen.getByText('Forecast endpoint'));
+    await waitFor(() => expect(screen.getByLabelText('ticket title')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Delete ticket' }));
+    await waitFor(() => expect(screen.getByText('Delete this ticket?')).toBeTruthy());
+  }
+
+  it('confirms with the shared warning modal, calls the host and closes the detail view', async () => {
+    const host = new FakeHost();
+    await openDetailAndModal(host);
+    fireEvent.click(within(modal()).getByRole('button', { name: 'Delete ticket' }));
+    await waitFor(() => {
+      const call = host.calls.find((c) => c.method === 'deleteTicket');
+      expect(call).toBeDefined();
+      expect(call?.args[1]).toBe('T-0002');
+    });
+    // The detail view has closed: no title input, and the board is visible again.
+    expect(screen.queryByLabelText('ticket title')).toBeNull();
+    expect(screen.getByText('Forecast endpoint')).toBeTruthy();
+  });
+
+  it('cancelling the confirmation does not call the host and leaves the detail view open', async () => {
+    const host = new FakeHost();
+    await openDetailAndModal(host);
+    fireEvent.click(within(modal()).getByRole('button', { name: 'Cancel' }));
+    expect(host.calls.some((c) => c.method === 'deleteTicket')).toBe(false);
+    expect(screen.queryByText('Delete this ticket?')).toBeNull();
+    expect(screen.getByLabelText('ticket title')).toBeTruthy();
   });
 });

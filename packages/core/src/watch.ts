@@ -32,6 +32,8 @@ export function watchProject(
   const stateDirPlain = join(dir, project.manifest.paths.state);
   const indexDir = indexDirPlain + sep;
   const stateDir = stateDirPlain + sep;
+  const presenceDirPlain = join(stateDirPlain, 'presence');
+  const presenceDir = presenceDirPlain + sep;
 
   let pending = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -52,12 +54,17 @@ export function watchProject(
   const watcher: FSWatcher = watch(dir, {
     ignoreInitial: true,
     ignored: (path: string) =>
-      // The live-agent marker is the one state/ file watchers react to.
+      // The live-agent markers are the state/ paths watchers react to: the
+      // legacy singleton file, and the per-session presence directory
+      // (and everything in it). Unlike index/, state/ itself is deliberately
+      // left off this list: chokidar v4 prunes traversal at an ignored
+      // directory, so ignoring state/ outright would keep it from ever
+      // descending far enough to see these exceptions. The startsWith(stateDir)
+      // rule below still ignores everything else inside state/.
       path !== join(stateDirPlain, 'presence.json') &&
-      (path === indexDirPlain ||
-        path === stateDirPlain ||
-        path.startsWith(indexDir) ||
-        path.startsWith(stateDir)),
+      path !== presenceDirPlain &&
+      !path.startsWith(presenceDir) &&
+      (path === indexDirPlain || path.startsWith(indexDir) || path.startsWith(stateDir)),
   });
   watcher.on('all', (_event, path) => {
     pending.add(path);

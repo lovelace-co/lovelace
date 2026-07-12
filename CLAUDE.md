@@ -8,7 +8,7 @@ Lovelace is a local-first, file-based project management tool for agent-heavy so
 
 - `packages/core`: parsing, schemas, validation, indexing, digest, mutations. Pure logic, no UI surface, no process-level IO assumptions. Everything in `mcp` and the app calls into this.
 - `packages/mcp`: the agent-facing processes: the MCP server (official TypeScript MCP SDK, stdio transport), the headless agent helper that Claude Code hooks invoke, and the core host the desktop app spawns per request. All three ship as self-contained sidecar binaries bundled with the app; users do not need Node installed.
-- `apps/desktop`: the Tauri app. Rust shell, React and TypeScript frontend. Reads and writes only through `packages/core`; no private store. Forms, board columns and filters are generated from workflow.yaml field definitions at runtime, never hard-coded.
+- `apps/desktop`: the Tauri app. Rust shell, React and TypeScript frontend. Reads and writes only through `packages/core`; no private store. Forms, board columns and filters are generated from schema.yaml field definitions at runtime, never hard-coded.
 - `examples/demo-project`: the canonical fixture. Tests run against it. Keep it valid at all times; if you change the spec, update the fixture and SPEC.md in the same commit.
 
 pnpm workspaces. Node 22 for development. TypeScript strict mode.
@@ -17,7 +17,7 @@ pnpm workspaces. Node 22 for development. TypeScript strict mode.
 
 1. Files are the source of truth. The index is derived and must be regenerable from scratch at any time. Never store state in the index that does not exist in the files.
 2. Hand-edited files are a supported path. Malformed input produces a clear validation error pointing at file and line, never a crash and never silent repair.
-3. Field definitions are data. Ticket fields are defined in `workflow.yaml` and read at runtime by the validator, the indexer, the MCP server and the app's forms. Never hard-code a field that is not in the locked core set (`id`, `type`, `status`, `created`, `updated`).
+3. Field definitions are data. Ticket fields are defined in `schema.yaml` and read at runtime by the validator, the indexer, the MCP server and the app's forms. Never hard-code a field that is not in the locked core set (`id`, `type`, `status`, `created`, `updated`).
 4. One entity per file. Comments and sessions are append-only sibling files.
 5. The spec is versioned. Any change to the format requires a version bump in SPEC.md and a note in the manifest schema. Tooling fails clearly on unknown major versions.
 6. Round-trip fidelity in the editor is an acceptance bar, not a preference. Opening and saving a file without edits must be byte-identical; edits produce minimal diffs. Do not relax this.
@@ -51,6 +51,7 @@ The desktop app has a deliberate visual language. These are settled decisions, r
 - Use the established design system, never ad-hoc styling: tonal surfaces with no borders (`--bg-0`, `--bg-1`, `--well`, `--raise`, `--raise-2`), the cyan `--current` signal, Geist Sans for everything with Geist Mono reserved for code (see above), and the punchcard-hole and loom-thread motif (`.hole` with punched and reading states). Dates and times render via the operating system locale through `apps/desktop/src/lib/datetime.ts`.
 - Control species (ADR-0006): every control keeps a quiet resting surface, one silhouette per species. Pressing is a capsule (`--radius-pill`), typing is a well (`--radius-well`), choosing is a well with a caret, a row in a list, menu or nav is a seat (`--radius-seat`), and only tertiary actions are typographic. Page titles are the one unboxed field. Never give two species the same silhouette, and never remove a control's resting surface.
 - One surface per region: a region of the screen holds one filled layer beside the canvas. Cards sit on open lanes; never nest wells holding cards holding chips. Priorities on cards and lists are a dot with tinted text, not a chip; the chip form survives only standing alone (for example the stale badge).
+- Read first, edit on intent (ADR-0010): editor-heavy screens rest as readable plain-English summaries with zero editing controls; the editor for one item materialises on the region's raised surface when clicked, one open at a time, and creating an item opens its editor immediately. Ticket bodies, documents and the schema editors all follow this. Diagnostic: when a screen overwhelms, count the controls visible at rest before touching styling; density is fixed by reducing what renders at rest, never by rearranging surfaces. A box means "interact here" and nothing else.
 - State moves, never marks: current, hover and selection are carried by colour and by surfaces that brighten, materialise or glide (the active nav seat slides between rows). No left accent bars or rails, no selection dots beside options, no underline focus. Focus is always the full cyan ring. The cyan thread appears only as the drop insertion line and the live-work orbit.
 - The metre: spacing snaps to the scale (`--sp-1` to `--sp-7`), radii to the species tokens, and motion to `--swift`, `--punch-step` and the three duration tokens, all defined in `tokens.css`. No ad-hoc spacing, radius, easing or duration values in stylesheets.
 - Surfaces bleed, text aligns: seats, wells and capsules extend into the gutter with negative margins so labels keep the shared left edge; the affordance grows into the padding, never into a content column.
@@ -61,8 +62,8 @@ The desktop app has a deliberate visual language. These are settled decisions, r
 - `pnpm app:dev` runs against `packages/mcp/dist/host.js` directly (via `LOVELACE_HOST_JS`), so dev picks up host changes from a plain `pnpm build`. A packaged production build does not: run `pnpm sidecars` to Bun-compile the host, agent and MCP binaries into `src-tauri/binaries/` (needs the Rust toolchain for the target triple) before `pnpm app:build`, or the app ships stale sidecars.
 - When changing `packages/core` schemas, check all three consumers: the validator and indexer, the MCP tools, and the app's generated forms.
 - ID assignment uses a counter file with an exclusive lock. Do not introduce alternative ID schemes.
-- The MCP server has exactly seven tools. Do not add tools without an explicit instruction.
-- Transition automation has exactly two action kinds, `run` and `agent`. Lovelace is an orchestrator, not a CI system: no retries, queues or scheduling.
+- The MCP server has exactly eight tools: create_ticket, update_ticket, describe_schema, query_tickets, read_document, log_session, set_active_ticket and search. Do not add tools without an explicit instruction.
+- Spec 3.0 removed transitions and automations entirely; a ticket may move to any status defined in schema.yaml. Lovelace is an orchestrator, not a CI system: no retries, queues or scheduling.
 - All app mutations route through core validation. The app must never be able to produce a file the validator rejects.
 - From the end of Phase 4, this repository dogfoods itself: read `.lovelace/documentation/index.md` at session start, work from tickets, and write a session record before finishing.
 
@@ -113,7 +114,7 @@ change where the brief would be longer than the diff): do those yourself.
    - Round-trip fidelity: open and save with no edits must be byte-identical.
    - Deterministic index output: sort everything, never emit timestamps.
    - Never hard-code ticket fields outside the locked core set.
-   - The MCP server has exactly seven tools; never add one.
+   - The MCP server has exactly eight tools; never add one.
    - `packages/core` schema changes touch three consumers: validator and indexer,
      MCP tools, and the app's generated forms.
    - For `apps/desktop` UI work, paste the relevant bullets from "Design and UX

@@ -3,15 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { InitWizard } from '../src/components/InitWizard';
 import { HostProvider } from '../src/state/store';
 import { FakeHost } from './fakeHost';
-import type { Workflow } from '../src/lib/types';
+import type { Schema } from '../src/lib/types';
 
-const DEFAULTS: Workflow = {
-  types: [{ name: 'task', id_prefix: 'T' }],
-  statuses: [{ name: 'todo' }, { name: 'done', complete: true }],
-  transitions: [{ from: 'todo', to: ['done'] }],
+const DEFAULTS: Schema = {
+  types: [
+    { name: 'task', id_prefix: 'T', fields: [{ name: 'title', type: 'string', required: true }] },
+    { name: 'bug', id_prefix: 'B', fields: [{ name: 'title', type: 'string', required: true }] },
+  ],
+  statuses: [{ name: 'todo' }, { name: 'done', agent: 'complete' }],
   priorities: ['high', 'low'],
-  fields: [{ name: 'title', type: 'string', required: true }],
-  on_transition: [],
 };
 
 function renderWizard() {
@@ -30,7 +30,7 @@ function renderWizard() {
 const next = () => fireEvent.click(screen.getByText('Next'));
 
 describe('InitWizard', () => {
-  it('seeds the project name and the Use defaults path sends no workflow', async () => {
+  it('seeds the project name and the Use defaults path sends no schema', async () => {
     const { onDone, initArgs } = renderWizard();
     expect((screen.getByLabelText('project name') as HTMLInputElement).value).toBe('Demo');
     fireEvent.click(screen.getByText('Use defaults'));
@@ -42,7 +42,7 @@ describe('InitWizard', () => {
   it('walking through unchanged still takes the default path', async () => {
     const { initArgs } = renderWizard();
     next(); // Statuses
-    next(); // Types & Fields
+    next(); // Types
     next(); // Review
     fireEvent.click(screen.getByText('Initialise project'));
     await waitFor(() => expect(initArgs()).toBeDefined());
@@ -62,38 +62,48 @@ describe('InitWizard', () => {
     expect(machine.value).toBe('review');
   });
 
-  it('customising a status sends a workflow config carrying the edit', async () => {
+  it('customising a status sends a schema carrying the edit', async () => {
     const { initArgs } = renderWizard();
     next(); // Statuses
     fireEvent.change(screen.getByLabelText('status 0 label'), { target: { value: 'Inbox' } });
-    next(); // Types & Fields
+    next(); // Types
     next(); // Review
     fireEvent.click(screen.getByText('Initialise project'));
     await waitFor(() => expect(initArgs()).toBeDefined());
-    const workflow = initArgs()![3] as Workflow;
-    expect(workflow).toBeDefined();
-    expect(workflow.statuses[0]!.name).toBe('inbox');
-    expect(workflow.transitions.find((t) => t.from === 'inbox')?.to).toContain('done');
+    const schema = initArgs()![3] as Schema;
+    expect(schema).toBeDefined();
+    expect(schema.statuses[0]!.name).toBe('inbox');
+  });
+
+  it('selecting an agent role on one status clears it from any other', () => {
+    renderWizard();
+    next(); // Statuses
+    fireEvent.click(screen.getByLabelText('status 0 agent role Ready'));
+    fireEvent.click(screen.getByLabelText('status 1 agent role Ready'));
+    expect((screen.getByLabelText('status 0 agent role Ready') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText('status 1 agent role Ready') as HTMLInputElement).checked).toBe(true);
   });
 
   it('pins Title and Body as locked default field rows and can add a field', () => {
     renderWizard();
     next(); // Statuses
-    next(); // Types & Fields
-    const title = screen.getByLabelText('title field name') as HTMLInputElement;
-    const body = screen.getByLabelText('body field name') as HTMLInputElement;
-    expect(title.value).toBe('Title');
-    expect(title.readOnly).toBe(true);
-    expect(body.value).toBe('Body');
+    next(); // Types
+    // Title and Body read as static rows: no inputs, and clicking them opens nothing.
+    expect(screen.getByText('Title')).toBeTruthy();
+    expect(screen.getByText('Body')).toBeTruthy();
+    expect(screen.queryByLabelText('title field name')).toBeNull();
+    expect(screen.queryByLabelText('body field name')).toBeNull();
+    fireEvent.click(screen.getByText('Title'));
+    expect(screen.queryByLabelText('field 0 label')).toBeNull();
     fireEvent.click(screen.getByText('Add field'));
-    // The new editable field row appears (index 1, after the locked title).
+    // The new field row appears (index 1, after the locked title) already open for editing.
     expect(screen.getByLabelText('field 1 label')).toBeTruthy();
   });
 
   it('an enum field offers a reorderable value list with a default radio', () => {
     renderWizard();
     next(); // Statuses
-    next(); // Types & Fields
+    next(); // Types
     fireEvent.click(screen.getByText('Add field'));
     fireEvent.click(screen.getByLabelText('field 1 type'));
     fireEvent.click(screen.getByRole('option', { name: 'enum' }));
@@ -108,7 +118,7 @@ describe('InitWizard', () => {
   it('an enum sourced from Priorities can still set a default (for quick-add)', async () => {
     const { initArgs } = renderWizard();
     next(); // Statuses
-    next(); // Types & Fields
+    next(); // Types
     fireEvent.click(screen.getByText('Add field'));
     fireEvent.click(screen.getByLabelText('field 1 type'));
     fireEvent.click(within(screen.getByRole('listbox', { name: 'field 1 type' })).getByText('enum'));
@@ -119,17 +129,43 @@ describe('InitWizard', () => {
     next(); // Review
     fireEvent.click(screen.getByText('Initialise project'));
     await waitFor(() => expect(initArgs()).toBeDefined());
-    const field = (initArgs()![3] as Workflow).fields.find((f) => f.name === 'new_field');
+    const schema = initArgs()![3] as Schema;
+    const field = schema.types[0]!.fields.find((f) => f.name === 'new_field');
     expect(field?.values_from).toBe('priorities');
     expect(field?.default).toBe('high');
   });
 
-  it('priorities are an editable list, not a comma field', () => {
+  it('switching tabs shows the other type\'s fields', () => {
     renderWizard();
-    next();
-    next();
-    expect((screen.getByLabelText('priority 0') as HTMLInputElement).value).toBe('high');
-    fireEvent.click(screen.getByText('Add priority'));
-    expect(screen.getByLabelText('priority 2')).toBeTruthy();
+    next(); // Statuses
+    next(); // Types
+    // Task is active by default; add a field scoped to it.
+    fireEvent.click(screen.getByText('Add field'));
+    fireEvent.change(screen.getByLabelText('field 1 label'), { target: { value: 'Points' } });
+    // Switching to Bug hides Task's Points field...
+    fireEvent.click(screen.getByRole('tab', { name: 'Bug' }));
+    expect(screen.queryByLabelText('field 1 label')).toBeNull();
+    expect(screen.queryByText('Points')).toBeNull();
+    // ...and switching back to Task shows it again, read-only until reopened.
+    fireEvent.click(screen.getByRole('tab', { name: 'Task' }));
+    expect(screen.queryByLabelText('field 1 label')).toBeNull();
+    fireEvent.click(screen.getByText('Points'));
+    expect((screen.getByLabelText('field 1 label') as HTMLInputElement).value).toBe('Points');
+  });
+
+  it('switches type tabs and adds a field scoped to that type only', async () => {
+    const { initArgs } = renderWizard();
+    next(); // Statuses
+    next(); // Types
+    fireEvent.click(screen.getByRole('tab', { name: 'Bug' }));
+    fireEvent.click(screen.getByText('Add field'));
+    next(); // Review
+    fireEvent.click(screen.getByText('Initialise project'));
+    await waitFor(() => expect(initArgs()).toBeDefined());
+    const schema = initArgs()![3] as Schema;
+    const task = schema.types.find((t) => t.name === 'task')!;
+    const bug = schema.types.find((t) => t.name === 'bug')!;
+    expect(bug.fields.length).toBe(DEFAULTS.types[1]!.fields.length + 1);
+    expect(task.fields.length).toBe(DEFAULTS.types[0]!.fields.length);
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useHost } from '../state/store';
+import { searchShortcutLabel } from '../lib/platform';
 import type { SearchHit } from '../lib/types';
 
 interface SearchPaletteProps {
@@ -113,6 +114,7 @@ export function SearchPalette({ root, onPick, onClose }: SearchPaletteProps) {
           <span>&uarr;&darr; to move</span>
           <span>&crarr; to open</span>
           <span>esc to close</span>
+          <span>{searchShortcutLabel} opens this search</span>
         </div>
       </div>
     </div>

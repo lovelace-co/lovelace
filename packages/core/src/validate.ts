@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { validateWorkflow } from './config.js';
+import { MANIFEST_KNOWN_KEYS, validateSchema } from './config.js';
 import { collectReferences, validateTicketFields } from './fields.js';
 import type { Project, ValidationIssue } from './types.js';
 import { SESSION_OUTCOMES } from './types.js';
@@ -17,14 +17,14 @@ export interface ValidateOptions {
 }
 
 /**
- * Validates a loaded project against the spec and its own workflow.yaml.
+ * Validates a loaded project against the spec and its own schema.yaml.
  * Returns load issues plus everything found here. Errors block mutations;
  * warnings never do.
  */
 export function validateProject(project: Project, options: ValidateOptions = {}): ValidationIssue[] {
   const now = options.now ?? (() => new Date());
   const issues: ValidationIssue[] = [...project.issues];
-  const { workflow } = project;
+  const { schema } = project;
 
   const add = (
     severity: 'error' | 'warning',
@@ -39,10 +39,16 @@ export function validateProject(project: Project, options: ValidateOptions = {})
     issues.push(issue);
   };
 
-  issues.push(...validateWorkflow(workflow, '.lovelace/workflow.yaml'));
+  issues.push(...validateSchema(schema, '.lovelace/schema.yaml'));
 
-  const statusNames = new Set(workflow.statuses.map((s) => s.name));
-  const typeNames = new Set(workflow.types.map((t) => t.name));
+  // Same tolerant-reads rule as the schema (ADR-0011): an unrecognised
+  // manifest key is a warning naming the key, never an error.
+  for (const key of Object.keys(project.manifest).filter((k) => !MANIFEST_KNOWN_KEYS.has(k))) {
+    add('warning', '.lovelace/manifest.yaml', 'manifest/unknown-key', `manifest.yaml carries unknown key "${key}"`);
+  }
+
+  const statusNames = new Set(schema.statuses.map((s) => s.name));
+  const typeNames = new Set(schema.types.map((t) => t.name));
   const actorIds = new Set(project.actors.map((a) => a.id));
   const ticketIds = new Set(project.tickets.map((t) => t.id));
   const documentIds = new Set(project.documents.map((b) => b.id));
@@ -107,9 +113,9 @@ export function validateProject(project: Project, options: ValidateOptions = {})
     }
     if (typeNames.has(ticket.type)) {
       issues.push(
-        ...validateTicketFields(workflow, ticket.type, ticket.fields, file, project.keyLines.get(file)),
+        ...validateTicketFields(schema, ticket.type, ticket.fields, file, project.keyLines.get(file)),
       );
-      for (const ref of collectReferences(workflow, ticket.type, ticket.fields)) {
+      for (const ref of collectReferences(schema, ticket.type, ticket.fields)) {
         if (!resolveRef(ref.targets, ref.value)) {
           add(
             'error',

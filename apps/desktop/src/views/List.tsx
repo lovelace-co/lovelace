@@ -1,7 +1,8 @@
 import { Fragment, useMemo, useState } from 'react';
+import { BulkActions } from '../components/BulkActions';
 import { ContextMenu } from '../components/ContextMenu';
 import { Dropdown } from '../components/Dropdown';
-import { EmptyState } from '../components/EmptyState';
+import { LiveRing } from '../components/LiveRing';
 import { AddIcon } from '../components/icons';
 import { formatDateShort } from '../lib/datetime';
 import { statusLabel, titleCase, typeLabel } from '../lib/format';
@@ -9,7 +10,7 @@ import { STATUS_HUE_CSS, priorityFamily, statusHue } from '../lib/loom';
 import { punch, release } from '../lib/punch';
 import { formatElapsed } from '../lib/presence';
 import type { ProjectPresence } from '../state/store';
-import type { IndexTicket, Snapshot } from '../lib/types';
+import type { FieldDef, IndexTicket, Snapshot } from '../lib/types';
 
 interface ListProps {
   snapshot: Snapshot;
@@ -18,6 +19,8 @@ interface ListProps {
   onNewTicket: (status?: string) => void;
   onQuickCreate: (status: string, title: string) => void;
   onRequestDelete: (ticket: IndexTicket) => void;
+  onBulkMove: (ids: string[], status: string) => Promise<void>;
+  onBulkDelete: (ids: string[]) => Promise<void>;
 }
 
 interface Filters {
@@ -30,7 +33,7 @@ const EMPTY_FILTERS: Filters = { type: '', assignee: '', custom: {} };
 
 /**
  * The board's tickets read as a single dense column instead of warp bands:
- * grouped by status in workflow order, one scannable row each. The status
+ * grouped by status in schema order, one scannable row each. The status
  * hues, pills and IDs are reused identically so the mapping stays learned.
  */
 export function List({
@@ -40,19 +43,36 @@ export function List({
   onNewTicket,
   onQuickCreate,
   onRequestDelete,
+  onBulkMove,
+  onBulkDelete,
 }: ListProps) {
-  const { workflow, index } = snapshot;
+  const { schema, index } = snapshot;
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [quickAdd, setQuickAdd] = useState<{ status: string; title: string } | null>(null);
   const [menu, setMenu] = useState<{ ticket: IndexTicket; x: number; y: number } | null>(null);
+  // Selection is carried by the seat surface, never a mark: hovering a row
+  // (or having anything selected) swaps its status dot for a checkbox in
+  // the same leading slot. Checking one toggles the row, shift-click on a
+  // later checkbox extends from the last-toggled row (the anchor) through
+  // the clicked row in visible order. Once checkbox mode is active
+  // (anything selected), clicking or activating anywhere on a row does the
+  // same toggle; only with nothing selected does it open the ticket.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [anchor, setAnchor] = useState<string | null>(null);
 
-  const filterableCustom = useMemo(
-    () =>
-      workflow.fields.filter(
-        (f) => (f.type === 'enum' || f.type === 'string') && !['title'].includes(f.name),
-      ),
-    [workflow.fields],
-  );
+  // Fields are owned per type now; the filter bar offers the union across
+  // every type (deduplicated by name), matching the old flat-list behaviour.
+  const filterableCustom = useMemo(() => {
+    const seen = new Map<string, FieldDef>();
+    for (const t of schema.types) {
+      for (const f of t.fields) {
+        if ((f.type === 'enum' || f.type === 'string') && f.name !== 'title' && !seen.has(f.name)) {
+          seen.set(f.name, f);
+        }
+      }
+    }
+    return [...seen.values()];
+  }, [schema.types]);
 
   const visible = useMemo(
     () =>
@@ -67,40 +87,79 @@ export function List({
     [index.tickets, filters],
   );
 
-  const groups = workflow.statuses
-    .map((status) => ({
-      status,
-      tickets: visible
-        .filter((t) => t.status === status.name)
-        .sort((a, b) => a.id.localeCompare(b.id)),
-    }))
-    .filter((g) => g.tickets.length > 0 || quickAdd?.status === g.status.name);
+  const groups = schema.statuses.map((status) => ({
+    status,
+    tickets: visible
+      .filter((t) => t.status === status.name)
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  }));
+
+  // The flattened visible row order, across group boundaries, that
+  // shift-click ranges walk.
+  const flatIds = groups.flatMap((g) => g.tickets.map((t) => t.id));
+
+  // Shared by the checkbox and, once checkbox mode is active, the row
+  // itself: a plain toggle adds or removes the ticket and moves the anchor
+  // to it; a shift toggle extends the range from the anchor through the
+  // clicked ticket in flatIds order without moving the anchor.
+  const toggleSelect = (id: string, shiftKey: boolean) => {
+    if (shiftKey) {
+      const from = anchor ? flatIds.indexOf(anchor) : -1;
+      const to = flatIds.indexOf(id);
+      if (from === -1 || to === -1) {
+        setSelected(new Set([id]));
+      } else {
+        const [start, end] = from <= to ? [from, to] : [to, from];
+        setSelected(new Set(flatIds.slice(start, end + 1)));
+      }
+      return;
+    }
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setAnchor(id);
+  };
 
   const row = (ticket: IndexTicket) => {
-    const hue = STATUS_HUE_CSS[statusHue(workflow, ticket.status)];
-    const isDone = workflow.statuses.find((s) => s.name === ticket.status)?.complete === true;
-    const live = presence?.awake === true && presence.focus === ticket.id;
+    const hue = STATUS_HUE_CSS[statusHue(schema, ticket.status)];
+    const isDone = schema.statuses.find((s) => s.name === ticket.status)?.agent === 'complete';
+    const live = presence?.tickets.has(ticket.id) ?? false;
+    const elapsed = live ? presence?.tickets.get(ticket.id) : undefined;
     const parentId = typeof ticket.fields.parent === 'string' ? ticket.fields.parent : null;
     const epicTitle = parentId
       ? (index.tickets.find((t) => t.id === parentId)?.title ?? parentId)
       : null;
     const priority = typeof ticket.fields.priority === 'string' ? ticket.fields.priority : null;
-    const family = priority !== null ? priorityFamily(workflow, priority) : null;
+    const family = priority !== null ? priorityFamily(schema, priority) : null;
     const assignee = typeof ticket.fields.assignee === 'string' ? ticket.fields.assignee : null;
+    const isSelected = selected.has(ticket.id);
     return (
       <div
         key={ticket.id}
-        className={`list-row${isDone ? ' done' : ''}${live ? ' live' : ''}`}
+        className={`list-row${isDone ? ' done' : ''}${live ? ' live' : ''}${isSelected ? ' selected' : ''}`}
         role="button"
         tabIndex={0}
         onPointerDown={punch}
         onPointerUp={release}
         onPointerLeave={release}
-        onClick={() => onOpenTicket(ticket.id)}
+        onClick={(e) => {
+          if (selected.size > 0) {
+            toggleSelect(ticket.id, e.shiftKey);
+          } else {
+            onOpenTicket(ticket.id);
+          }
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onOpenTicket(ticket.id);
+            if (selected.size > 0) {
+              toggleSelect(ticket.id, e.shiftKey);
+            } else {
+              onOpenTicket(ticket.id);
+            }
           }
         }}
         onContextMenu={(e) => {
@@ -108,7 +167,30 @@ export function List({
           setMenu({ ticket, x: e.clientX, y: e.clientY });
         }}
       >
-        <span className="priority-dot" style={{ background: hue }} title={statusLabel(workflow.statuses.find((s) => s.name === ticket.status) ?? { name: ticket.status })} />
+        {live && <LiveRing />}
+        <span className="list-row-lead">
+          <span
+            className="priority-dot"
+            style={{ background: hue }}
+            title={statusLabel(schema.statuses.find((s) => s.name === ticket.status) ?? { name: ticket.status })}
+          />
+          <span className="hole-check list-row-check">
+            <input
+              type="checkbox"
+              aria-label={`select ${ticket.id}`}
+              checked={isSelected}
+              onChange={() => {}}
+              onClick={(e) => {
+                // The row itself is, once checkbox mode is active, also a
+                // toggle on click; the checkbox must not let this click
+                // bubble to the row.
+                e.stopPropagation();
+                toggleSelect(ticket.id, e.shiftKey);
+              }}
+            />
+            <span className="hole-mark" aria-hidden />
+          </span>
+        </span>
         <span className="list-row-title">{ticket.title}</span>
         <span className="list-row-meta">
           {epicTitle !== null && <span className="prio epic">{epicTitle}</span>}
@@ -118,7 +200,7 @@ export function List({
           {assignee !== null && <span className="list-assignee">@{assignee}</span>}
           <span className="list-updated num">{formatDateShort(ticket.updated)}</span>
           <span className={`id${live ? ' live' : ''}`}>
-            {live && presence?.elapsedSeconds !== null ? `${formatElapsed(presence.elapsedSeconds)} · ` : ''}
+            {elapsed !== undefined ? `${formatElapsed(elapsed)} · ` : ''}
             {ticket.id}
           </span>
         </span>
@@ -135,7 +217,7 @@ export function List({
             aria-label="filter type"
             value={filters.type}
             placeholder="All Types"
-            options={workflow.types.map((t) => ({ value: t.name, label: typeLabel(t) }))}
+            options={schema.types.map((t) => ({ value: t.name, label: typeLabel(t) }))}
             onChange={(v) => setFilters({ ...filters, type: v })}
           />
           <Dropdown
@@ -153,7 +235,7 @@ export function List({
                 aria-label={`filter ${f.name}`}
                 value={filters.custom[f.name] ?? ''}
                 placeholder={`Any ${titleCase(f.name)}`}
-                options={(f.values ?? (f.values_from === 'priorities' ? workflow.priorities : [])).map((v) => ({ value: v, label: titleCase(v) }))}
+                options={(f.values ?? (f.values_from === 'priorities' ? schema.priorities : [])).map((v) => ({ value: v, label: titleCase(v) }))}
                 onChange={(v) => setFilters({ ...filters, custom: { ...filters.custom, [f.name]: v } })}
               />
             ))}
@@ -163,17 +245,11 @@ export function List({
           </button>
         </div>
       </header>
-      <div className="list-scroll">
-        {groups.length === 0 &&
-          (filters.type || filters.assignee || Object.values(filters.custom).some(Boolean) ? (
-            <EmptyState note="No tickets match these filters" hint="Clear a filter to see more." />
-          ) : (
-            <EmptyState note="No tickets yet" hint="Add one with New ticket, or on the board." />
-          ))}
+      <div className={`list-scroll${selected.size > 0 ? ' selecting' : ''}`}>
         {groups.map(({ status, tickets }) => (
           <section key={status.name} className="list-group">
             <header className="list-group-head">
-              <span className="priority-dot" style={{ background: STATUS_HUE_CSS[statusHue(workflow, status.name)] }} />
+              <span className="priority-dot" style={{ background: STATUS_HUE_CSS[statusHue(schema, status.name)] }} />
               <h2 className="list-group-title">{statusLabel(status)}</h2>
               <span className="list-group-count num">{tickets.length}</span>
             </header>
@@ -235,6 +311,25 @@ export function List({
           ]}
         />
       )}
+      <BulkActions
+        selected={[...selected]}
+        statuses={schema.statuses}
+        index={index}
+        onMove={(ids, status) => {
+          setSelected(new Set());
+          setAnchor(null);
+          void onBulkMove(ids, status);
+        }}
+        onDelete={(ids) => {
+          setSelected(new Set());
+          setAnchor(null);
+          void onBulkDelete(ids);
+        }}
+        onClear={() => {
+          setSelected(new Set());
+          setAnchor(null);
+        }}
+      />
     </>
   );
 }

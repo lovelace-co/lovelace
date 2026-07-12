@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { ConfigError, loadActors, loadManifest, loadWorkflow } from './config.js';
+import { ConfigError, loadActors, loadManifest, loadSchema } from './config.js';
 import { FrontmatterError, parseFrontmatter } from './frontmatter.js';
 import type {
   Comment,
@@ -13,13 +13,21 @@ import type {
 import { CORE_FIELDS } from './types.js';
 
 export class ProjectError extends Error {
+  code?: 'spec-too-new' | 'spec-needs-migration';
+  declared?: string;
+  supported?: string;
+
   constructor(
     message: string,
     public file: string,
     public line?: number,
+    extra?: { code?: 'spec-too-new' | 'spec-needs-migration'; declared?: string; supported?: string },
   ) {
     super(message);
     this.name = 'ProjectError';
+    if (extra?.code !== undefined) this.code = extra.code;
+    if (extra?.declared !== undefined) this.declared = extra.declared;
+    if (extra?.supported !== undefined) this.supported = extra.supported;
   }
 }
 
@@ -54,14 +62,18 @@ export function loadProject(root: string): Project {
   if (!existsSync(dir)) {
     throw new ProjectError('no .lovelace directory found', '.lovelace');
   }
-  let manifest, workflow, actors;
+  let manifest, schema, actors;
   try {
     manifest = loadManifest(dir);
-    workflow = loadWorkflow(dir);
+    schema = loadSchema(dir);
     actors = loadActors(dir);
   } catch (e) {
     if (e instanceof ConfigError) {
-      throw new ProjectError(e.message, e.file, e.line);
+      throw new ProjectError(e.message, e.file, e.line, {
+        code: e.code,
+        declared: e.declared,
+        supported: e.supported,
+      });
     }
     throw e;
   }
@@ -162,7 +174,7 @@ export function loadProject(root: string): Project {
     root,
     dir,
     manifest,
-    workflow,
+    schema,
     actors,
     tickets,
     documents,

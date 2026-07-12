@@ -5,12 +5,6 @@
    One electric signal (--current), never used as a fill.
    Source of truth: lovelace-ui-v4.html; system: BRIEF.md. */
 
-@property --orbit {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
-}
-
 :root {
   color-scheme: light dark;
 }
@@ -52,8 +46,9 @@
   --dot-review: #8f87d8; /* between work and done */
   --dot-done: #6ca98a; /* terminal */
 
-  /* Semantic washes for problems/outcomes, kept desaturated */
-  --bad-fg: #de9c9c;
+  /* Semantic washes for problems/outcomes; warn and good stay desaturated,
+     the destructive red runs at full strength so it is never faint. */
+  --bad-fg: #f87171;
   --bad-bg: rgba(248, 113, 113, 0.09);
   --warn-fg: #d2b584;
   --warn-bg: rgba(251, 191, 36, 0.08);
@@ -68,6 +63,8 @@
   --pop-soft: #5d6873;
   --pop-wash: rgba(11, 165, 201, 0.12);
   --pop-current: #0ba5c9;
+  --pop-bad: #be4646;
+  --pop-bad-wash: rgba(190, 70, 70, 0.08);
   --pop-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
 }
 
@@ -106,7 +103,7 @@
   --dot-review: #8f87d8;
   --dot-done: #6ca98a;
 
-  --bad-fg: #a95f5f;
+  --bad-fg: #be4646;
   --bad-bg: rgba(190, 70, 70, 0.08);
   --warn-fg: #94732f;
   --warn-bg: rgba(180, 130, 30, 0.09);
@@ -121,6 +118,8 @@
   --pop-soft: #97a1ad;
   --pop-wash: rgba(34, 211, 238, 0.14);
   --pop-current: #22d3ee;
+  --pop-bad: #f87171;
+  --pop-bad-wash: rgba(248, 113, 113, 0.09);
   --pop-shadow: 0 24px 70px rgba(42, 49, 59, 0.28);
 }
 

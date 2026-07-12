@@ -3,7 +3,6 @@ import {
   ViewColumnsIcon,
   QueueListIcon,
   BookOpenIcon,
-  BoltIcon,
   MagnifyingGlassIcon,
   ClockIcon,
   DocumentTextIcon,
@@ -13,12 +12,9 @@ import {
   ChevronRightIcon,
   ArrowLeftIcon as HeroArrowLeftIcon,
   InformationCircleIcon,
-  ShareIcon,
   SunIcon as HeroSunIcon,
   MoonIcon as HeroMoonIcon,
   XMarkIcon,
-  SparklesIcon,
-  CommandLineIcon,
   PencilSquareIcon,
   CalendarIcon as HeroCalendarIcon,
   Cog6ToothIcon,
@@ -27,6 +23,7 @@ import {
   FolderPlusIcon,
   DocumentPlusIcon,
   TrashIcon as HeroTrashIcon,
+  LockClosedIcon,
 } from '@heroicons/react/24/outline';
 
 /* Heroicons (outline) under the app's semantic names. Each wrapper bakes in a
@@ -55,6 +52,9 @@ export const NewFileIcon = make(DocumentPlusIcon, 15);
 /** Trash: the tree's delete affordance. */
 export const TrashIcon = make(HeroTrashIcon, 15);
 
+/** Lock: a built-in item that ships with every project and cannot be edited. */
+export const LockIcon = make(LockClosedIcon, 14);
+
 /** Board: the columns of work. */
 export const BoardIcon = make(ViewColumnsIcon, 17);
 
@@ -63,12 +63,6 @@ export const ListIcon = make(QueueListIcon, 17);
 
 /** Documentation: an open book. */
 export const DocsIcon = make(BookOpenIcon, 17);
-
-/** Workflow: the states and their transitions as a graph. */
-export const WorkflowIcon = make(ShareIcon, 17);
-
-/** Automations: a transition fired. */
-export const AutomationsIcon = make(BoltIcon, 17);
 
 /** Search: the lens. */
 export const SearchIcon = make(MagnifyingGlassIcon, 17);
@@ -109,12 +103,6 @@ export const MoonIcon = make(HeroMoonIcon, 15);
 
 /** Close: dismiss a modal. */
 export const CloseIcon = make(XMarkIcon, 16);
-
-/** Agent action: the loom hands the thread to an agent. */
-export const AgentIcon = make(SparklesIcon, 14);
-
-/** Run action: a shell command pulled like a lever. */
-export const CommandIcon = make(CommandLineIcon, 14);
 
 /** Date: the datepicker trigger. */
 export const CalendarIcon = make(HeroCalendarIcon, 15);

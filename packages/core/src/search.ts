@@ -19,8 +19,10 @@ function snippetFor(text: string, needle: string): string | undefined {
 }
 
 /**
- * Plain substring search across titles, summaries and bodies. Title and
- * summary hits rank above body hits; no embeddings, no stemming.
+ * Plain substring search across titles, summaries and bodies. Ticket IDs are
+ * matched by substring too, so a query like `0086` or `T-008` finds tickets
+ * by partial ID. Title and summary hits rank above body hits; no embeddings,
+ * no stemming.
  */
 export function search(project: Project, query: string, limit = 20): SearchHit[] {
   const needle = query.trim().toLowerCase();
@@ -29,9 +31,11 @@ export function search(project: Project, query: string, limit = 20): SearchHit[]
 
   for (const t of project.tickets) {
     const title = typeof t.fields.title === 'string' ? t.fields.title : '';
+    const id = t.id.toLowerCase();
     let score = 0;
     if (title.toLowerCase().includes(needle)) score += 4;
-    if (t.id.toLowerCase() === needle) score += 5;
+    if (id === needle) score += 5;
+    else if (id.includes(needle)) score += 3;
     if (t.body.toLowerCase().includes(needle)) score += 1;
     if (score > 0) {
       hits.push({
@@ -58,13 +62,18 @@ export function search(project: Project, query: string, limit = 20): SearchHit[]
     }
   }
   for (const s of project.sessions) {
-    if (s.body.toLowerCase().includes(needle)) {
+    const id = s.id.toLowerCase();
+    let score = 0;
+    if (id === needle) score += 5;
+    else if (id.includes(needle)) score += 3;
+    if (s.body.toLowerCase().includes(needle)) score += 1;
+    if (score > 0) {
       hits.push({
         kind: 'session',
         id: s.id,
         path: s.path,
         snippet: snippetFor(s.body, needle) ?? '',
-        score: 1,
+        score,
       });
     }
   }

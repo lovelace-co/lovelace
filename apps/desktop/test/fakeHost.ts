@@ -1,5 +1,5 @@
-import type { HostClient, SourceFile } from '../src/lib/host';
-import type { AutomationRule, SearchHit, Snapshot, WorkflowEdit } from '../src/lib/types';
+import { HostError, type HostClient, type SourceFile } from '../src/lib/host';
+import type { MigrationPlan, MigrationResult, SchemaEdit, SearchHit, Snapshot } from '../src/lib/types';
 import fixture from './fixtures/snapshot.json';
 
 /**
@@ -13,8 +13,25 @@ export class FakeHost implements HostClient {
   files = new Map<string, string>();
   sourceFiles = new Map<string, SourceFile>();
   fileList: string[] = [];
-  transitionRules: AutomationRule[] = [];
-  log = '';
+  /** Set to make `snapshot` throw a HostError, for spec-gate tests. */
+  snapshotError: { message: string; kind?: string; code?: string; declared?: string; supported?: string } | null =
+    null;
+  migrationPlanData: MigrationPlan = {
+    declared: '2.1.0',
+    target: '3.0.0',
+    steps: [
+      {
+        summary: 'upgrades the 2.x workflow format to 3.0',
+        changes: ['nest 4 fields under their types', 'rename workflow.yaml to schema.yaml'],
+      },
+    ],
+  };
+  migrationResultData: MigrationResult = {
+    declared: '2.1.0',
+    finalVersion: '3.0.0',
+    steps: ['upgrades the 2.x workflow format to 3.0'],
+    issues: [],
+  };
 
   private record(method: string, args: unknown[]) {
     this.calls.push({ method, args });
@@ -25,14 +42,14 @@ export class FakeHost implements HostClient {
     return true;
   }
 
-  async init(root: string, name: string, userName?: string, workflow?: unknown): Promise<Snapshot> {
-    this.record('init', [root, name, userName, workflow]);
+  async init(root: string, name: string, userName?: string, schema?: unknown): Promise<Snapshot> {
+    this.record('init', [root, name, userName, schema]);
     return this.snapshotData;
   }
 
-  async defaultWorkflow() {
-    this.record('defaultWorkflow', []);
-    return this.snapshotData.workflow;
+  async defaultSchema() {
+    this.record('defaultSchema', []);
+    return this.snapshotData.schema;
   }
 
   async installClaude(root: string, gitHook: boolean): Promise<{ written: string[]; manual: string[] }> {
@@ -42,7 +59,23 @@ export class FakeHost implements HostClient {
 
   async snapshot(root: string): Promise<Snapshot> {
     this.record('snapshot', [root]);
+    if (this.snapshotError) {
+      const e = this.snapshotError;
+      throw new HostError(e.message, e.kind ?? 'project', e.code, e.declared, e.supported);
+    }
     return this.snapshotData;
+  }
+
+  async migrationPlan(root: string): Promise<MigrationPlan> {
+    this.record('migrationPlan', [root]);
+    return this.migrationPlanData;
+  }
+
+  async migrateProject(root: string): Promise<MigrationResult> {
+    this.record('migrateProject', [root]);
+    // A real migration patches the manifest so the next snapshot loads.
+    this.snapshotError = null;
+    return this.migrationResultData;
   }
 
   async createTicket(
@@ -59,15 +92,10 @@ export class FakeHost implements HostClient {
     root: string,
     id: string,
     fields: Record<string, unknown>,
-    options?: { actor?: string; force?: boolean },
+    options?: { actor?: string },
   ): Promise<Snapshot> {
     this.record('updateTicket', [root, id, fields, options]);
     return this.snapshotData;
-  }
-
-  async testTransition(root: string, id: string, to: string): Promise<AutomationRule[]> {
-    this.record('testTransition', [root, id, to]);
-    return this.transitionRules;
   }
 
   async deleteTicket(root: string, id: string): Promise<Snapshot> {
@@ -75,17 +103,15 @@ export class FakeHost implements HostClient {
     return this.snapshotData;
   }
 
-  async setAutomations(root: string, rules: AutomationRule[]): Promise<Snapshot> {
-    this.record('setAutomations', [root, rules]);
+  async writeSchema(root: string, edit: SchemaEdit): Promise<Snapshot> {
+    this.record('writeSchema', [root, edit]);
     return this.snapshotData;
   }
 
-  async writeWorkflow(root: string, edit: WorkflowEdit): Promise<Snapshot> {
-    this.record('writeWorkflow', [root, edit]);
-    return this.snapshotData;
-  }
-
-  async writeManifest(root: string, changes: { name: string }): Promise<Snapshot> {
+  async writeManifest(
+    root: string,
+    changes: { name?: string; presence_timeout_minutes?: number | null },
+  ): Promise<Snapshot> {
     this.record('writeManifest', [root, changes]);
     return this.snapshotData;
   }
@@ -103,10 +129,6 @@ export class FakeHost implements HostClient {
   async setGraphLayout(root: string, layout: Record<string, { x: number; y: number }>): Promise<Snapshot> {
     this.record('setGraphLayout', [root, layout]);
     return this.snapshotData;
-  }
-
-  async actionLog(): Promise<string> {
-    return this.log;
   }
 
   async readFile(_root: string, path: string): Promise<string> {
@@ -191,7 +213,7 @@ export class FakeHost implements HostClient {
     return null;
   }
 
-  async watch(): Promise<() => void> {
+  async watch(_root: string, _onChange: (change: { presenceOnly: boolean }) => void): Promise<() => void> {
     return () => undefined;
   }
 }

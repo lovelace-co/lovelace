@@ -1,7 +1,7 @@
 {
   "root": "examples/demo-project",
   "manifest": {
-    "spec_version": "1.0.0",
+    "spec_version": "3.0.0",
     "project_id": "demo4f2a",
     "name": "Orbit Weather Service",
     "created": "2026-05-28",
@@ -15,19 +15,115 @@
       "state": "state"
     }
   },
-  "workflow": {
+  "schema": {
     "types": [
       {
         "name": "epic",
-        "id_prefix": "E"
+        "id_prefix": "E",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "assignee",
+            "type": "reference",
+            "refers_to": [
+              "actor"
+            ]
+          },
+          {
+            "name": "priority",
+            "type": "enum",
+            "values_from": "priorities"
+          }
+        ]
       },
       {
         "name": "task",
-        "id_prefix": "T"
+        "id_prefix": "T",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "parent",
+            "type": "reference",
+            "refers_to": [
+              "epic"
+            ]
+          },
+          {
+            "name": "depends_on",
+            "type": "list",
+            "item_type": "reference"
+          },
+          {
+            "name": "assignee",
+            "type": "reference",
+            "refers_to": [
+              "actor"
+            ]
+          },
+          {
+            "name": "priority",
+            "type": "enum",
+            "values_from": "priorities"
+          },
+          {
+            "name": "estimate",
+            "type": "number"
+          }
+        ]
       },
       {
         "name": "bug",
-        "id_prefix": "T"
+        "id_prefix": "T",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "parent",
+            "type": "reference",
+            "refers_to": [
+              "epic"
+            ]
+          },
+          {
+            "name": "depends_on",
+            "type": "list",
+            "item_type": "reference"
+          },
+          {
+            "name": "assignee",
+            "type": "reference",
+            "refers_to": [
+              "actor"
+            ]
+          },
+          {
+            "name": "priority",
+            "type": "enum",
+            "values_from": "priorities"
+          },
+          {
+            "name": "environment",
+            "type": "enum",
+            "values": [
+              "local",
+              "dev",
+              "staging",
+              "production"
+            ],
+            "required": true
+          }
+        ]
       }
     ],
     "statuses": [
@@ -35,67 +131,22 @@
         "name": "backlog"
       },
       {
-        "name": "todo"
+        "name": "todo",
+        "agent": "ready"
       },
       {
         "name": "in_progress",
-        "active": true
+        "agent": "in_progress"
       },
       {
-        "name": "in_review",
-        "active": true
-      },
-      {
-        "name": "staging",
-        "active": true
+        "name": "in_review"
       },
       {
         "name": "done",
-        "complete": true
+        "agent": "complete"
       },
       {
-        "name": "cancelled",
-        "complete": true
-      }
-    ],
-    "transitions": [
-      {
-        "from": "backlog",
-        "to": [
-          "todo",
-          "cancelled"
-        ]
-      },
-      {
-        "from": "todo",
-        "to": [
-          "in_progress",
-          "backlog",
-          "cancelled"
-        ]
-      },
-      {
-        "from": "in_progress",
-        "to": [
-          "in_review",
-          "todo",
-          "cancelled"
-        ]
-      },
-      {
-        "from": "in_review",
-        "to": [
-          "staging",
-          "in_progress",
-          "cancelled"
-        ]
-      },
-      {
-        "from": "staging",
-        "to": [
-          "done",
-          "in_review"
-        ]
+        "name": "cancelled"
       }
     ],
     "priorities": [
@@ -103,74 +154,6 @@
       "high",
       "medium",
       "low"
-    ],
-    "fields": [
-      {
-        "name": "title",
-        "type": "string",
-        "required": true
-      },
-      {
-        "name": "parent",
-        "type": "reference",
-        "refers_to": [
-          "epic"
-        ]
-      },
-      {
-        "name": "depends_on",
-        "type": "list",
-        "item_type": "reference"
-      },
-      {
-        "name": "assignee",
-        "type": "reference",
-        "refers_to": [
-          "actor"
-        ]
-      },
-      {
-        "name": "priority",
-        "type": "enum",
-        "values_from": "priorities"
-      },
-      {
-        "name": "estimate",
-        "type": "number",
-        "applies_to": [
-          "task"
-        ]
-      },
-      {
-        "name": "environment",
-        "type": "enum",
-        "values": [
-          "local",
-          "dev",
-          "staging",
-          "production"
-        ],
-        "required": true,
-        "applies_to": [
-          "bug"
-        ]
-      }
-    ],
-    "on_transition": [
-      {
-        "when": {
-          "to": "staging",
-          "type": "task"
-        },
-        "agent": "Deploy the current branch to the staging environment using scripts/deploy-staging.sh and comment the result on the ticket.",
-        "confirm": true
-      },
-      {
-        "when": {
-          "to": "done"
-        },
-        "run": "./scripts/archive-artifacts.sh"
-      }
     ]
   },
   "actors": [
@@ -186,7 +169,7 @@
     }
   ],
   "index": {
-    "spec_version": "1.0.0",
+    "spec_version": "3.0.0",
     "project": {
       "id": "demo4f2a",
       "name": "Orbit Weather Service"
@@ -352,12 +335,30 @@
       }
     ],
     "links": [
-      { "source": "architecture-overview", "target": "ADR-0001" },
-      { "source": "context", "target": "architecture-overview" },
-      { "source": "context", "target": "conventions-overview" },
-      { "source": "context", "target": "domain-overview" },
-      { "source": "decisions-overview", "target": "ADR-0001" },
-      { "source": "T-0002", "target": "architecture-overview" }
+      {
+        "source": "architecture-overview",
+        "target": "ADR-0001"
+      },
+      {
+        "source": "context",
+        "target": "architecture-overview"
+      },
+      {
+        "source": "context",
+        "target": "conventions-overview"
+      },
+      {
+        "source": "context",
+        "target": "domain-overview"
+      },
+      {
+        "source": "decisions-overview",
+        "target": "ADR-0001"
+      },
+      {
+        "source": "T-0002",
+        "target": "architecture-overview"
+      }
     ]
   },
   "fieldCatalogue": {
@@ -366,18 +367,6 @@
         "name": "title",
         "type": "string",
         "required": true
-      },
-      {
-        "name": "parent",
-        "type": "reference",
-        "refers_to": [
-          "epic"
-        ]
-      },
-      {
-        "name": "depends_on",
-        "type": "list",
-        "item_type": "reference"
       },
       {
         "name": "assignee",
@@ -424,10 +413,7 @@
       },
       {
         "name": "estimate",
-        "type": "number",
-        "applies_to": [
-          "task"
-        ]
+        "type": "number"
       }
     ],
     "bug": [
@@ -469,10 +455,7 @@
           "staging",
           "production"
         ],
-        "required": true,
-        "applies_to": [
-          "bug"
-        ]
+        "required": true
       }
     ]
   },

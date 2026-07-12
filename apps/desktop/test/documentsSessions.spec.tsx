@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Documents } from '../src/views/Documents';
-import { Sessions } from '../src/views/Sessions';
+import { SessionsModal } from '../src/components/SessionsModal';
 import { HostProvider } from '../src/state/store';
 import type { Snapshot } from '../src/lib/types';
 import { FakeHost } from './fakeHost';
@@ -269,7 +269,7 @@ describe('Sessions view', () => {
   it('lists session records reverse-chronologically with outcome and commits', () => {
     render(
       <HostProvider host={new FakeHost()}>
-        <Sessions snapshot={snapshot} onOpenTicket={vi.fn()} />
+        <SessionsModal snapshot={snapshot} onClose={vi.fn()} onOpenTicket={vi.fn()} />
       </HostProvider>,
     );
     const ids = screen.getAllByText(/^S-\d+$/).map((el) => el.textContent);
@@ -278,5 +278,26 @@ describe('Sessions view', () => {
     expect(screen.getByText('Partial')).toBeTruthy();
     expect(screen.getByText('Completed')).toBeTruthy();
     expect(screen.getByText(/9c41f2a/)).toBeTruthy();
+  });
+
+  it('opens pre-expanded on initialOpen, loading its body without user interaction', async () => {
+    render(
+      <HostProvider host={new FakeHost()}>
+        <SessionsModal snapshot={snapshot} onClose={vi.fn()} onOpenTicket={vi.fn()} initialOpen="S-0002" />
+      </HostProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'toggle S-0002' }).textContent).toBe('collapse');
+    expect(screen.getByRole('button', { name: 'toggle S-0001' }).textContent).toBe('expand');
+    await waitFor(() => expect(screen.getByText('Fixture body.')).toBeTruthy());
+  });
+
+  it('ignores an initialOpen that matches no session, behaving as if none were given', () => {
+    render(
+      <HostProvider host={new FakeHost()}>
+        <SessionsModal snapshot={snapshot} onClose={vi.fn()} onOpenTicket={vi.fn()} initialOpen="S-9999" />
+      </HostProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'toggle S-0002' }).textContent).toBe('expand');
+    expect(screen.getByRole('button', { name: 'toggle S-0001' }).textContent).toBe('expand');
   });
 });

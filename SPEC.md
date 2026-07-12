@@ -1,12 +1,12 @@
 # Lovelace Format Specification
 
-Version 2.1.0
+Version 3.2.0
 
 This document specifies the on-disk format of a Lovelace project. It is written so that a developer who has never seen Lovelace can create a valid `.lovelace/` directory by hand using only this document. Files conforming to this specification are the single source of truth for a project; anything derived from them (indexes, boards, digests) can be regenerated at any time.
 
 ## 1. Overview
 
-A Lovelace project is a directory tree named `.lovelace/` at the root of a repository. Every entity (ticket, document, session, comment) is one Markdown file with YAML frontmatter. Configuration files (`manifest.yaml`, `workflow.yaml`, `actors.yaml`) are plain YAML.
+A Lovelace project is a directory tree named `.lovelace/` at the root of a repository. Every entity (ticket, document, session, comment) is one Markdown file with YAML frontmatter. Configuration files (`manifest.yaml`, `schema.yaml`, `actors.yaml`) are plain YAML.
 
 Rules that apply everywhere:
 
@@ -22,8 +22,8 @@ Rules that apply everywhere:
 ```
 .lovelace/
   manifest.yaml            project identity and spec version
-  workflow.yaml            ticket types, statuses, transitions, priorities,
-                           field definitions, transition automations
+  schema.yaml              ticket types (with their fields), statuses,
+                           priorities
   actors.yaml              the user plus named agent identities
   board-order.yaml         optional; manual per-column card order (see 2.1)
   AGENTS.md                agent operating instructions (how to mutate, move
@@ -41,16 +41,15 @@ Rules that apply everywhere:
     ticket.md
     adr.md
     session.md
-  state/                   gitignored; active ticket, queued instructions
+  state/                   gitignored; active ticket, presence marker
   index/
     index.json             generated, gitignored
     BOARD.md               generated, committed
-    actions.log            generated, gitignored
 ```
 
 `documentation/` may hold any Markdown files and subdirectories, to any depth, with any names (see 7.3 for the only naming constraints). No file or directory is required. By convention `documentation/index.md` is where an agent starts reading, and a directory's `index.md`, when present, is its landing page; tooling prefers these but never depends on them. Documents that no other document links to are surfaced as orphans in the documentation graph rather than being enforced against.
 
-The paths `state/`, `index/index.json` and `index/actions.log` must be listed in the repository's `.gitignore`. `index/BOARD.md` is committed.
+The paths `state/` and `index/index.json` must be listed in the repository's `.gitignore`. `index/BOARD.md` is committed.
 
 ### 2.1 board-order.yaml
 
@@ -83,19 +82,24 @@ Document files other than ADRs are identified by their repository-relative path;
 
 ## 4. Spec versioning
 
-This specification is versioned with semver. The current version is `2.1.0`.
+This specification is versioned with semver. The current version is `3.2.0`.
 
-- The manifest declares the spec version the project conforms to.
-- Tooling must read `manifest.yaml` before parsing anything else and must refuse to operate on a major version it does not know, with a clear error naming both versions.
-- Minor and patch differences are tolerated: parsing proceeds, unknown constructs produce warnings.
+- The manifest declares the spec version the project conforms to. Tooling reads `manifest.yaml` before parsing anything else.
+- A major version changes the shape of the format, and tooling refuses to operate across a major boundary. A project declaring a major above the tooling's own is refused with a clear error naming both versions and telling the user to update Lovelace. A project declaring a major below the tooling's own is not opened as-is either; it is offered a migration instead.
+- A minor version is strictly additive: it introduces new, optional constructs without changing or removing anything that already exists. Tooling operating on a project of the same major must tolerate constructs it does not recognise: parsing proceeds, each unknown construct produces a validation warning naming the file and the key, and a write preserves unknown constructs untouched rather than stripping them. Preservation follows identity where the tooling can track it: a renamed type or status keeps its unknown constructs, while renaming a field is a removal and an addition, so unknown keys on the field do not follow it. A proposed change that would require rewriting existing files is a major change by definition, never a minor one.
+- A patch version clarifies this document's prose only. It changes no format and requires no tooling change.
+- The declared `spec_version` is a floor, not an inventory of every construct a project actually uses. Because minors are additive, a project valid under 3.0 is also valid under 3.1. Tooling never bumps the declared version on its own; only a migration rewrites it.
 - Any change to this document requires a version bump here and in the manifest schema notes.
 
 Changes by version:
 
-- `2.1.0`: adds the optional manifest key `presence_timeout_minutes` (positive integer; tooling defaults to 120) and the machine-local `state/presence.json` live-agent marker (see 13). Projects declaring `2.0.0` remain valid.
+- `3.2.0`: replaces the singleton `state/presence.json` live-agent marker with per-session entries, `state/presence/<session-id>.json`, each carrying a `beat_at` heartbeat refreshed on every tool call (see 12). This supersedes the singleton, which current tooling reads as a single legacy entry and removes on its next presence write. The `presence_timeout_minutes` default drops from 120 to 15 now that heartbeats refresh liveness on every tool call rather than only at turn start. Backward compatible: projects declaring `3.1.0` remain valid.
+- `3.1.0`: documents the version semantics (majors migrate, minors are additive and tolerated, patches are prose), requires tooling to preserve unknown keys through writes and surface them as warnings rather than stripping them, distinguishes the too-new refusal (update the app) from the too-old refusal (migrate the project), and states the declared version is a floor rewritten only by migrations. Adds the machine-local `state/active/<session-id>` per-session active-ticket markers (see 12), letting concurrent Claude Code sessions each hold their own active ticket rather than sharing `state/active_ticket`. Backward compatible: projects declaring `3.0.0` remain valid.
+- `3.0.0`: renames `workflow.yaml` to `schema.yaml`. Fields are nested under each type instead of living in a shared top-level list, and the `applies_to` key is removed. Statuses carry an optional `agent` role (`ready`, `in_progress` or `complete`, at most one status per role) in place of the `active`/`complete` boolean flags; an agent picks up work in the `ready` status, marks it `in_progress` while working and `complete` when done. Transitions and transition automations are removed entirely, along with `state/agent_instructions.json` and `index/actions.log`; a ticket's status may change to any defined status. This is a breaking change over the 2.x line: 3.0 tooling refuses a project declaring a spec version below `3.0.0`.
+- `2.1.0`: adds the optional manifest key `presence_timeout_minutes` (positive integer; tooling defaults to 120) and the machine-local `state/presence.json` live-agent marker (see 12). Projects declaring `2.0.0` remain valid.
 - `2.0.0`: the knowledge tree is `documentation/` (the `paths.documentation` key, default `documentation`), and its files are "documents". It informs rather than enforces: there are no fixed-name, required files. `documentation/index.md` is a scaffolded-at-init convention, the place an agent starts reading, but it is freely renamable, and a directory's `index.md`, when present, is its landing page. Document filenames are unrestricted (any `.md` name, no slug rule; the only guard is no path separators), and nothing under `documentation/` is required; documents that nothing links to surface as orphans in the documentation graph rather than being enforced against. This is a breaking change over the 1.x line, which required fixed-name landing files throughout the knowledge tree: 2.0 tooling refuses a 1.x project.
 - `1.6.0`: generalises the `[[...]]` wiki-link into a scheme namespace: a bare token is an entity id (as before), `file:<repo-relative-path>` references a source file, and `@<actor-id>` mentions a person. Only entity-to-entity links enter the index `links` graph; file and person references are display links, never indexed. Backward compatible: existing `[[id]]` bodies are unaffected.
-- `1.5.0`: adds the optional, machine-local `state/graph-layout.json` holding manual documentation-graph node positions (see 13). Gitignored and never required for correctness; absent positions fall back to the automatic layout.
+- `1.5.0`: adds the optional, machine-local `state/graph-layout.json` holding manual documentation-graph node positions (see 12). Gitignored and never required for correctness; absent positions fall back to the automatic layout.
 - `1.4.0`: adds optional wiki-links (`[[id]]`) in entity bodies and a derived `links` array in the index (see 7.1 and 11). Backward compatible: bodies without wiki-links are unaffected, and a project declaring an earlier version gains the index `links` section when reindexed by current tooling.
 - `1.3.0`: removes the cycle entity, the `C-` identifier prefix and the default `cycle` field. The `cycles/` directory is no longer part of the layout, and `cycle` is no longer a valid `refers_to` target. Projects declaring an earlier version that still carry cycle data will see validation errors against the removed constructs.
 - `1.2.0`: renames the status flags `wip`/`terminal` to `active`/`complete`, and adds optional human-readable `label` (statuses, types, fields) and `plural` (types). Display names are derived by Title-Casing the machine `name` when absent.
@@ -105,13 +109,13 @@ Changes by version:
 ## 5. manifest.yaml
 
 ```yaml
-spec_version: 1.0.0        # required, semver string
+spec_version: 3.2.0        # required, semver string
 project_id: 7f3a9c2e       # required, stable opaque string, assigned at init
 name: My Project           # required, display name
 created: 2026-06-10        # required, ISO date
-presence_timeout_minutes: 120  # optional, positive integer; how long a live
-                           # agent marker stays believable without its end
-                           # hook having fired (defaults to 120)
+presence_timeout_minutes: 15  # optional, positive integer; how long a live
+                           # agent marker stays believable without a
+                           # heartbeat (defaults to 15)
 paths:                     # optional, all default to the values shown
   tickets: tickets
   documentation: documentation
@@ -124,68 +128,51 @@ paths:                     # optional, all default to the values shown
 
 `project_id` is an opaque identifier (eight or more URL-safe characters) generated at init and never changed. `paths` allows renaming the standard directories; tooling must resolve all paths through the manifest.
 
-## 6. workflow.yaml
+## 6. schema.yaml
 
-Defines ticket types, statuses, transitions, priorities, field definitions and transition automations.
+Defines ticket types (with their fields), statuses and priorities.
 
 ```yaml
 types:
-  - name: epic
-    id_prefix: E
   - name: task
     id_prefix: T
+    fields:
+      - name: title
+        type: string
+        required: true
+      - name: priority
+        type: enum
+        values_from: priorities
   - name: bug
     id_prefix: T
+    fields:
+      - name: title
+        type: string
+        required: true
+      - name: environment
+        type: enum
+        values: [local, dev, staging, production]
+        required: true
 
 statuses:
   - name: backlog
   - name: todo
+    agent: ready
   - name: in_progress
-    active: true
+    agent: in_progress
   - name: in_review
-    active: true
   - name: done
-    complete: true
+    agent: complete
   - name: cancelled
-    complete: true
-
-transitions:
-  - from: backlog
-    to: [todo, cancelled]
-  - from: todo
-    to: [in_progress, backlog, cancelled]
-  - from: in_progress
-    to: [in_review, todo, cancelled]
-  - from: in_review
-    to: [done, in_progress, cancelled]
 
 priorities: [urgent, high, medium, low]
-
-fields:
-  - name: title
-    type: string
-    required: true
-  - name: parent
-    type: reference
-    refers_to: [epic]
-  - name: depends_on
-    type: list
-    item_type: reference
-  - name: assignee
-    type: reference
-    refers_to: [actor]
-  - name: priority
-    type: enum
-    values_from: priorities
-
-on_transition: []          # see section 12
 ```
 
 Rules:
 
-- `types` is a non-empty list. Each type has a `name` (lowercase identifier) and an `id_prefix` matching section 3, plus optional `label` (human-readable singular) and `plural`. Multiple types may share a prefix.
-- `statuses` is a non-empty ordered list; the order defines board column order. The first status is the default for new tickets. `active: true` marks a status as in-progress work (used by the digest, board signal and epic progress). `complete: true` marks a completion state (dims cards, counts toward epic completion). An optional `label` gives a human-readable display name.
-- `transitions` lists the legal moves. A transition not listed is illegal. Tooling rejects illegal transitions; the validator reports tickets whose status is not in `statuses`.
+- `types` is a non-empty list. Each type has a `name` (lowercase identifier), an `id_prefix` matching section 3, optional `label` (human-readable singular) and `plural`, and its own `fields` list (see 6.1). Multiple types may share a prefix.
+- `statuses` is a non-empty ordered list; the order defines board column order. The first status is the default for new tickets. An optional `label` gives a human-readable display name. An optional `agent` role, one of `ready`, `in_progress` or `complete`, marks the status an agent keys off: it picks up work in the `ready` status, marks a ticket `in_progress` while working on it, and moves it to `complete` when done. At most one status may hold each role. This replaces the 1.x/2.x `active`/`complete` boolean flags.
+- A ticket's status may change to any status defined in `statuses`; there is no legal-move gating.
 - `priorities` is an ordered list, highest first, referenced by `values_from`.
 - Human-readable display names (`label`, `plural`) are optional everywhere; when absent, tooling derives a display name by Title-Casing the machine `name`. Added in spec 1.2.0.
 
@@ -193,24 +180,23 @@ Rules:
 
 Ticket fields are data, not code. The validator, indexer, MCP server and app forms read these definitions at runtime.
 
-Core fields are reserved, locked and not declared in `workflow.yaml`: `id`, `type`, `status`, `created`, `updated`. Tooling manages them; user edits to them through tooling are rejected.
+Core fields are reserved, locked and not declared in `schema.yaml`: `id`, `type`, `status`, `created`, `updated`. Tooling manages them; user edits to them through tooling are rejected.
 
-Standard fields ship as defaults in the `fields` list shown above and may be modified or removed like any user-defined field.
+Fields shown in the example above are per-type defaults and may be modified or removed like any other field definition.
 
 Each field definition has:
 
 | Key | Required | Meaning |
 |---|---|---|
-| `name` | yes | Lowercase identifier, unique, not a core field name |
+| `name` | yes | Lowercase identifier, unique within its type, not a core field name |
 | `type` | yes | One of `string`, `number`, `boolean`, `date`, `enum`, `list`, `reference` |
 | `label` | optional | Human-readable display name; defaults to Title-Cased `name` |
 | `values` | for `enum` | Allowed values |
 | `values_from` | for `enum` | Alternative to `values`: `priorities` |
 | `item_type` | for `list` | Element type, any type except `list` |
 | `refers_to` | optional, `reference` only | Entity kinds the reference may target: type names, `actor`, `document` |
-| `required` | optional, default false | Whether tickets of the applicable types must set it |
+| `required` | optional, default false | Whether tickets of this type must set it |
 | `default` | optional | Value applied at creation when absent |
-| `applies_to` | optional | Ticket type names; absent means all types |
 
 `date` values are ISO 8601 dates (`2026-06-10`) or datetimes (`2026-06-10T09:30:00Z`). `reference` values are entity IDs (or actor IDs from `actors.yaml`); they participate in link integrity checking. A `list` of `reference` is permitted via `item_type: reference`.
 
@@ -220,7 +206,7 @@ Each field definition has:
 
 - `id` must match the filename (for ID-named files).
 - `created` and `updated` are ISO 8601 datetimes in UTC.
-- Frontmatter keys not defined by this spec or by `workflow.yaml` produce a warning.
+- Frontmatter keys not defined by this spec or by `schema.yaml` produce a warning.
 - Bodies are free Markdown and may contain references written `[[token]]`. The token is one of: a bare **entity id** (`[[T-0142]]`, `[[architecture-overview]]`); `file:<path>` for a **source file** by repository-relative path (`[[file:src/cache.ts]]`); or `@<actor-id>` to **mention a person** (`[[@ada]]`). The stored token is stable, so changing a target's displayed title never breaks the link; tools resolve it to a title for display. Only bare entity ids feed the index link graph (see 11); `file:` and `@` references are display links and are never indexed. A token that does not resolve is shown verbatim.
 
 ### 7.2 Ticket
@@ -323,7 +309,7 @@ Exactly one actor must have `kind: human` in v1 (the solo developer). `assignee`
 
 ## 9. The documentation tree
 
-`documentation/` is a nested knowledge tree of documents. It informs rather than enforces: no file or directory is required, and filenames are unrestricted (see 7.3). By convention `documentation/index.md` is where an agent starts reading, scaffolded at init and holding the project summary and reading order, and a directory's `index.md`, when present, is its landing page pointing downward to its children. Tooling prefers these conventional entry points but never depends on them, and a document that nothing else links to is surfaced as an orphan in the documentation graph (see 13) rather than being enforced against. The agent rules of engagement (how to mutate, move and resolve tickets) live in `.lovelace/AGENTS.md`, a Lovelace-owned file the agent integration installs and regenerates; the project's `CLAUDE.md` only points to it.
+`documentation/` is a nested knowledge tree of documents. It informs rather than enforces: no file or directory is required, and filenames are unrestricted (see 7.3). By convention `documentation/index.md` is where an agent starts reading, scaffolded at init and holding the project summary and reading order, and a directory's `index.md`, when present, is its landing page pointing downward to its children. Tooling prefers these conventional entry points but never depends on them, and a document that nothing else links to is surfaced as an orphan in the documentation graph (see 12) rather than being enforced against. The agent rules of engagement (how to mutate, move and resolve tickets) live in `.lovelace/AGENTS.md`, a Lovelace-owned file the agent integration installs and regenerates; the project's `CLAUDE.md` only points to it.
 
 ## 10. Templates
 
@@ -335,39 +321,21 @@ Exactly one actor must have `kind: human` in v1 (the solo developer). `assignee`
 
 The index also carries a `links` array: the wiki-link graph derived from ticket and document bodies. Each entry is `{ source, target }`, both entity ids (a ticket id or a document id). Entries are de-duplicated and sorted by `source` then `target`; unresolved tokens and self-links are excluded. Like the rest of the index it is fully derivable and deterministic.
 
-`index/BOARD.md` is a generated, committed Markdown board: tickets grouped by status in `workflow.yaml` column order, each row showing ID, title, type and assignee.
+`index/BOARD.md` is a generated, committed Markdown board: tickets grouped by status in `schema.yaml` column order, each row showing ID, title, type and assignee.
 
-## 12. Transition automations
-
-`workflow.yaml` may define `on_transition` rules executed when a ticket transition is observed.
-
-```yaml
-on_transition:
-  - when: { to: staging, type: task }
-    agent: Deploy the current branch to staging and comment the result on the ticket.
-  - when: { to: done }
-    run: ./scripts/archive.sh
-```
-
-- `when` matches on `to`, optionally `from`, ticket `type`, and any defined field value (exact match).
-- Exactly one of `run` (shell command, executed from the repo root with ticket frontmatter as `LOVELACE_*` environment variables) or `agent` (instruction text delivered to the coding agent) per rule.
-- A `run` action executes when the transition is observed. An `agent` action is returned to the agent inline when the agent made the move, or queued in `state/agent_instructions.json` for the next session when a human made it.
-- Failed actions never roll back transitions. Every fired action is appended to `index/actions.log`.
-- The validator rejects rules referencing unknown statuses, types or fields.
-
-## 13. state/
+## 12. state/
 
 Gitignored, machine-local, never required for correctness:
 
 - `state/active_ticket` contains the active ticket ID, one line.
+- `state/active/<session-id>` contains one live Claude Code session's active ticket ID, one line per file, one file per session. Written by the Claude Code integration's tool tracking (a hook watching `set_active_ticket` calls) and removed when the session ends. Lets concurrent sessions each hold their own active ticket instead of sharing the single `state/active_ticket` pointer.
 - `state/counters/<prefix>` contains the last assigned number for that ID prefix.
-- `state/agent_instructions.json` contains automation instructions queued for the next agent session.
-- `state/presence.json` is the live-agent marker: `{ "ticket": "T-0142" | null, "actor": "<id>" | null, "started_at": "<ISO datetime>" }`. The agent integration writes it when a turn begins processing and removes it when the turn or session ends; readers treat a marker older than `presence_timeout_minutes` as gone.
+- `state/presence/<session-id>.json` is one live Claude Code session's agent marker: `{ "ticket": "T-0142" | null, "actor": "<id>" | null, "started_at": "<ISO datetime>", "beat_at": "<ISO datetime>" }`. The agent integration writes it when a turn begins processing, refreshes `beat_at` with a heartbeat on every tool call, and removes it when the session's stop passes its checks or the session ends. Readers treat an entry as fresh when `beat_at` (falling back to `started_at` when no heartbeat has landed) is younger than `presence_timeout_minutes`; elapsed time is always measured from `started_at`. A pre-3.2 project's singleton `state/presence.json` is read as one more entry and cleaned up on the next presence write.
 - `state/graph-layout.json` contains manual node positions for the documentation graph: `{ "version": 1, "nodes": { "<id>": { "x": <number>, "y": <number> } } }`. A node without a saved position falls back to the automatic layout.
 
-Deleting `state/` loses only the active-ticket pointer, any queued automation instructions and the graph arrangement; counters are rebuilt by scanning existing IDs.
+Deleting `state/` loses only the active-ticket pointer and the graph arrangement; counters are rebuilt by scanning existing IDs.
 
-## 14. Validation summary
+## 13. Validation summary
 
 Errors (non-zero outcome, block mutations):
 
@@ -375,7 +343,8 @@ Errors (non-zero outcome, block mutations):
 - `id` not matching filename; duplicate IDs.
 - Unknown ticket `type` or `status`; field values violating their definitions; missing required fields.
 - Broken references: `parent`, `depends_on`, `assignee` and `reference` fields that do not resolve.
-- `on_transition` rules referencing unknown statuses, types or fields.
+- More than one status declaring the same `agent` role.
+- More than one type or status sharing the same machine name.
 - Manifest spec major version unknown to the tooling.
 
 Warnings (reported, never blocking):

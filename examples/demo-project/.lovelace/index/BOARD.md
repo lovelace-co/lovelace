@@ -25,10 +25,6 @@ _Empty._
 | --- | --- | --- | --- |
 | T-0004 | Wind gusts reported as negative values | bug | claude |
 
-## staging (0)
-
-_Empty._
-
 ## done (1)
 
 | ID | Title | Type | Assignee |

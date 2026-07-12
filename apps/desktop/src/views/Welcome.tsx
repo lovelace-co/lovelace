@@ -5,7 +5,8 @@ import { InitWizard } from '../components/InitWizard';
 import { Toast } from '../components/Toast';
 import { useTheme } from '../state/theme';
 import { forgetRecent, loadRecents, useHost } from '../state/store';
-import type { Workflow } from '../lib/types';
+import { HostError } from '../lib/host';
+import type { Schema } from '../lib/types';
 
 interface WelcomeProps {
   onOpenProject: (root: string) => void;
@@ -17,26 +18,34 @@ export function Welcome({ onOpenProject, onInitialised }: WelcomeProps) {
   const { theme } = useTheme();
   const [recents, setRecents] = useState(loadRecents);
   const [initTarget, setInitTarget] = useState<string | null>(null);
-  const [defaults, setDefaults] = useState<Workflow | null>(null);
+  const [defaults, setDefaults] = useState<Schema | null>(null);
   const [pendingName, setPendingName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const openExisting = async () => {
     setError(null);
+    let dir: string | null = null;
     try {
-      const dir = await host.pickDirectory();
+      dir = await host.pickDirectory();
       if (!dir) return;
       if (await host.detect(dir)) {
         onOpenProject(dir);
       } else {
-        // No .lovelace yet: gather the workflow and scaffold one.
-        const wf = await host.defaultWorkflow();
+        // No .lovelace yet: gather the default schema and scaffold one.
+        const schema = await host.defaultSchema();
         const leaf = dir.split('/').filter(Boolean).pop() ?? 'Project';
         setPendingName(leaf);
-        setDefaults(wf);
+        setDefaults(schema);
         setInitTarget(dir);
       }
     } catch (e) {
+      // A spec-version mismatch still opens the tab so ProjectView can
+      // render its dedicated screen; the root is already known by then.
+      // Any other failure keeps the toast.
+      if (dir && e instanceof HostError && (e.code === 'spec-too-new' || e.code === 'spec-needs-migration')) {
+        onOpenProject(dir);
+        return;
+      }
       setError(e instanceof Error ? e.message : String(e));
     }
   };

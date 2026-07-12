@@ -11,24 +11,25 @@ import {
   buildDigest,
   buildIndex,
   createTicket,
-  defaultWorkflow,
+  defaultSchema,
   deleteTicket,
   fieldCatalogue,
   getActiveTicket,
   initProject,
   loadProject,
   logSession,
+  migrateProject,
+  planProjectMigration,
   readBoardOrder,
   readGraphLayout,
-  readPresence,
+  readPresences,
   search,
   setActiveTicket,
   setColumnOrder,
   writeGraphLayout,
   updateTicket,
   validateProject,
-  writeAutomations,
-  writeWorkflow,
+  writeSchema,
   writeManifest,
   writeActors,
   writeIndex,
@@ -37,7 +38,7 @@ import {
   MutationError,
   ProjectError,
 } from '@lovelace/core';
-import type { Workflow, WorkflowEdit } from '@lovelace/core';
+import type { Schema, SchemaEdit } from '@lovelace/core';
 import {
   readFileSync,
   writeFileSync,
@@ -50,11 +51,6 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { parseDocument } from 'yaml';
-import {
-  readActionLog,
-  recordTransitionOutcome,
-  testTransition,
-} from './actions.js';
 import { installClaudeAssets } from './claude.js';
 
 export interface HostRequest {
@@ -89,17 +85,29 @@ function snapshot(root: string): Json {
   return {
     root,
     manifest: project.manifest,
-    workflow: project.workflow,
+    schema: project.schema,
     actors: project.actors,
     index: buildIndex(project),
     fieldCatalogue: fieldCatalogue(project),
     issues,
     digest: buildDigest(project),
     activeTicket: getActiveTicket(root),
-    agentPresence: readPresence(root),
+    agentPresences: readPresences(root),
     boardOrder: readBoardOrder(project.dir),
     graphLayout: readGraphLayout(project.dir, project.manifest.paths.state),
   };
+}
+
+/** A slug like "null" would be coerced by YAML; quote it when the plain scalar does not read back as the same string. */
+function idScalar(slug: string): string {
+  const parsed = (parseDocument(`k: ${slug}`).toJS() as { k: unknown }).k;
+  return parsed === slug ? slug : JSON.stringify(slug);
+}
+
+/** Document ids must be slugs starting with a letter; names that slugify to a digit start get a prefix. */
+function documentSlug(name: string, fallback = 'doc'): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return /^[a-z]/.test(slug) ? slug : slug ? `doc-${slug}` : fallback;
 }
 
 /** File extensions previewed as an image, mapped to their MIME type. */
@@ -181,14 +189,22 @@ export async function handle(request: HostRequest): Promise<Json> {
       const created = initProject(root, {
         name: String(request.name ?? 'Untitled project'),
         userName: request.userName !== undefined ? String(request.userName) : undefined,
-        ...(request.workflow !== undefined ? { workflow: request.workflow as Workflow } : {}),
+        ...(request.schema !== undefined ? { schema: request.schema as Schema } : {}),
       });
       return { created, ...snapshot(root) };
     }
-    case 'default_workflow':
-      return { workflow: defaultWorkflow() };
+    case 'default_schema':
+      return { schema: defaultSchema() };
     case 'snapshot':
       return snapshot(root);
+    case 'migration_plan':
+      // Works on a project whose snapshot fails with spec-needs-migration:
+      // it reads manifest.yaml raw rather than loading the project.
+      return { plan: planProjectMigration(root) };
+    case 'migrate_project': {
+      const result = migrateProject(root);
+      return { ...result, ...snapshot(root) };
+    }
     case 'digest': {
       const project = loadProject(root);
       return { digest: buildDigest(project) };
@@ -219,11 +235,13 @@ export async function handle(request: HostRequest): Promise<Json> {
       const result = await updateTicket(
         root,
         String(request.id),
-        (request.fields ?? {}) as Record<string, unknown>,
-        { actor, ...(request.force === true ? { forceTransition: true } : {}) },
+        {
+          fields: (request.fields ?? {}) as Record<string, unknown>,
+          ...(request.body !== undefined ? { body: String(request.body) } : {}),
+        },
+        { actor },
       );
-      const automation = recordTransitionOutcome(root, result, actor);
-      return { ticket: result.ticket, automation, ...snapshot(root) };
+      return { ticket: result.ticket, ...snapshot(root) };
     }
     case 'delete_ticket': {
       const deleted = await deleteTicket(root, String(request.id));
@@ -237,15 +255,8 @@ export async function handle(request: HostRequest): Promise<Json> {
       writeGraphLayout(root, (request.layout ?? {}) as Record<string, { x: number; y: number }>);
       return snapshot(root);
     }
-    case 'test_transition': {
-      return { rules: testTransition(root, String(request.id), String(request.to)) };
-    }
-    case 'set_automations': {
-      await writeAutomations(root, request.rules ?? []);
-      return snapshot(root);
-    }
-    case 'write_workflow': {
-      await writeWorkflow(root, (request.edit ?? {}) as WorkflowEdit);
+    case 'write_schema': {
+      await writeSchema(root, (request.edit ?? {}) as SchemaEdit);
       return snapshot(root);
     }
     case 'write_manifest': {
@@ -255,9 +266,6 @@ export async function handle(request: HostRequest): Promise<Json> {
     case 'write_actors': {
       await writeActors(root, request.actors ?? []);
       return snapshot(root);
-    }
-    case 'action_log': {
-      return { log: readActionLog(root) };
     }
     case 'install_claude': {
       const defaults = siblingCommands();
@@ -369,16 +377,8 @@ export async function handle(request: HostRequest): Promise<Json> {
       return snapshot(root);
     }
     case 'write_ticket_body': {
-      const project = loadProject(root);
-      const ticket = project.tickets.find((t) => t.id === String(request.id));
-      if (!ticket) throw new Error(`ticket "${String(request.id)}" does not exist`);
-      const abs = join(root, ticket.path);
-      const existing = parseFrontmatter(readFileSync(abs, 'utf8'));
-      const doc = parseDocument(existing.raw);
-      doc.set('updated', `${new Date().toISOString().slice(0, 19)}Z`);
-      const body = String(request.body ?? '');
-      const fm = doc.toString({ lineWidth: 0, flowCollectionPadding: false });
-      writeFileSync(abs, `---\n${fm}---\n${body.startsWith('\n') ? body : `\n${body}`}`);
+      const actor = request.actor !== undefined ? String(request.actor) : undefined;
+      await updateTicket(root, String(request.id), { body: String(request.body ?? '') }, { actor });
       return snapshot(root);
     }
     case 'create_document': {
@@ -395,12 +395,12 @@ export async function handle(request: HostRequest): Promise<Json> {
       const stamp = `${new Date().toISOString().slice(0, 19)}Z`;
       const dirAbs = join(root, dirRel);
       mkdirSync(dirAbs, { recursive: true });
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'doc';
+      const slug = documentSlug(name);
       const file = join(dirAbs, `${name}.md`);
       if (existsSync(file)) throw new Error(`${dirRel}/${name}.md already exists`);
       writeFileSync(
         file,
-        `---\nid: ${slug}\ntype: document\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
+        `---\nid: ${idScalar(slug)}\ntype: document\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
       );
       return { created: [`${dirRel}/${name}.md`], ...snapshot(root) };
     }
@@ -423,13 +423,13 @@ export async function handle(request: HostRequest): Promise<Json> {
       if (existsSync(dirAbs)) throw new Error(`${folderRel} already exists`);
       const summary = String(request.summary ?? '(to be written)');
       const stamp = `${new Date().toISOString().slice(0, 19)}Z`;
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'index';
+      const slug = documentSlug(name, 'index');
       mkdirSync(dirAbs, { recursive: true });
       // A folder needs at least one file to exist and be discoverable, so it gets
       // a starter index.md (its entry point). This is a default, not a requirement.
       writeFileSync(
         join(dirAbs, 'index.md'),
-        `---\nid: ${slug}\ntype: document\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
+        `---\nid: ${idScalar(slug)}\ntype: document\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
       );
       return { created: [`${folderRel}/index.md`], ...snapshot(root) };
     }
@@ -490,7 +490,11 @@ export async function handle(request: HostRequest): Promise<Json> {
       if (!existsSync(abs) || !statSync(abs).isFile()) {
         throw new Error(`${rel} does not exist`);
       }
-      const original = readFileSync(abs, 'utf8');
+      const buf = readFileSync(abs);
+      const original = buf.toString('utf8');
+      if (!buf.equals(Buffer.from(original, 'utf8'))) {
+        throw new Error(`${rel} is not UTF-8 text; fix it by hand`);
+      }
       try {
         parseFrontmatter(original);
         // Already valid: never rewrite a file that already round-trips.
@@ -499,11 +503,11 @@ export async function handle(request: HostRequest): Promise<Json> {
         if (!(e instanceof FrontmatterError)) throw e;
       }
       const filename = rel.slice(rel.lastIndexOf('/') + 1).replace(/\.md$/, '');
-      const slug = filename.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'doc';
+      const slug = documentSlug(filename);
       const stamp = `${new Date().toISOString().slice(0, 19)}Z`;
       writeFileSync(
         abs,
-        `---\nid: ${slug}\ntype: document\nsummary: (to be written)\nupdated: ${stamp}\n---\n\n${original}`,
+        `---\nid: ${idScalar(slug)}\ntype: document\nsummary: (to be written)\nupdated: ${stamp}\n---\n\n${original}`,
       );
       return { fixed: rel, ...snapshot(root) };
     }
@@ -547,6 +551,42 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+export interface HostErrorEnvelope {
+  ok: false;
+  error: {
+    kind: string;
+    message: string;
+    code?: 'spec-too-new' | 'spec-needs-migration';
+    declared?: string;
+    supported?: string;
+    file?: string;
+    line?: number;
+  };
+}
+
+/**
+ * Builds the failure envelope sent to stdout. A ProjectError (which wraps a
+ * spec-version ConfigError, see loadProject) carries a machine code plus
+ * both versions and the file/line the problem lives at; those ride along so
+ * the app can render a dedicated screen instead of pattern-matching text.
+ */
+export function errorEnvelope(e: unknown): HostErrorEnvelope {
+  const message =
+    e instanceof MutationError || e instanceof ProjectError || e instanceof Error
+      ? e.message
+      : String(e);
+  const kind = e instanceof MutationError ? 'mutation' : e instanceof ProjectError ? 'project' : 'internal';
+  const error: HostErrorEnvelope['error'] = { kind, message };
+  if (e instanceof ProjectError) {
+    if (e.code !== undefined) error.code = e.code;
+    if (e.declared !== undefined) error.declared = e.declared;
+    if (e.supported !== undefined) error.supported = e.supported;
+    if (e.file !== undefined) error.file = e.file;
+    if (e.line !== undefined) error.line = e.line;
+  }
+  return { ok: false, error };
+}
+
 const bun = (globalThis as { Bun?: { main?: string } }).Bun;
 const isMain =
   process.argv[1]?.endsWith('host.js') ||
@@ -561,12 +601,7 @@ if (isMain) {
       const data = await handle(request);
       process.stdout.write(JSON.stringify({ ok: true, data }));
     } catch (e) {
-      const message =
-        e instanceof MutationError || e instanceof ProjectError || e instanceof Error
-          ? e.message
-          : String(e);
-      const kind = e instanceof MutationError ? 'mutation' : e instanceof ProjectError ? 'project' : 'internal';
-      process.stdout.write(JSON.stringify({ ok: false, error: { kind, message } }));
+      process.stdout.write(JSON.stringify(errorEnvelope(e)));
       process.exitCode = 1;
     }
   })();

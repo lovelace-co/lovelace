@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "bundle": "bun build src/host.ts --compile --outfile dist-bin/lovelace-host && bun build src/helper.ts --compile --outfile dist-bin/lovelace-agent && bun build src/server.ts --compile --outfile dist-bin/lovelace-mcp",
+    "bundle": "node scripts/bundle.mjs",
     "test": "vitest run"
   },
   "dependencies": {

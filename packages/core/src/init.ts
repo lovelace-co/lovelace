@@ -1,73 +1,67 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { validateWorkflow } from './config.js';
-import { serializeWorkflow } from './workflow-config.js';
-import { SPEC_VERSION } from './types.js';
-import type { Workflow } from './types.js';
+import { validateSchema } from './config.js';
+import { serializeSchema } from './schema-config.js';
+import { SPEC_VERSION } from './version.js';
+import type { Schema } from './types.js';
 
 export interface InitOptions {
   name: string;
   userName?: string;
   now?: () => Date;
   /**
-   * A custom workflow gathered by the init wizard. When omitted, the built-in
-   * default workflow is written verbatim. When provided, it is validated and
-   * serialised; invalid workflows throw before anything is written.
+   * A custom schema gathered by the init wizard. When omitted, the built-in
+   * default schema is written verbatim. When provided, it is validated and
+   * serialised; invalid schemas throw before anything is written.
    */
-  workflow?: Workflow;
+  schema?: Schema;
 }
 
-const DEFAULT_WORKFLOW = `types:
+const DEFAULT_SCHEMA = `types:
   - name: epic
     id_prefix: E
+    fields:
+      - name: title
+        type: string
+        required: true
   - name: task
     id_prefix: T
+    fields:
+      - name: title
+        type: string
+        required: true
+      - name: assignee
+        type: reference
+        refers_to: [actor]
+      - name: priority
+        type: enum
+        values_from: priorities
   - name: bug
     id_prefix: T
+    fields:
+      - name: title
+        type: string
+        required: true
+      - name: assignee
+        type: reference
+        refers_to: [actor]
+      - name: priority
+        type: enum
+        values_from: priorities
 
 statuses:
   - name: backlog
   - name: todo
+    agent: ready
   - name: in_progress
-    active: true
+    agent: in_progress
   - name: in_review
-    active: true
   - name: done
-    complete: true
+    agent: complete
   - name: cancelled
-    complete: true
-
-transitions:
-  - from: backlog
-    to: [todo, cancelled]
-  - from: todo
-    to: [in_progress, backlog, cancelled]
-  - from: in_progress
-    to: [in_review, todo, cancelled]
-  - from: in_review
-    to: [done, in_progress, cancelled]
 
 priorities: [urgent, high, medium, low]
-
-fields:
-  - name: title
-    type: string
-    required: true
-  - name: parent
-    type: reference
-    refers_to: [epic]
-  - name: depends_on
-    type: list
-    item_type: reference
-  - name: assignee
-    type: reference
-    refers_to: [actor]
-  - name: priority
-    type: enum
-    values_from: priorities
-
-on_transition: []
 `;
 
 const TEMPLATE_TICKET = `---
@@ -146,14 +140,14 @@ export function initProject(root: string, options: InitOptions): string[] {
   if (existsSync(dir)) {
     throw new Error('.lovelace already exists in this directory');
   }
-  // Validate a custom workflow before writing anything, so a rejected
+  // Validate a custom schema before writing anything, so a rejected
   // configuration never leaves a half-scaffolded project on disk.
-  if (options.workflow) {
-    const errors = validateWorkflow(options.workflow, '.lovelace/workflow.yaml').filter(
+  if (options.schema) {
+    const errors = validateSchema(options.schema, '.lovelace/schema.yaml').filter(
       (i) => i.severity === 'error',
     );
     if (errors.length > 0) {
-      throw new Error(`invalid workflow: ${errors.map((i) => i.message).join('; ')}`);
+      throw new Error(`invalid schema: ${errors.map((i) => i.message).join('; ')}`);
     }
   }
   const created: string[] = [];
@@ -171,7 +165,7 @@ export function initProject(root: string, options: InitOptions): string[] {
     'manifest.yaml',
     `spec_version: ${SPEC_VERSION}\nproject_id: ${randomBytes(6).toString('hex')}\nname: ${options.name}\ncreated: ${date}\n`,
   );
-  write('workflow.yaml', options.workflow ? serializeWorkflow(options.workflow) : DEFAULT_WORKFLOW);
+  write('schema.yaml', options.schema ? serializeSchema(options.schema) : DEFAULT_SCHEMA);
   write(
     'actors.yaml',
     `actors:\n  - id: me\n    name: ${options.userName ?? 'Developer'}\n    kind: human\n  - id: claude\n    name: Claude Code\n    kind: agent\n`,
@@ -188,7 +182,7 @@ export function initProject(root: string, options: InitOptions): string[] {
   write('sessions/.gitkeep', '');
 
   const gitignore = join(root, '.gitignore');
-  const entries = ['.lovelace/state/', '.lovelace/index/index.json', '.lovelace/index/actions.log'];
+  const entries = ['.lovelace/state/', '.lovelace/index/index.json'];
   const existing = existsSync(gitignore) ? readFileSync(gitignore, 'utf8') : '';
   const missing = entries.filter((e) => !existing.split('\n').includes(e));
   if (missing.length > 0) {

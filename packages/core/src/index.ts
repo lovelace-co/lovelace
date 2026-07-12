@@ -1,13 +1,14 @@
 export * from './types.js';
+export { SPEC_VERSION, SUPPORTED_SPEC_MAJOR, classifySpecVersion } from './version.js';
+export type { SpecFit } from './version.js';
 export { parseFrontmatter, extractSection, FrontmatterError } from './frontmatter.js';
 export {
   ConfigError,
   loadManifest,
-  loadWorkflow,
+  loadSchema,
   loadActors,
-  validateWorkflow,
+  validateSchema,
   defaultStatus,
-  isLegalTransition,
 } from './config.js';
 export {
   fieldsForType,
@@ -27,33 +28,38 @@ export {
   createTicket,
   updateTicket,
   deleteTicket,
-  writeAutomations,
-  writeWorkflow,
+  writeSchema,
   writeManifest,
   writeActors,
   logSession,
   addComment,
   setActiveTicket,
   getActiveTicket,
+  writeSessionActiveTicket,
+  readSessionActiveTicket,
   writePresence,
   clearPresence,
-  readPresence,
+  readPresences,
+  beatPresence,
+  DEFAULT_PRESENCE_TIMEOUT_MINUTES,
   MutationError,
 } from './mutate.js';
 export type {
   UpdateResult,
+  UpdateTicketInput,
   CreateTicketInput,
   LogSessionInput,
   DeleteResult,
   MutationContext,
-  WorkflowEdit,
-  WorkflowRenames,
+  SchemaEdit,
+  SchemaRenames,
 } from './mutate.js';
 export { readBoardOrder, setColumnOrder, pruneFromBoardOrder } from './order.js';
 export { readGraphLayout, writeGraphLayout } from './graph-layout.js';
 export type { GraphLayout, NodePosition } from './graph-layout.js';
-export { matchRules } from './automation.js';
 export { search } from './search.js';
 export { initProject } from './init.js';
-export { defaultWorkflow, permissiveTransitions, serializeWorkflow } from './workflow-config.js';
+export { defaultSchema, serializeSchema } from './schema-config.js';
 export { watchProject } from './watch.js';
+export { migrationPath, planProjectMigration, migrateProject } from './migrations/registry.js';
+export type { MigrationPlan, MigrationStep } from './migrations/types.js';

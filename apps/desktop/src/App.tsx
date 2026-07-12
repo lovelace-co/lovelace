@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import symbol from './assets/symbol.svg';
 import { ThemeProvider } from './state/theme';
 import { ThemeToggle } from './components/ThemeToggle';
+import { UpdatePill } from './components/UpdatePill';
 import { ProjectView } from './views/ProjectView';
 import { Welcome } from './views/Welcome';
 
@@ -310,6 +311,7 @@ export function App() {
             +
           </button>
           <div className="tab-bar-tools">
+            <UpdatePill />
             <ThemeToggle />
           </div>
         </div>

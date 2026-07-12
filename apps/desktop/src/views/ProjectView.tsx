@@ -1,42 +1,36 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  AutomationsIcon,
   BoardIcon,
-  CloseIcon,
   DocsIcon,
   GraphIcon,
   ListIcon,
-  ProblemsIcon,
   SearchIcon,
-  SessionsIcon,
   SettingsIcon,
 } from '../components/icons';
-import { EmptyState } from '../components/EmptyState';
 import { NewTicketModal } from '../components/NewTicketModal';
 import { SearchPalette } from '../components/SearchPalette';
 import { FilePreviewModal } from '../components/FilePreviewModal';
+import { SpecGate } from '../components/SpecGate';
 import { Toast } from '../components/Toast';
 import { rememberRecent, useHost, useProject } from '../state/store';
-import { formatElapsed } from '../lib/presence';
 import { buildLinkResolver, referenceCandidates, type LinkResolver, type OpenLink } from '../lib/links';
-import type { IndexTicket, SearchHit, Snapshot } from '../lib/types';
-import { Actions } from './Actions';
+import { searchShortcutLabel } from '../lib/platform';
+import type { IndexTicket, MigrationPlan, SearchHit, Snapshot } from '../lib/types';
 import { Board } from './Board';
 import { Documents } from './Documents';
 import { Graph } from './Graph';
 import { List } from './List';
-import { Sessions } from './Sessions';
 import { Settings } from './Settings';
 import { TicketDetail } from './TicketDetail';
 
-type NavKey = 'board' | 'list' | 'docs' | 'graph' | 'sessions' | 'runs' | 'settings' | 'issues';
+type NavKey = 'board' | 'list' | 'docs' | 'graph' | 'settings';
 
 interface ProjectViewProps {
   root: string;
 }
 
 export function ProjectView({ root }: ProjectViewProps) {
-  const { snapshot, loading, error, externalChange, apply, dismissExternalChange, presence } =
+  const { snapshot, loading, error, externalChange, apply, reload, dismissExternalChange, presence } =
     useProject(root);
   const [nav, setNav] = useState<NavKey>('board');
   const [openTicket, setOpenTicket] = useState<string | null>(null);
@@ -44,12 +38,51 @@ export function ProjectView({ root }: ProjectViewProps) {
   const [deleting, setDeleting] = useState<IndexTicket | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [docsFocus, setDocsFocus] = useState<string | null>(null);
+  const [sessionFocus, setSessionFocus] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<string | null>(null);
   // Settings reports unsaved edits so navigating away can prompt; pendingNav
   // holds the destination the user asked for while that prompt is open.
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [pendingNav, setPendingNav] = useState<NavKey | null>(null);
   const host = useHost();
+
+  // The needs-migration gate (ADR-0011): fetch the plan once the project
+  // fails to load with that code, and run the migration on request. SpecGate
+  // stays presentational; this is the thin container that talks to the host.
+  const [migrationPlan, setMigrationPlan] = useState<MigrationPlan | null>(null);
+  const [migrating, setMigrating] = useState(false);
+  const [migrateError, setMigrateError] = useState<string | null>(null);
+  const needsMigration = error?.code === 'spec-needs-migration';
+  useEffect(() => {
+    if (!needsMigration) {
+      setMigrationPlan(null);
+      return;
+    }
+    let cancelled = false;
+    void host.migrationPlan(root).then(
+      (plan) => {
+        if (!cancelled) setMigrationPlan(plan);
+      },
+      (e) => {
+        if (!cancelled) setMigrateError(e instanceof Error ? e.message : String(e));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [host, root, needsMigration]);
+  const runMigration = async () => {
+    setMigrating(true);
+    setMigrateError(null);
+    try {
+      await host.migrateProject(root);
+      await reload();
+    } catch (e) {
+      setMigrateError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMigrating(false);
+    }
+  };
 
   // The active nav row rests on a seat that glides between rows rather than
   // teleporting (state moves, never marks). Measured, not hard-coded, so a
@@ -123,14 +156,14 @@ export function ProjectView({ root }: ProjectViewProps) {
   const guardedUpdate = async (id: string, changes: Record<string, unknown>) => {
     const to = typeof changes.status === 'string' ? changes.status : undefined;
     await apply(
-      (h) => h.updateTicket(root, id, changes, { actor: humanActor, force: to !== undefined }),
+      (h) => h.updateTicket(root, id, changes, { actor: humanActor }),
       to !== undefined ? moveOptimistically(id, to) : undefined,
     );
   };
 
   /**
    * A board drop: persist the target column's order, and when the card has
-   * crossed columns, also perform the status transition.
+   * crossed columns, also perform the status move.
    */
   const reorder = (id: string, status: string, orderedIds: string[]) => {
     const ticket = snapshot?.index.tickets.find((t) => t.id === id);
@@ -138,7 +171,7 @@ export function ProjectView({ root }: ProjectViewProps) {
     void apply(
       async (h) => {
         if (movingColumns) {
-          await h.updateTicket(root, id, { status }, { actor: humanActor, force: true });
+          await h.updateTicket(root, id, { status }, { actor: humanActor });
         }
         return h.setColumnOrder(root, status, orderedIds);
       },
@@ -176,7 +209,8 @@ export function ProjectView({ root }: ProjectViewProps) {
       setDocsFocus(hit.path);
       goto('docs');
     } else if (hit.kind === 'session') {
-      goto('sessions');
+      setSessionFocus(hit.id);
+      goto('settings');
     } else if (hit.path.includes('/tickets/')) {
       setOpenTicket(hit.id);
     } else {
@@ -188,16 +222,30 @@ export function ProjectView({ root }: ProjectViewProps) {
     return <p className="subtle" style={{ padding: '1.5rem' }}>opening project...</p>;
   }
   if (error && !snapshot) {
+    if (
+      (error.code === 'spec-too-new' || error.code === 'spec-needs-migration') &&
+      error.declared &&
+      error.supported
+    ) {
+      return (
+        <SpecGate
+          code={error.code}
+          declared={error.declared}
+          supported={error.supported}
+          plan={error.code === 'spec-needs-migration' ? migrationPlan : undefined}
+          migrating={migrating}
+          migrateError={migrateError}
+          onMigrate={error.code === 'spec-needs-migration' ? () => void runMigration() : undefined}
+        />
+      );
+    }
     return (
       <div style={{ padding: '1.5rem' }}>
-        <div className="problem-note">{error}</div>
+        <div className="problem-note">{error.message}</div>
       </div>
     );
   }
   if (!snapshot) return null;
-
-  const errors = snapshot.issues.filter((i) => i.severity === 'error');
-  const warnings = snapshot.issues.filter((i) => i.severity === 'warning');
 
   const navButton = (key: NavKey, icon: ReactNode, text: string, note?: number, noteClass?: string) => (
     <button
@@ -216,11 +264,6 @@ export function ProjectView({ root }: ProjectViewProps) {
     </button>
   );
 
-  const agentActor = snapshot.actors.find((a) => a.kind === 'agent')?.id ?? 'agent';
-  const focusTask = presence.focus ?? snapshot.activeTicket;
-  const healthClass =
-    snapshot.issues.length === 0 ? 'clean' : errors.length > 0 ? 'snag-error' : 'snag-warning';
-
   return (
     <div className="workbench">
       <nav className="side-nav">
@@ -233,7 +276,7 @@ export function ProjectView({ root }: ProjectViewProps) {
                 className="head-btn"
                 onClick={() => setSearchOpen(true)}
                 aria-label="Search"
-                title="Search (⌘K)"
+                title={`Search (${searchShortcutLabel})`}
               >
                 <SearchIcon />
               </button>
@@ -255,37 +298,7 @@ export function ProjectView({ root }: ProjectViewProps) {
           {navButton('graph', <GraphIcon />, 'Graph')}
         </div>
 
-        <div className="nav-sep" />
-
-        <div className="nav-group">
-          <div className="nav-section-head">Activity</div>
-          {navButton('sessions', <SessionsIcon />, 'Sessions')}
-          {navButton('runs', <AutomationsIcon />, 'Runs')}
-          {navButton('issues', <ProblemsIcon />, 'Problems', snapshot.issues.length, healthClass)}
-        </div>
-
         <div className="nav-footer">
-          <div className="agent-seat">
-            <div className="seat-top">
-              <span className={`seat-dot${presence.awake ? ' awake' : ''}`} aria-hidden />
-              <span className="seat-name">{agentActor}</span>
-              <span className={`seat-state${presence.awake ? ' live' : ''}`}>
-                {presence.awake
-                  ? `weaving${presence.elapsedSeconds !== null ? ` · ${formatElapsed(presence.elapsedSeconds)}` : ''}`
-                  : 'idle'}
-              </span>
-            </div>
-            <div className="seat-task">
-              <span className="key">task</span>
-              {focusTask ? (
-                <button className="seat-link" onClick={() => setOpenTicket(focusTask)}>
-                  {focusTask}
-                </button>
-              ) : (
-                <span className="seat-idle">none</span>
-              )}
-            </div>
-          </div>
           <div className="footer-bar">
             <button
               className={`footer-settings${nav === 'settings' && !openTicket ? ' active' : ''}`}
@@ -306,10 +319,12 @@ export function ProjectView({ root }: ProjectViewProps) {
         {openTicket ? (
           <TicketDetail
             snapshot={snapshot}
+            presence={presence}
             ticketId={openTicket}
             onBack={() => setOpenTicket(null)}
             onOpenTicket={setOpenTicket}
             onUpdate={guardedUpdate}
+            onRequestDelete={setDeleting}
             candidates={linkCandidates}
             resolveLink={resolveLink}
             onOpenLink={openLink}
@@ -329,10 +344,21 @@ export function ProjectView({ root }: ProjectViewProps) {
             onReorder={reorder}
             onQuickCreate={(status, title) => {
               const type =
-                snapshot.workflow.types.find((t) => t.name === 'task') ?? snapshot.workflow.types[0];
+                snapshot.schema.types.find((t) => t.name === 'task') ?? snapshot.schema.types[0];
               if (type) void apply((h) => h.createTicket(root, type.name, { title }, status));
             }}
             onRequestDelete={setDeleting}
+            onBulkMove={async (ids, status) => {
+              for (const id of ids) {
+                await apply((h) => h.updateTicket(root, id, { status }, { actor: humanActor }));
+              }
+            }}
+            onBulkDelete={async (ids) => {
+              for (const id of ids) {
+                await apply((h) => h.deleteTicket(root, id));
+                if (openTicket === id) setOpenTicket(null);
+              }
+            }}
           />
         ) : nav === 'list' ? (
           <List
@@ -342,10 +368,21 @@ export function ProjectView({ root }: ProjectViewProps) {
             onNewTicket={(status) => setCreating({ ...(status !== undefined ? { status } : {}) })}
             onQuickCreate={(status, title) => {
               const type =
-                snapshot.workflow.types.find((t) => t.name === 'task') ?? snapshot.workflow.types[0];
+                snapshot.schema.types.find((t) => t.name === 'task') ?? snapshot.schema.types[0];
               if (type) void apply((h) => h.createTicket(root, type.name, { title }, status));
             }}
             onRequestDelete={setDeleting}
+            onBulkMove={async (ids, status) => {
+              for (const id of ids) {
+                await apply((h) => h.updateTicket(root, id, { status }, { actor: humanActor }));
+              }
+            }}
+            onBulkDelete={async (ids) => {
+              for (const id of ids) {
+                await apply((h) => h.deleteTicket(root, id));
+                if (openTicket === id) setOpenTicket(null);
+              }
+            }}
           />
         ) : nav === 'docs' ? (
           <Documents
@@ -390,24 +427,12 @@ export function ProjectView({ root }: ProjectViewProps) {
               void apply((h) => h.setGraphLayout(root, layout));
             }}
           />
-        ) : nav === 'sessions' ? (
-          <Sessions
-            snapshot={snapshot}
-            onOpenTicket={setOpenTicket}
-            resolveLink={resolveLink}
-            onOpenLink={openLink}
-          />
-        ) : nav === 'runs' ? (
-          <Actions snapshot={snapshot} />
-        ) : nav === 'settings' ? (
+        ) : (
           <Settings
             snapshot={snapshot}
             onDirtyChange={setSettingsDirty}
-            onSaveWorkflow={async (edit) => {
-              await apply((h) => h.writeWorkflow(root, edit));
-            }}
-            onSaveAutomations={async (rules) => {
-              await apply((h) => h.setAutomations(root, rules));
+            onSaveSchema={async (edit) => {
+              await apply((h) => h.writeSchema(root, edit));
             }}
             onRenameProject={async (name) => {
               await apply((h) => h.writeManifest(root, { name }));
@@ -420,33 +445,12 @@ export function ProjectView({ root }: ProjectViewProps) {
               await apply((h) => h.writeActors(root, actors));
             }}
             onInstallClaude={(gitHook) => host.installClaude(root, gitHook)}
+            onOpenTicket={setOpenTicket}
+            resolveLink={resolveLink}
+            onOpenLink={openLink}
+            focusSession={sessionFocus}
+            onFocusSessionHandled={() => setSessionFocus(null)}
           />
-        ) : (
-          <>
-            <header className="view-header">
-              <h1 className="view-title">Problems</h1>
-              <span className="subtle">
-                {errors.length} errors, {warnings.length} warnings
-              </span>
-            </header>
-            <div className="view-body">
-              <div className="panel">
-                {snapshot.issues.length === 0 && (
-                  <EmptyState note="Everything validates" hint="No errors or warnings across the project." />
-                )}
-                {snapshot.issues.map((issue, i) => (
-                  <div key={i} className="issue-row">
-                    <span className={`sev-${issue.severity}`}>{issue.severity}</span>
-                    <span className="mono" style={{ color: 'var(--slate)' }}>
-                      {issue.file}
-                      {issue.line !== undefined ? `:${issue.line}` : ''}
-                    </span>
-                    <span>{issue.message}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
         )}
       </main>
       {searchOpen && (

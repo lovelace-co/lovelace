@@ -1,20 +1,20 @@
-import type { FieldDef, FieldType, ValidationIssue, Workflow } from './types.js';
+import type { FieldDef, FieldType, ValidationIssue, Schema } from './types.js';
 import { CORE_FIELDS } from './types.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
-export function fieldsForType(workflow: Workflow, type: string): FieldDef[] {
-  return workflow.fields.filter((f) => !f.applies_to || f.applies_to.includes(type));
+export function fieldsForType(schema: Schema, type: string): FieldDef[] {
+  return schema.types.find((t) => t.name === type)?.fields ?? [];
 }
 
-export function enumValues(workflow: Workflow, field: FieldDef): string[] {
+export function enumValues(schema: Schema, field: FieldDef): string[] {
   if (field.values) return field.values;
-  if (field.values_from === 'priorities') return workflow.priorities;
+  if (field.values_from === 'priorities') return schema.priorities;
   return [];
 }
 
 function checkScalar(
-  workflow: Workflow,
+  schema: Schema,
   field: FieldDef,
   type: Exclude<FieldType, 'list'>,
   value: unknown,
@@ -31,7 +31,7 @@ function checkScalar(
         ? undefined
         : 'must be an ISO 8601 date or datetime';
     case 'enum': {
-      const allowed = enumValues(workflow, field);
+      const allowed = enumValues(schema, field);
       return typeof value === 'string' && allowed.includes(value)
         ? undefined
         : `must be one of: ${allowed.join(', ')}`;
@@ -48,14 +48,14 @@ function checkScalar(
  * Reference resolution is link-integrity work and happens separately.
  */
 export function validateTicketFields(
-  workflow: Workflow,
+  schema: Schema,
   type: string,
   fields: Record<string, unknown>,
   file: string,
   keyLines?: Map<string, number>,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const defs = fieldsForType(workflow, type);
+  const defs = fieldsForType(schema, type);
   const defByName = new Map(defs.map((d) => [d.name, d]));
   const push = (severity: 'error' | 'warning', rule: string, message: string, key?: string) => {
     const issue: ValidationIssue = { severity, file, rule, message };
@@ -74,17 +74,7 @@ export function validateTicketFields(
     if ((CORE_FIELDS as readonly string[]).includes(name)) continue;
     const def = defByName.get(name);
     if (!def) {
-      const definedElsewhere = workflow.fields.some((f) => f.name === name);
-      if (definedElsewhere) {
-        push(
-          'error',
-          'fields/not-applicable',
-          `field "${name}" does not apply to type "${type}"`,
-          name,
-        );
-      } else {
-        push('warning', 'fields/unknown', `unknown frontmatter key "${name}"`, name);
-      }
+      push('warning', 'fields/unknown', `unknown frontmatter key "${name}"`, name);
       continue;
     }
     if (value === undefined || value === null) {
@@ -98,13 +88,13 @@ export function validateTicketFields(
       }
       const itemType = def.item_type ?? 'string';
       value.forEach((item, i) => {
-        const problem = checkScalar(workflow, def, itemType, item);
+        const problem = checkScalar(schema, def, itemType, item);
         if (problem) {
           push('error', 'fields/type', `field "${name}"[${i}] ${problem}`, name);
         }
       });
     } else {
-      const problem = checkScalar(workflow, def, def.type, value);
+      const problem = checkScalar(schema, def, def.type, value);
       if (problem) {
         push('error', 'fields/type', `field "${name}" ${problem}`, name);
       }
@@ -116,12 +106,12 @@ export function validateTicketFields(
 
 /** Applies declared defaults for fields the input does not set. */
 export function applyDefaults(
-  workflow: Workflow,
+  schema: Schema,
   type: string,
   fields: Record<string, unknown>,
 ): Record<string, unknown> {
   const out = { ...fields };
-  for (const def of fieldsForType(workflow, type)) {
+  for (const def of fieldsForType(schema, type)) {
     if (out[def.name] === undefined && def.default !== undefined) {
       out[def.name] = def.default;
     }
@@ -131,12 +121,12 @@ export function applyDefaults(
 
 /** Collects reference values to check for link integrity: [field, target kinds, value]. */
 export function collectReferences(
-  workflow: Workflow,
+  schema: Schema,
   type: string,
   fields: Record<string, unknown>,
 ): Array<{ field: string; targets: string[] | undefined; value: string }> {
   const out: Array<{ field: string; targets: string[] | undefined; value: string }> = [];
-  for (const def of fieldsForType(workflow, type)) {
+  for (const def of fieldsForType(schema, type)) {
     const value = fields[def.name];
     if (value === undefined) continue;
     if (def.type === 'reference' && typeof value === 'string') {

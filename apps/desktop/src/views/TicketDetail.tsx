@@ -1,26 +1,31 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Dropdown } from '../components/Dropdown';
 import { EmptyState } from '../components/EmptyState';
 import { FieldInput } from '../components/FieldInput';
 import { Toast } from '../components/Toast';
-import { AddIcon, ArrowLeftIcon, EditIcon } from '../components/icons';
+import { AddIcon, ArrowLeftIcon, EditIcon, TrashIcon } from '../components/icons';
 import { BlockEditor } from '../editor/BlockEditor';
 import { formatDateTime, formatDateTimeShort } from '../lib/datetime';
 import { fieldLabel, statusLabel, titleCase, typeLabel } from '../lib/format';
 import { STATUS_HUE_CSS, statusHue } from '../lib/loom';
 import { Markdown } from '../lib/markdown';
 import type { LinkResolver, OpenLink, ReferenceCandidate } from '../lib/links';
+import { formatElapsed } from '../lib/presence';
 import { useHost } from '../state/store';
-import type { Snapshot } from '../lib/types';
+import type { ProjectPresence } from '../state/store';
+import type { IndexTicket, Snapshot } from '../lib/types';
 import { fieldsFor } from '../lib/types';
 
 interface TicketDetailProps {
   snapshot: Snapshot;
+  presence?: ProjectPresence;
   ticketId: string;
   onBack: () => void;
   onOpenTicket: (id: string) => void;
   onUpdate: (id: string, changes: Record<string, unknown>) => Promise<void>;
   onComment: (ticket: string, body: string) => Promise<void>;
   onSaveBody?: (id: string, body: string) => Promise<void>;
+  onRequestDelete?: (ticket: IndexTicket) => void;
   /** Wiki-link plumbing for the body editor, comment composer and read views. */
   candidates?: ReferenceCandidate[];
   resolveLink?: LinkResolver;
@@ -34,12 +39,14 @@ function frontmatterAndBody(content: string): string {
 
 export function TicketDetail({
   snapshot,
+  presence,
   ticketId,
   onBack,
   onOpenTicket,
   onUpdate,
   onComment,
   onSaveBody,
+  onRequestDelete,
   candidates,
   resolveLink,
   onOpenLink,
@@ -59,11 +66,22 @@ export function TicketDetail({
   const [commentBodies, setCommentBodies] = useState<Record<string, string>>({});
   const [titleDraft, setTitleDraft] = useState(ticket?.title ?? '');
   const titleFocused = useRef(false);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
 
   // Keep the editable title in sync with the file, except while editing.
   useEffect(() => {
     if (!titleFocused.current) setTitleDraft(ticket?.title ?? '');
   }, [ticket?.title]);
+
+  // Auto-grow the title to fit its content: no scrollbar, no manual resize
+  // handle. Reset to 'auto' first so shrinking (deleting a line) is picked
+  // up, not just growth.
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [titleDraft, ticket?.id]);
 
   // The body is read once when the ticket opens; it is not re-synced from
   // disk while open. Editing is an explicit mode (see the Edit button), so
@@ -133,6 +151,8 @@ export function TicketDetail({
     );
   }
 
+  const elapsed = presence?.tickets.get(ticket.id);
+
   const timeline = [
     ...snapshot.index.comments
       .filter((c) => c.ticket === ticket.id)
@@ -147,6 +167,13 @@ export function TicketDetail({
       .map((s) => ({ kind: 'session' as const, at: s.ended, who: s.actor, what: `${s.id}: ${titleCase(s.outcome)}` })),
     ...commits.map((c) => ({ kind: 'commit' as const, at: '', who: '', what: `${c.sha} ${c.subject}` })),
   ].sort((a, b) => a.at.localeCompare(b.at));
+
+  const statusOptions = snapshot.schema.statuses.map((s) => ({ value: s.name, label: statusLabel(s) }));
+  // Hand-edited files can carry a status that has since fallen out of the
+  // schema; keep it selectable and truthful rather than silently swapping it.
+  if (!statusOptions.some((o) => o.value === ticket.status)) {
+    statusOptions.push({ value: ticket.status, label: statusLabel({ name: ticket.status }) });
+  }
 
   const change = async (changes: Record<string, unknown>, label: string) => {
     setSaving(label);
@@ -239,11 +266,21 @@ export function TicketDetail({
   return (
     <>
       <header className="view-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0, flex: 1 }}>
-          <button className="btn btn-secondary btn-icon" onClick={onBack} aria-label="Back" title="Back">
+        {/* flex-start, not center: a wrapped title must not float the back
+            button mid-height; the margin optically centres it on line one. */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', minWidth: 0, flex: 1 }}>
+          <button
+            className="btn btn-secondary btn-icon"
+            style={{ marginTop: '6px' }}
+            onClick={onBack}
+            aria-label="Back"
+            title="Back"
+          >
             <ArrowLeftIcon />
           </button>
-          <input
+          <textarea
+            ref={titleRef}
+            rows={1}
             className="view-title view-title-input"
             aria-label="ticket title"
             value={titleDraft}
@@ -267,6 +304,11 @@ export function TicketDetail({
             }}
           />
         </div>
+        {elapsed !== undefined && (
+          <span className="id live">
+            {formatElapsed(elapsed)} · {ticket.id}
+          </span>
+        )}
       </header>
       {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
       <div className="detail-grid">
@@ -407,7 +449,19 @@ export function TicketDetail({
         </div>
         <aside>
           <div className="props-panel">
-            <div className="panel-heading props-heading">Properties</div>
+            <div className="panel-heading props-heading">
+              <span>Properties</span>
+              {onRequestDelete && (
+                <button
+                  className="btn btn-secondary btn-icon"
+                  onClick={() => onRequestDelete(ticket)}
+                  aria-label="Delete ticket"
+                  title="Delete ticket"
+                >
+                  <TrashIcon />
+                </button>
+              )}
+            </div>
             <div className="props-list">
               <div className="prop">
                 <span className="prop-label">{titleCase('id')}</span>
@@ -416,22 +470,24 @@ export function TicketDetail({
               <div className="prop">
                 <span className="prop-label">{titleCase('type')}</span>
                 <span className="prop-value">
-                  {typeLabel(snapshot.workflow.types.find((t) => t.name === ticket.type) ?? { name: ticket.type })}
+                  {typeLabel(snapshot.schema.types.find((t) => t.name === ticket.type) ?? { name: ticket.type })}
                 </span>
               </div>
               <div className="prop">
                 <span className="prop-label">{titleCase('status')}</span>
-                <span className="prop-value">
-                  <span className="status-chip">
-                    <span
-                      className="priority-dot"
-                      style={{ background: STATUS_HUE_CSS[statusHue(snapshot.workflow, ticket.status)] }}
-                    />
-                    {statusLabel(
-                      snapshot.workflow.statuses.find((s) => s.name === ticket.status) ?? { name: ticket.status },
-                    )}
-                  </span>
-                </span>
+                <div className="prop-control">
+                  <Dropdown
+                    aria-label="Status"
+                    width="100%"
+                    allowEmpty={false}
+                    value={ticket.status}
+                    options={statusOptions}
+                    onChange={(next) => {
+                      if (next === ticket.status) return;
+                      void change({ status: next }, 'status');
+                    }}
+                  />
+                </div>
               </div>
               <div className="prop">
                 <span className="prop-label">{titleCase('created')}</span>
@@ -451,7 +507,7 @@ export function TicketDetail({
                     <FieldInput
                       def={def}
                       value={ticket.fields[def.name]}
-                      workflow={snapshot.workflow}
+                      schema={snapshot.schema}
                       index={snapshot.index}
                       actors={snapshot.actors}
                       onChange={(value) => void change({ [def.name]: value }, def.name)}
@@ -474,9 +530,9 @@ export function TicketDetail({
                   >
                     <span
                       className="priority-dot"
-                      style={{ background: STATUS_HUE_CSS[statusHue(snapshot.workflow, child.status)] }}
+                      style={{ background: STATUS_HUE_CSS[statusHue(snapshot.schema, child.status)] }}
                       title={statusLabel(
-                        snapshot.workflow.statuses.find((s) => s.name === child.status) ?? {
+                        snapshot.schema.statuses.find((s) => s.name === child.status) ?? {
                           name: child.status,
                         },
                       )}

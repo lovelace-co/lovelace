@@ -1,8 +1,16 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { loadProject, buildIndex, buildLinks, stringifyIndex, buildBoard, writeIndex } from '../src/index.js';
+import {
+  loadProject,
+  buildIndex,
+  buildLinks,
+  stringifyIndex,
+  buildBoard,
+  writeIndex,
+  fieldCatalogue,
+} from '../src/index.js';
 import type { LinkEdge } from '../src/index.js';
-import { corrupt, tempFixture } from './helpers.js';
+import { corrupt, tempFixture, unknownKeysFixture } from './helpers.js';
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -18,6 +26,17 @@ function fixture() {
 describe('index.json', () => {
   it('is byte-identical across two runs on unchanged input', () => {
     const root = fixture();
+    const first = stringifyIndex(buildIndex(loadProject(root)));
+    const second = stringifyIndex(buildIndex(loadProject(root)));
+    expect(second).toBe(first);
+    const { indexPath } = writeIndex(loadProject(root));
+    writeIndex(loadProject(root));
+    expect(readFileSync(indexPath, 'utf8')).toBe(first);
+  });
+
+  it('stays byte-identical when the schema and manifest carry unknown keys (ADR-0011)', () => {
+    const { root, cleanup } = unknownKeysFixture();
+    cleanups.push(cleanup);
     const first = stringifyIndex(buildIndex(loadProject(root)));
     const second = stringifyIndex(buildIndex(loadProject(root)));
     expect(second).toBe(first);
@@ -103,11 +122,11 @@ describe('link graph', () => {
 });
 
 describe('BOARD.md', () => {
-  it('groups tickets by status in workflow column order', () => {
+  it('groups tickets by status in schema column order', () => {
     const root = fixture();
     const board = buildBoard(loadProject(root));
     const headings = [...board.matchAll(/^## (\w+)/gm)].map((m) => m[1]);
-    expect(headings).toEqual(['backlog', 'todo', 'in_progress', 'in_review', 'staging', 'done', 'cancelled']);
+    expect(headings).toEqual(['backlog', 'todo', 'in_progress', 'in_review', 'done', 'cancelled']);
     expect(board).toContain('| T-0002 | Forecast endpoint | task | claude |');
     expect(board.indexOf('## todo')).toBeLessThan(board.indexOf('## done'));
   });
@@ -115,5 +134,18 @@ describe('BOARD.md', () => {
   it('is stable across runs', () => {
     const root = fixture();
     expect(buildBoard(loadProject(root))).toBe(buildBoard(loadProject(root)));
+  });
+});
+
+describe('fieldCatalogue', () => {
+  it("lists each type's own fields, not a flat shared list", () => {
+    const root = fixture();
+    const catalogue = fieldCatalogue(loadProject(root));
+    expect(Object.keys(catalogue).sort()).toEqual(['bug', 'epic', 'task']);
+    expect(catalogue.bug?.some((f) => f.name === 'environment')).toBe(true);
+    expect(catalogue.task?.some((f) => f.name === 'environment')).toBe(false);
+    expect(catalogue.task?.some((f) => f.name === 'estimate')).toBe(true);
+    expect(catalogue.bug?.some((f) => f.name === 'estimate')).toBe(false);
+    expect(catalogue.epic?.map((f) => f.name)).toEqual(['title', 'assignee', 'priority']);
   });
 });

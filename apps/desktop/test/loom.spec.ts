@@ -4,33 +4,33 @@ import type { Snapshot } from '../src/lib/types';
 import fixture from './fixtures/snapshot.json';
 
 const snapshot = fixture as unknown as Snapshot;
-const workflow = snapshot.workflow;
+const schema = snapshot.schema;
 
 describe('status hues', () => {
-  it('maps workflow positions to the four learned hues', () => {
-    expect(statusHue(workflow, 'backlog')).toBe('pre');
-    expect(statusHue(workflow, 'todo')).toBe('pre');
-    expect(statusHue(workflow, 'in_progress')).toBe('current'); // first wip carries the signal
-    expect(statusHue(workflow, 'in_review')).toBe('review');
-    expect(statusHue(workflow, 'staging')).toBe('review');
-    expect(statusHue(workflow, 'done')).toBe('done');
-    expect(statusHue(workflow, 'cancelled')).toBe('done');
-    expect(statusHue(workflow, 'nonsense')).toBe('pre');
+  it('maps schema positions to the four learned hues', () => {
+    expect(statusHue(schema, 'backlog')).toBe('pre'); // before in_progress
+    expect(statusHue(schema, 'todo')).toBe('pre'); // ready, but before in_progress
+    expect(statusHue(schema, 'in_progress')).toBe('current'); // the one working status
+    expect(statusHue(schema, 'in_review')).toBe('review'); // untagged, between in_progress and done
+    expect(statusHue(schema, 'done')).toBe('done');
+    // cancelled sits after done with no role: neutral, not "in review".
+    expect(statusHue(schema, 'cancelled')).toBe('pre');
+    expect(statusHue(schema, 'nonsense')).toBe('pre');
   });
 });
 
 describe('urgency pill families', () => {
   it('maps the priorities list front-to-back into high, med, low', () => {
-    expect(priorityFamily(workflow, 'urgent')).toBe('high');
-    expect(priorityFamily(workflow, 'high')).toBe('high');
-    expect(priorityFamily(workflow, 'medium')).toBe('med');
-    expect(priorityFamily(workflow, 'low')).toBe('low');
-    expect(priorityFamily(workflow, 'unknown')).toBeNull();
+    expect(priorityFamily(schema, 'urgent')).toBe('high');
+    expect(priorityFamily(schema, 'high')).toBe('high');
+    expect(priorityFamily(schema, 'medium')).toBe('med');
+    expect(priorityFamily(schema, 'low')).toBe('low');
+    expect(priorityFamily(schema, 'unknown')).toBeNull();
   });
 });
 
 describe('epic punch rows', () => {
-  it('derives one hole per child: punched when terminal, reading where work sits', () => {
+  it('derives one hole per child: punched when complete, reading where work sits', () => {
     const epics = epicProgress(snapshot);
     expect(epics).toHaveLength(1);
     const epic = epics[0]!;

@@ -1,33 +1,23 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { Document, parseDocument, isSeq, isMap } from 'yaml';
+import { Document, parseDocument } from 'yaml';
 import { pruneFromBoardOrder, renameBoardOrderColumns } from './order.js';
-import { isLegalTransition, defaultStatus, validateWorkflow, automationListSchema } from './config.js';
-import {
-  applyWorkflowFlow,
-  compactField,
-  compactStatus,
-  compactTransition,
-  compactType,
-} from './workflow-config.js';
+import { defaultStatus, loadManifest, validateSchema } from './config.js';
+import { applySchemaFlow, mergeStatus, mergeType } from './schema-config.js';
 import { applyDefaults, fieldsForType, validateTicketFields } from './fields.js';
 import { parseFrontmatter } from './frontmatter.js';
 import { nextId } from './ids.js';
-import { matchRules } from './automation.js';
 import { loadProject } from './project.js';
 import { writeIndex } from './index-gen.js';
 import type {
   AgentPresence,
   Actor,
-  AutomationRule,
-  FieldDef,
   Project,
   StatusDef,
   Ticket,
-  TransitionDef,
   TypeDef,
   ValidationIssue,
-  Workflow,
+  Schema,
 } from './types.js';
 import { CORE_FIELDS, SESSION_OUTCOMES } from './types.js';
 
@@ -48,12 +38,6 @@ export interface MutationContext {
   actor?: string;
   /** Skip reindexing after the write (for bulk operations). */
   skipReindex?: boolean;
-  /**
-   * Permit transitions outside workflow.yaml's legal moves. The app's
-   * board offers this to humans, who could equally hand-edit the file;
-   * the status must still exist. Agent tooling never sets it.
-   */
-  forceTransition?: boolean;
 }
 
 function isoNow(ctx: MutationContext): string {
@@ -87,8 +71,33 @@ export interface CreateTicketInput {
   type: string;
   fields: Record<string, unknown>;
   body?: string;
-  /** Starting status; must exist in workflow.yaml. Defaults to the first status. */
+  /** Starting status; must exist in schema.yaml. Defaults to the first status. */
   status?: string;
+}
+
+/**
+ * Rejects a fields object holding a key that is neither one of `extra`
+ * (letting update pass "status" through) nor defined on the type. "body" is
+ * a common mistake since it looks like a field but is not frontmatter, so it
+ * gets its own message pointing at the right parameter.
+ */
+function rejectUnknownFields(
+  schema: Schema,
+  type: string,
+  fields: Record<string, unknown>,
+  extra: readonly string[] = [],
+): void {
+  const defs = fieldsForType(schema, type);
+  const known = new Set<string>([...defs.map((d) => d.name), ...extra]);
+  for (const key of Object.keys(fields)) {
+    if (known.has(key)) continue;
+    if (key === 'body') {
+      throw new MutationError('"body" is not a frontmatter field; pass the ticket body with the body parameter');
+    }
+    throw new MutationError(
+      `unknown field "${key}" for type "${type}"; defined fields: ${defs.map((d) => d.name).join(', ')}`,
+    );
+  }
 }
 
 export async function createTicket(
@@ -97,10 +106,10 @@ export async function createTicket(
   ctx: MutationContext = {},
 ): Promise<Ticket> {
   const project = loadProject(root);
-  const typeDef = project.workflow.types.find((t) => t.name === input.type);
+  const typeDef = project.schema.types.find((t) => t.name === input.type);
   if (!typeDef) {
     throw new MutationError(
-      `unknown ticket type "${input.type}"; defined types: ${project.workflow.types.map((t) => t.name).join(', ')}`,
+      `unknown ticket type "${input.type}"; defined types: ${project.schema.types.map((t) => t.name).join(', ')}`,
     );
   }
   for (const key of Object.keys(input.fields)) {
@@ -108,15 +117,16 @@ export async function createTicket(
       throw new MutationError(`"${key}" is a locked core field and cannot be set directly`);
     }
   }
-  const fields = applyDefaults(project.workflow, input.type, input.fields);
-  const issues = validateTicketFields(project.workflow, input.type, fields, '(new ticket)').filter(
+  rejectUnknownFields(project.schema, input.type, input.fields);
+  const fields = applyDefaults(project.schema, input.type, input.fields);
+  const issues = validateTicketFields(project.schema, input.type, fields, '(new ticket)').filter(
     (i) => i.severity === 'error',
   );
   if (issues.length > 0) {
     throw new MutationError(`invalid fields: ${issues.map((i) => i.message).join('; ')}`, issues);
   }
 
-  if (input.status !== undefined && !project.workflow.statuses.some((s) => s.name === input.status)) {
+  if (input.status !== undefined && !project.schema.statuses.some((s) => s.name === input.status)) {
     throw new MutationError(`unknown status "${input.status}"`);
   }
   const id = await nextId(project.dir, project.manifest, typeDef.id_prefix);
@@ -124,16 +134,20 @@ export async function createTicket(
   const ordered: Array<[string, unknown]> = [
     ['id', id],
     ['type', input.type],
-    ['status', input.status ?? defaultStatus(project.workflow)],
+    ['status', input.status ?? defaultStatus(project.schema)],
     ['created', stamp],
     ['updated', stamp],
   ];
-  for (const def of fieldsForType(project.workflow, input.type)) {
+  for (const def of fieldsForType(project.schema, input.type)) {
     if (fields[def.name] !== undefined) ordered.push([def.name, fields[def.name]]);
   }
-  const body =
-    input.body ?? '## Description\n\n(to be written)\n\n## Acceptance criteria\n\n- [ ] (to be defined)\n';
-  const content = `---\n${buildFrontmatterYaml(ordered)}---\n\n${body.trimEnd()}\n`;
+  // A body is optional; when absent (or blank), the file carries frontmatter
+  // only, with no dangling blank line after the closing fence.
+  const body = (input.body ?? '').trimEnd();
+  const content =
+    body === ''
+      ? `---\n${buildFrontmatterYaml(ordered)}---\n`
+      : `---\n${buildFrontmatterYaml(ordered)}---\n\n${body}\n`;
   const ticketsDir = join(project.dir, project.manifest.paths.tickets);
   mkdirSync(ticketsDir, { recursive: true });
   const path = join(ticketsDir, `${id}.md`);
@@ -146,19 +160,26 @@ export async function createTicket(
 
 export interface UpdateResult {
   ticket: Ticket;
-  /** Automation rules matched by a status transition, in definition order. */
-  firedRules: Array<{ rule: AutomationRule; from: string; to: string }>;
+}
+
+export interface UpdateTicketInput {
+  /** Field changes; include "status" to move the ticket; null removes a field. */
+  fields?: Record<string, unknown>;
+  /** When set, replaces the whole markdown body. Undefined leaves the body untouched. */
+  body?: string;
 }
 
 /**
- * Updates defined fields and, when "status" is included, performs a
- * transition validated against workflow.yaml. Edits preserve the file's
- * existing frontmatter formatting; only changed keys are touched.
+ * Updates defined fields and, when "status" is included, moves the ticket.
+ * Any status defined in schema.yaml is a legal move; there is no configured
+ * flow to gate it. Edits preserve the file's existing frontmatter
+ * formatting; only changed keys are touched. A body, when given, replaces
+ * the whole body using the same blank-body handling as createTicket.
  */
 export async function updateTicket(
   root: string,
   id: string,
-  changes: Record<string, unknown>,
+  input: UpdateTicketInput,
   ctx: MutationContext = {},
 ): Promise<UpdateResult> {
   const project = loadProject(root);
@@ -166,26 +187,37 @@ export async function updateTicket(
   if (!ticket) {
     throw new MutationError(`ticket "${id}" does not exist`);
   }
+  const changes = input.fields ?? {};
+  // An update carrying nothing would still rewrite the file to stamp
+  // `updated`, so an empty call is rejected rather than producing churn.
+  if (Object.keys(changes).length === 0 && input.body === undefined) {
+    throw new MutationError('nothing to update: pass field changes or a body');
+  }
   for (const key of Object.keys(changes)) {
     if (key !== 'status' && (CORE_FIELDS as readonly string[]).includes(key)) {
       throw new MutationError(`"${key}" is a locked core field and cannot be edited`);
     }
   }
+  // A hand-edited ticket can carry a type the schema no longer defines. Its
+  // fields cannot be checked against anything, so field edits are refused
+  // with the real cause named; a status move stays legal so the ticket can
+  // still be parked or closed.
+  if (project.schema.types.some((t) => t.name === ticket.type)) {
+    rejectUnknownFields(project.schema, ticket.type, changes, ['status']);
+  } else if (Object.keys(changes).some((k) => k !== 'status')) {
+    throw new MutationError(
+      `ticket "${id}" has unknown type "${ticket.type}"; correct the type in the file before editing fields`,
+    );
+  }
 
-  const from = ticket.status;
+  // A non-string status would otherwise be dropped silently, reporting
+  // success for a move that never happened.
+  if ('status' in changes && typeof changes.status !== 'string') {
+    throw new MutationError('status must be a string naming a status defined in schema.yaml');
+  }
   const to = typeof changes.status === 'string' ? changes.status : undefined;
-  if (to !== undefined) {
-    if (!project.workflow.statuses.some((s) => s.name === to)) {
-      throw new MutationError(`unknown status "${to}"`);
-    }
-    if (!ctx.forceTransition && !isLegalTransition(project.workflow, from, to)) {
-      const legal = project.workflow.transitions
-        .filter((t) => t.from === from)
-        .flatMap((t) => t.to);
-      throw new MutationError(
-        `illegal transition ${from} -> ${to}; legal targets from ${from}: ${legal.join(', ') || '(none)'}`,
-      );
-    }
+  if (to !== undefined && !project.schema.statuses.some((s) => s.name === to)) {
+    throw new MutationError(`unknown status "${to}"`);
   }
 
   const { status: _status, ...fieldChanges } = changes;
@@ -193,7 +225,7 @@ export async function updateTicket(
   for (const [key, value] of Object.entries(fieldChanges)) {
     if (value === null) delete merged[key];
   }
-  const issues = validateTicketFields(project.workflow, ticket.type, merged, ticket.path).filter(
+  const issues = validateTicketFields(project.schema, ticket.type, merged, ticket.path).filter(
     (i) => i.severity === 'error',
   );
   if (issues.length > 0) {
@@ -213,17 +245,20 @@ export async function updateTicket(
   }
   if (to !== undefined) doc.set('status', to);
   doc.set('updated', isoNow(ctx));
-  const newText = `---\n${doc.toString({ lineWidth: 0, flowCollectionPadding: false })}---\n${parsed.body}`;
+  const fm = doc.toString({ lineWidth: 0, flowCollectionPadding: false });
+  let newText: string;
+  if (input.body === undefined) {
+    newText = `---\n${fm}---\n${parsed.body}`;
+  } else {
+    const body = input.body.trimEnd();
+    newText = body === '' ? `---\n${fm}---\n` : `---\n${fm}---\n\n${body}\n`;
+  }
   writeFileSync(abs, newText);
 
   const after = reindex(root, ctx);
   const updated = after.tickets.find((t) => t.id === id);
   if (!updated) throw new MutationError(`ticket ${id} was updated but could not be read back`);
-  const firedRules =
-    to !== undefined && to !== from
-      ? matchRules(project.workflow, updated, from, to).map((rule) => ({ rule, from, to }))
-      : [];
-  return { ticket: updated, firedRules };
+  return { ticket: updated };
 }
 
 export interface DeleteResult {
@@ -263,73 +298,23 @@ export async function deleteTicket(
   return { id, comments: commentCount, sessions: sessions.length };
 }
 
-/**
- * Replaces the on_transition automation rules in workflow.yaml. Validates
- * structure (exactly one of run/agent, a target status) and references
- * (statuses, types and fields must exist) before writing, so the app can
- * never persist a rule set the validator would reject. Only the
- * on_transition node is rewritten; the rest of workflow.yaml is preserved.
- */
-export async function writeAutomations(
-  root: string,
-  rules: unknown,
-  ctx: MutationContext = {},
-): Promise<AutomationRule[]> {
-  const project = loadProject(root);
-
-  const parsed = automationListSchema.safeParse(rules);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    const path = first && first.path.length > 0 ? `${first.path.join('.')}: ` : '';
-    throw new MutationError(`invalid automation: ${path}${first?.message ?? 'invalid'}`);
-  }
-  const next = parsed.data as AutomationRule[];
-
-  const candidate: Project['workflow'] = { ...project.workflow, on_transition: next };
-  const issues = validateWorkflow(candidate, '.lovelace/workflow.yaml').filter((i) =>
-    i.rule.startsWith('automation/'),
-  );
-  if (issues.length > 0) {
-    throw new MutationError(issues.map((i) => i.message).join('; '), issues);
-  }
-
-  const abs = join(project.dir, 'workflow.yaml');
-  const doc = parseDocument(readFileSync(abs, 'utf8'));
-  doc.set('on_transition', next);
-  // Match the house style: each rule's `when` map renders in flow style.
-  const seq = doc.get('on_transition', true);
-  if (isSeq(seq)) {
-    for (const item of seq.items) {
-      if (isMap(item)) {
-        const when = item.get('when', true);
-        if (isMap(when)) (when as { flow?: boolean }).flow = true;
-      }
-    }
-  }
-  writeFileSync(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
-  if (!ctx.skipReindex) reindex(root, ctx);
-  return next;
-}
-
 /** A rename maps an old machine name to its new one, per schema section. */
-export interface WorkflowRenames {
+export interface SchemaRenames {
   statuses?: Record<string, string>;
   types?: Record<string, string>;
   priorities?: Record<string, string>;
 }
 
 /**
- * A workflow-editor save. Each section present replaces its counterpart;
+ * A schema-editor save. Each section present replaces its counterpart;
  * omitted sections are kept. `renames` carries the editor's in-place name
  * changes so they cascade to existing data rather than stranding it.
  */
-export interface WorkflowEdit {
+export interface SchemaEdit {
   types?: TypeDef[];
   statuses?: StatusDef[];
-  transitions?: TransitionDef[];
   priorities?: string[];
-  fields?: FieldDef[];
-  renames?: WorkflowRenames;
+  renames?: SchemaRenames;
 }
 
 /** Remaps a name through a rename map, leaving unmapped names untouched. */
@@ -338,62 +323,67 @@ function remap(map: Record<string, string>, name: string): string {
 }
 
 /**
- * Persists a workflow-editor save to workflow.yaml. Renames cascade to
- * existing tickets, the board order and the automation rules, so nothing
- * dangles. Removing a status or type that tickets still use, or a priority
- * still in use, is blocked with a message naming the count, because those
- * would strand tickets in an invalid state. Structure is validated with the
- * same rules the validator enforces before anything is written. Each schema
- * node is patched in place, so hand-authored comments elsewhere survive.
+ * Finds the previously loaded item a candidate type or status corresponds
+ * to, so its unknown keys can be carried forward. Identity follows the
+ * renames map before the name: in a single save one rename can vacate a
+ * name another node takes (a swap or a chain), so a direct name match is
+ * only trusted when no rename produced this name and the old holder of the
+ * name was not renamed away.
  */
-export async function writeWorkflow(
+function matchOld<T extends { name: string }>(
+  newName: string,
+  oldByName: Map<string, T>,
+  renames: Record<string, string>,
+): T | undefined {
+  const renamedFrom = Object.entries(renames).find(([, to]) => to === newName)?.[0];
+  if (renamedFrom !== undefined) return oldByName.get(renamedFrom);
+  if (newName in renames) return undefined;
+  return oldByName.get(newName);
+}
+
+/**
+ * Persists a schema-editor save to schema.yaml. Renames cascade to existing
+ * tickets and the board order, so nothing dangles. Removing a status or type
+ * that tickets still use, or a priority still in use, is blocked with a
+ * message naming the count, because those would strand tickets in an
+ * invalid state. Structure is validated with the same rules the validator
+ * enforces before anything is written. Each schema node is patched in
+ * place, so hand-authored comments elsewhere survive.
+ */
+export async function writeSchema(
   root: string,
-  edit: WorkflowEdit,
+  edit: SchemaEdit,
   ctx: MutationContext = {},
 ): Promise<void> {
   const project = loadProject(root);
-  const current = project.workflow;
+  const current = project.schema;
   const statusRenames = edit.renames?.statuses ?? {};
   const typeRenames = edit.renames?.types ?? {};
   const prioRenames = edit.renames?.priorities ?? {};
 
   // Assemble the candidate: a provided section replaces, an omitted one is
-  // kept. Sections that can reference a renamed status or type are remapped so
-  // they stay consistent even when the caller sent the old names.
+  // kept. A field's refers_to can reference a renamed type, so it is
+  // remapped even when the caller sent the old names.
   const statuses = edit.statuses ?? current.statuses;
-  const types = edit.types ?? current.types;
+  const types = (edit.types ?? current.types).map((t) => ({
+    ...t,
+    fields: t.fields.map((f) => ({
+      ...f,
+      ...(f.refers_to ? { refers_to: f.refers_to.map((x) => remap(typeRenames, x)) } : {}),
+    })),
+  }));
   const priorities = edit.priorities ?? current.priorities;
-  const transitions = (edit.transitions ?? current.transitions).map((t) => ({
-    from: remap(statusRenames, t.from),
-    to: t.to.map((to) => remap(statusRenames, to)),
-  }));
-  const fields = (edit.fields ?? current.fields).map((f) => ({
-    ...f,
-    ...(f.applies_to ? { applies_to: f.applies_to.map((x) => remap(typeRenames, x)) } : {}),
-    ...(f.refers_to ? { refers_to: f.refers_to.map((x) => remap(typeRenames, x)) } : {}),
-  }));
-  const onTransition = current.on_transition.map((rule) => {
-    const when = { ...rule.when };
-    when.to = remap(statusRenames, when.to);
-    if (typeof when.from === 'string') when.from = remap(statusRenames, when.from);
-    if (typeof when.type === 'string') when.type = remap(typeRenames, when.type);
-    return { ...rule, when };
-  });
 
-  const candidate: Workflow = {
-    types,
-    statuses,
-    transitions,
-    priorities,
-    fields,
-    on_transition: onTransition,
-  };
+  const candidate: Schema = { types, statuses, priorities };
 
   // The enum fields whose values are the priorities list; a removed priority
   // is "in use" if any ticket holds it in one of these.
-  const prioFields = fields
-    .filter((f) => f.type === 'enum' && f.values_from === 'priorities')
-    .map((f) => f.name);
+  const prioFields = new Set<string>();
+  for (const t of types) {
+    for (const f of t.fields) {
+      if (f.type === 'enum' && f.values_from === 'priorities') prioFields.add(f.name);
+    }
+  }
 
   // Block removals that would strand existing tickets. A section member is
   // gone if it is absent from the new list and was not renamed away.
@@ -420,7 +410,7 @@ export async function writeWorkflow(
   const prioSet = new Set(priorities);
   for (const p of current.priorities) {
     if (prioSet.has(p) || p in prioRenames) continue;
-    const n = project.tickets.filter((t) => prioFields.some((pf) => t.fields[pf] === p)).length;
+    const n = project.tickets.filter((t) => [...prioFields].some((pf) => t.fields[pf] === p)).length;
     if (n > 0) {
       throw new MutationError(
         `cannot remove priority "${p}": ${n} ticket${n === 1 ? '' : 's'} still use it`,
@@ -429,7 +419,7 @@ export async function writeWorkflow(
   }
 
   // Structural validation: the same errors the validator would report.
-  const issues = validateWorkflow(candidate, '.lovelace/workflow.yaml').filter(
+  const issues = validateSchema(candidate, '.lovelace/schema.yaml').filter(
     (i) => i.severity === 'error',
   );
   if (issues.length > 0) {
@@ -466,34 +456,29 @@ export async function writeWorkflow(
   }
 
   // Patch each schema node in place so comments and untouched sections survive.
-  const abs = join(project.dir, 'workflow.yaml');
+  // Build real YAML nodes via createNode (not plain JS) so applySchemaFlow's
+  // isSeq/isMap guards fire and the scalar arrays keep their compact flow style;
+  // a plain doc.set stores JS values that reflow to block style on every save.
+  // Types and statuses are merged, not just compacted: a matched old item
+  // (by name, or through the renames map) carries its unknown keys forward
+  // so a save does not destroy a newer-minor or hand-authored construct
+  // (ADR-0011).
+  const oldTypeByName = new Map(current.types.map((t) => [t.name, t] as const));
+  const oldStatusByName = new Map(current.statuses.map((s) => [s.name, s] as const));
+  const abs = join(project.dir, 'schema.yaml');
   const doc = parseDocument(readFileSync(abs, 'utf8'));
-  doc.set('types', candidate.types.map(compactType));
-  doc.set('statuses', candidate.statuses.map(compactStatus));
-  doc.set('transitions', candidate.transitions.map(compactTransition));
-  doc.set('priorities', [...candidate.priorities]);
-  doc.set('fields', candidate.fields.map(compactField));
-  // The automation rules are owned by the Automations editor, not this one, so
-  // leave the node untouched, only remapping the status and type names a rename
-  // changed. Editing the node in place preserves keys this editor does not
-  // model (for example a rule's `confirm` gate).
-  const automations = doc.get('on_transition', true);
-  if (!isSeq(automations)) {
-    doc.set('on_transition', candidate.on_transition);
-  } else if (Object.keys(statusRenames).length + Object.keys(typeRenames).length > 0) {
-    for (const item of automations.items) {
-      if (!isMap(item)) continue;
-      const when = item.get('when', true);
-      if (!isMap(when)) continue;
-      const to = when.get('to');
-      if (typeof to === 'string' && to in statusRenames) when.set('to', statusRenames[to]);
-      const from = when.get('from');
-      if (typeof from === 'string' && from in statusRenames) when.set('from', statusRenames[from]);
-      const type = when.get('type');
-      if (typeof type === 'string' && type in typeRenames) when.set('type', typeRenames[type]);
-    }
-  }
-  applyWorkflowFlow(doc);
+  doc.set(
+    'types',
+    doc.createNode(candidate.types.map((t) => mergeType(t, matchOld(t.name, oldTypeByName, typeRenames)))),
+  );
+  doc.set(
+    'statuses',
+    doc.createNode(
+      candidate.statuses.map((s) => mergeStatus(s, matchOld(s.name, oldStatusByName, statusRenames))),
+    ),
+  );
+  doc.set('priorities', doc.createNode([...candidate.priorities]));
+  applySchemaFlow(doc);
   writeFileSync(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
 
   if (!ctx.skipReindex) reindex(root, ctx);
@@ -718,38 +703,194 @@ export function setActiveTicket(root: string, id: string | null): void {
   writeFileSync(file, `${id}\n`);
 }
 
-/** Writes the live agent marker; the hooks call this at turn start. */
-export function writePresence(root: string, presence: AgentPresence): void {
+// At least one alphanumeric, so the dot-only names "." and ".." can never
+// pass and navigate out of the active/ directory.
+const SESSION_ID_PATTERN = /^(?=.*[A-Za-z0-9])[A-Za-z0-9._-]+$/;
+
+/**
+ * Writes the active-ticket pointer for one Claude Code session
+ * (state/active/<session-id>), so concurrent sessions do not share the
+ * singleton slot. A session ID outside the safe pattern is silently
+ * refused rather than used to build a path.
+ */
+export function writeSessionActiveTicket(root: string, sessionId: string, id: string | null): void {
+  if (!SESSION_ID_PATTERN.test(sessionId)) return;
   const project = loadProject(root);
-  const stateDir = join(project.dir, project.manifest.paths.state);
-  mkdirSync(stateDir, { recursive: true });
-  writeFileSync(join(stateDir, 'presence.json'), `${JSON.stringify(presence, null, 2)}\n`);
+  const dir = join(project.dir, project.manifest.paths.state, 'active');
+  const file = join(dir, sessionId);
+  if (id === null) {
+    if (existsSync(file)) rmSync(file);
+    return;
+  }
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, `${id}\n`);
 }
 
-/** Removes the live agent marker; the hooks call this when a turn or session ends. */
-export function clearPresence(root: string): void {
+/** The active-ticket pointer for one Claude Code session, or null when it never claimed one. */
+export function readSessionActiveTicket(root: string, sessionId: string): string | null {
+  if (!SESSION_ID_PATTERN.test(sessionId)) return null;
   const project = loadProject(root);
-  const file = join(project.dir, project.manifest.paths.state, 'presence.json');
-  if (existsSync(file)) rmSync(file);
-}
-
-/** The live agent marker, or null when no agent is processing. */
-export function readPresence(root: string): AgentPresence | null {
-  const project = loadProject(root);
-  const file = join(project.dir, project.manifest.paths.state, 'presence.json');
+  const file = join(project.dir, project.manifest.paths.state, 'active', sessionId);
   if (!existsSync(file)) return null;
+  const id = readFileSync(file, 'utf8').trim();
+  return id.length > 0 ? id : null;
+}
+
+/** The default stale cap when the manifest does not set presence_timeout_minutes, in minutes. */
+export const DEFAULT_PRESENCE_TIMEOUT_MINUTES = 15;
+
+/** Parses one presence entry file; a torn write or a missing started_at is not an error state, just no entry. */
+function parsePresenceFile(file: string): AgentPresence | null {
   try {
     const raw = JSON.parse(readFileSync(file, 'utf8')) as Partial<AgentPresence>;
     if (typeof raw.started_at !== 'string') return null;
-    return {
+    const presence: AgentPresence = {
       ticket: typeof raw.ticket === 'string' ? raw.ticket : null,
       actor: typeof raw.actor === 'string' ? raw.actor : null,
       started_at: raw.started_at,
     };
+    if (typeof raw.beat_at === 'string') presence.beat_at = raw.beat_at;
+    return presence;
   } catch {
-    // A torn write is not an error state; the marker simply is not live.
     return null;
   }
+}
+
+/**
+ * Deletes presence entries whose last heartbeat (or started_at, when no
+ * heartbeat has landed) is older than the cap. Called from writePresence,
+ * once per turn; never from beatPresence, which stays on the hot path.
+ */
+function gcPresence(presenceDir: string, capMinutes: number): void {
+  if (!existsSync(presenceDir)) return;
+  const capMs = capMinutes * 60_000;
+  const now = Date.now();
+  for (const name of readdirSync(presenceDir)) {
+    if (!name.endsWith('.json')) continue;
+    const file = join(presenceDir, name);
+    const presence = parsePresenceFile(file);
+    if (!presence) continue; // a torn entry cannot be timed; leave it for readPresences to skip
+    const age = now - Date.parse(presence.beat_at ?? presence.started_at);
+    if (Number.isNaN(age) || age > capMs) rmSync(file);
+  }
+}
+
+/**
+ * Writes one session's live agent marker; presence-start calls this once per
+ * turn. A session ID outside the safe pattern is silently refused, exactly
+ * like writeSessionActiveTicket. Also removes the legacy singleton
+ * state/presence.json when still present (cleanup of a pre-3.2 marker on
+ * the write path, per SPEC 3.2.0) and prunes entries the heartbeat cap has
+ * outlived.
+ */
+export function writePresence(root: string, sessionId: string, presence: AgentPresence): void {
+  if (!SESSION_ID_PATTERN.test(sessionId)) return;
+  const project = loadProject(root);
+  const stateDir = join(project.dir, project.manifest.paths.state);
+  const presenceDir = join(stateDir, 'presence');
+  mkdirSync(presenceDir, { recursive: true });
+  writeFileSync(join(presenceDir, `${sessionId}.json`), `${JSON.stringify(presence, null, 2)}\n`);
+  const legacy = join(stateDir, 'presence.json');
+  if (existsSync(legacy)) rmSync(legacy);
+  gcPresence(presenceDir, project.manifest.presence_timeout_minutes ?? DEFAULT_PRESENCE_TIMEOUT_MINUTES);
+}
+
+/**
+ * Removes one session's live agent marker; the hooks call this when a
+ * passing stop or a session end lets the turn finish. Also removes the
+ * legacy singleton state/presence.json, if a pre-3.2 marker is still there.
+ */
+export function clearPresence(root: string, sessionId: string): void {
+  if (!SESSION_ID_PATTERN.test(sessionId)) return;
+  const project = loadProject(root);
+  const stateDir = join(project.dir, project.manifest.paths.state);
+  const file = join(stateDir, 'presence', `${sessionId}.json`);
+  if (existsSync(file)) rmSync(file);
+  const legacy = join(stateDir, 'presence.json');
+  if (existsSync(legacy)) rmSync(legacy);
+}
+
+/**
+ * Every live session's presence entry, plus the legacy singleton
+ * state/presence.json read as one more entry when it is still around (a
+ * pre-3.2 project, or a marker not yet swept by a write). A torn or foreign
+ * file is not an error state; it is skipped. Sorted by started_at then
+ * filename so output is deterministic. Missing state/presence/ means [].
+ */
+export function readPresences(root: string): AgentPresence[] {
+  const project = loadProject(root);
+  const stateDir = join(project.dir, project.manifest.paths.state);
+  const presenceDir = join(stateDir, 'presence');
+  const entries: Array<{ file: string; presence: AgentPresence }> = [];
+
+  if (existsSync(presenceDir)) {
+    // presence/ existing but not a directory (foreign junk, same stance as
+    // parsePresenceFile) reads as no entries rather than throwing ENOTDIR.
+    let names: string[] = [];
+    try {
+      names = readdirSync(presenceDir).sort();
+    } catch {
+      names = [];
+    }
+    for (const name of names) {
+      if (!name.endsWith('.json')) continue;
+      const presence = parsePresenceFile(join(presenceDir, name));
+      if (presence) entries.push({ file: name, presence });
+    }
+  }
+  const legacy = join(stateDir, 'presence.json');
+  if (existsSync(legacy)) {
+    const presence = parsePresenceFile(legacy);
+    if (presence) entries.push({ file: 'presence.json', presence });
+  }
+
+  return entries
+    .sort((a, b) => a.presence.started_at.localeCompare(b.presence.started_at) || a.file.localeCompare(b.file))
+    .map((e) => e.presence);
+}
+
+/**
+ * The turn's heartbeat: called on every tool use, so it must stay far
+ * lighter than loadProject (which parses every ticket). Resolves state/
+ * from manifest.yaml alone, re-resolves the focus ticket from
+ * state/active/<session-id> falling back to state/active_ticket (the same
+ * plain reads and trim semantics as readSessionActiveTicket/
+ * getActiveTicket), and writes the entry back with a fresh beat_at while
+ * preserving started_at and actor. Creates a missing entry rather than
+ * doing nothing, so a beat after the entry has been garbage-collected still
+ * lights the ring on the next paint. Never runs garbage collection; that is
+ * writePresence's job, once per turn.
+ */
+export function beatPresence(root: string, sessionId: string): void {
+  if (!SESSION_ID_PATTERN.test(sessionId)) return;
+  const lovelaceDir = join(root, '.lovelace');
+  const manifest = loadManifest(lovelaceDir);
+  const stateDir = join(lovelaceDir, manifest.paths.state);
+  const now = `${new Date().toISOString().slice(0, 19)}Z`;
+
+  const readTrimmed = (file: string): string | null => {
+    if (!existsSync(file)) return null;
+    const value = readFileSync(file, 'utf8').trim();
+    return value.length > 0 ? value : null;
+  };
+  const ticket =
+    readTrimmed(join(stateDir, 'active', sessionId)) ?? readTrimmed(join(stateDir, 'active_ticket'));
+
+  const presenceDir = join(stateDir, 'presence');
+  const entryFile = join(presenceDir, `${sessionId}.json`);
+  const existing = parsePresenceFile(entryFile);
+  const entry: AgentPresence = {
+    ticket,
+    actor: existing?.actor ?? null,
+    started_at: existing?.started_at ?? now,
+    beat_at: now,
+  };
+
+  mkdirSync(presenceDir, { recursive: true });
+  writeFileSync(entryFile, `${JSON.stringify(entry, null, 2)}\n`);
+
+  const legacy = join(stateDir, 'presence.json');
+  if (existsSync(legacy)) rmSync(legacy);
 }
 
 export function getActiveTicket(root: string): string | null {

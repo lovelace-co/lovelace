@@ -2,8 +2,8 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { defaultWorkflow } from '@lovelace/core';
-import { handle } from '../src/host.js';
+import { defaultSchema, parseFrontmatter, SPEC_VERSION, updateTicket } from '@lovelace/core';
+import { errorEnvelope, handle } from '../src/host.js';
 import { tempFixture } from './helpers.js';
 
 const cleanups: Array<() => void> = [];
@@ -46,24 +46,209 @@ describe('host ops: delete and board order', () => {
   });
 });
 
-describe('host ops: init configuration', () => {
-  it('default_workflow returns the built-in default', async () => {
-    const res = await handle({ op: 'default_workflow' });
-    const wf = res.workflow as { statuses: Array<{ name: string }>; priorities: string[] };
-    expect(wf.statuses.map((s) => s.name)).toContain('backlog');
-    expect(wf.priorities).toEqual(['urgent', 'high', 'medium', 'low']);
+/** The `updated` stamp is wall-clock and the two writers under comparison run moments apart; blank it before a byte comparison. */
+function normalizeUpdated(text: string): string {
+  return text.replace(/^updated: .*$/m, 'updated: NORMALIZED');
+}
+
+describe('host op: write_ticket_body', () => {
+  it('clearing the body to "" matches the shape updateTicket produces for an empty body', async () => {
+    const root = fixture();
+    await handle({ op: 'write_ticket_body', root, id: 'T-0002', body: '' });
+    const viaOp = readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8');
+
+    const other = fixture();
+    await updateTicket(other, 'T-0002', { body: '' });
+    const viaCore = readFileSync(join(other, '.lovelace/tickets/T-0002.md'), 'utf8');
+
+    expect(normalizeUpdated(viaOp)).toBe(normalizeUpdated(viaCore));
+    expect(viaOp.endsWith('---\n')).toBe(true);
+    expect(viaOp).not.toContain('---\n\n');
   });
 
-  it('init scaffolds a project from a custom workflow', async () => {
+  it('a non-empty body matches the file updateTicket writes for the same body', async () => {
+    const root = fixture();
+    await handle({ op: 'write_ticket_body', root, id: 'T-0002', body: 'Replaced by the op.\n' });
+    const viaOp = readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8');
+
+    const other = fixture();
+    await updateTicket(other, 'T-0002', { body: 'Replaced by the op.\n' });
+    const viaCore = readFileSync(join(other, '.lovelace/tickets/T-0002.md'), 'utf8');
+
+    expect(normalizeUpdated(viaOp)).toBe(normalizeUpdated(viaCore));
+  });
+
+  it('round trip: a body written by the op then a core fields-only update produces no body diff', async () => {
+    const root = fixture();
+    await handle({ op: 'write_ticket_body', root, id: 'T-0002', body: 'App-written body.\n' });
+    const afterOp = readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8');
+
+    await updateTicket(root, 'T-0002', { fields: { priority: 'low' } });
+    const afterFieldsEdit = readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8');
+
+    expect(parseFrontmatter(afterFieldsEdit).body).toBe(parseFrontmatter(afterOp).body);
+  });
+
+  it('stamps updated on a body edit, unlike the old hand-splice', async () => {
+    const root = fixture();
+    const before = parseFrontmatter(readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8')).data.updated;
+    await handle({ op: 'write_ticket_body', root, id: 'T-0002', body: 'New body.\n' });
+    const after = parseFrontmatter(readFileSync(join(root, '.lovelace/tickets/T-0002.md'), 'utf8')).data.updated;
+    expect(after).not.toBe(before);
+  });
+
+  it('errors when the ticket does not exist', async () => {
+    const root = fixture();
+    await expect(
+      handle({ op: 'write_ticket_body', root, id: 'T-9999', body: 'x' }),
+    ).rejects.toThrow(/ticket "T-9999" does not exist/);
+  });
+});
+
+describe('host op: error envelope', () => {
+  it('carries code, declared, supported and file for a spec-mismatched project', async () => {
+    const root = fixture();
+    const manifestPath = join(root, '.lovelace/manifest.yaml');
+    writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replace('3.0.0', '2.1.0'));
+
+    try {
+      await handle({ op: 'snapshot', root });
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      const envelope = errorEnvelope(e);
+      expect(envelope.ok).toBe(false);
+      expect(envelope.error.kind).toBe('project');
+      expect(envelope.error.code).toBe('spec-needs-migration');
+      expect(envelope.error.declared).toBe('2.1.0');
+      expect(envelope.error.supported).toBe(SPEC_VERSION);
+      expect(envelope.error.file).toContain('manifest.yaml');
+    }
+  });
+});
+
+// The real 2.x workflow.yaml shape (ADR-0011's migration source), matching
+// the fixture packages/core/test/helpers.ts builds for its own migration
+// tests.
+const V2_WORKFLOW_YAML = `types:
+  - name: epic
+    id_prefix: E
+  - name: task
+    id_prefix: T
+  - name: bug
+    id_prefix: T
+
+statuses:
+  - name: backlog
+  - name: todo
+  - name: in_progress
+    active: true
+  - name: done
+    complete: true
+  - name: cancelled
+    complete: true
+
+transitions:
+  - from: backlog
+    to: [todo, cancelled]
+
+priorities: [urgent, high, medium, low]
+
+fields:
+  - name: title
+    type: string
+    required: true
+  - name: assignee
+    type: reference
+    refers_to: [actor]
+  - name: priority
+    type: enum
+    values_from: priorities
+  - name: estimate
+    type: number
+    applies_to: [task]
+
+on_transition:
+  - when: { to: done }
+    run: ./scripts/archive-artifacts.sh
+`;
+
+/** Turns a copy of the demo fixture into a 2.x-shaped project in place. */
+function toV2Fixture(root: string): void {
+  rmSync(join(root, '.lovelace/schema.yaml'));
+  writeFileSync(join(root, '.lovelace/workflow.yaml'), V2_WORKFLOW_YAML);
+  const manifestPath = join(root, '.lovelace/manifest.yaml');
+  writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replace('spec_version: 3.0.0', 'spec_version: 2.0.0'));
+}
+
+describe('host ops: migration', () => {
+  it('migration_plan returns the plan for a 2.x fixture without touching files', async () => {
+    const root = fixture();
+    toV2Fixture(root);
+
+    const res = await handle({ op: 'migration_plan', root });
+    const plan = res.plan as { declared: string; target: string; steps: Array<{ summary: string; changes: string[] }> };
+    expect(plan.declared).toBe('2.0.0');
+    // The target is the chain's final floor (what the 2-to-3 step actually
+    // stamps), not this tooling's full SPEC_VERSION.
+    expect(plan.target).toBe('3.0.0');
+    expect(plan.steps).toHaveLength(1);
+    expect(plan.steps[0]!.changes).toContain('rename workflow.yaml to schema.yaml');
+    expect(existsSync(join(root, '.lovelace/workflow.yaml'))).toBe(true);
+  });
+
+  it('migrate_project migrates the project and returns a working snapshot', async () => {
+    const root = fixture();
+    toV2Fixture(root);
+
+    const res = await handle({ op: 'migrate_project', root });
+    expect((res as { declared: string }).declared).toBe('2.0.0');
+    expect((res as { finalVersion: string }).finalVersion).toBe('3.0.0');
+    expect(existsSync(join(root, '.lovelace/workflow.yaml'))).toBe(false);
+    expect(existsSync(join(root, '.lovelace/schema.yaml'))).toBe(true);
+
+    // The normal snapshot payload rides along: the project now loads.
+    const manifest = res.manifest as { spec_version: string };
+    expect(manifest.spec_version).toBe('3.0.0');
+    expect(res.index).toBeTruthy();
+
+    // A plain snapshot op now succeeds too.
+    const after = await handle({ op: 'snapshot', root });
+    expect((after.manifest as { spec_version: string }).spec_version).toBe('3.0.0');
+  });
+});
+
+describe('host ops: init configuration', () => {
+  it('default_schema returns the built-in default', async () => {
+    const res = await handle({ op: 'default_schema' });
+    const schema = res.schema as { statuses: Array<{ name: string }>; priorities: string[] };
+    expect(schema.statuses.map((s) => s.name)).toContain('backlog');
+    expect(schema.priorities).toEqual(['urgent', 'high', 'medium', 'low']);
+  });
+
+  it('init scaffolds a project from a custom schema', async () => {
     const root = mkdtempSync(join(tmpdir(), 'lovelace-init-host-'));
     cleanups.push(() => rmSync(root, { recursive: true, force: true }));
-    const wf = defaultWorkflow();
-    wf.statuses = [{ name: 'inbox' }, { name: 'shipped', terminal: true }];
-    wf.transitions = [{ from: 'inbox', to: ['shipped'] }];
-    const res = await handle({ op: 'init', root, name: 'Custom', userName: 'Me', workflow: wf });
-    expect(existsSync(join(root, '.lovelace/workflow.yaml'))).toBe(true);
-    const statuses = (res.workflow as { statuses: Array<{ name: string }> }).statuses;
+    const schema = defaultSchema();
+    schema.statuses = [{ name: 'inbox' }, { name: 'shipped', agent: 'complete' }];
+    const res = await handle({ op: 'init', root, name: 'Custom', userName: 'Me', schema });
+    expect(existsSync(join(root, '.lovelace/schema.yaml'))).toBe(true);
+    const statuses = (res.schema as { statuses: Array<{ name: string }> }).statuses;
     expect(statuses.map((s) => s.name)).toEqual(['inbox', 'shipped']);
+  });
+
+  it('write_schema saves an edit and returns the updated schema in the snapshot', async () => {
+    const root = fixture();
+    const before = await handle({ op: 'snapshot', root });
+    const statuses = (before.schema as { statuses: Array<{ name: string; agent?: string }> }).statuses;
+    const renamed = statuses.map((s) => (s.name === 'in_review' ? { ...s, name: 'review' } : s));
+    const res = await handle({
+      op: 'write_schema',
+      root,
+      edit: { statuses: renamed, renames: { statuses: { in_review: 'review' } } },
+    });
+    const after = (res.schema as { statuses: Array<{ name: string }> }).statuses.map((s) => s.name);
+    expect(after).toContain('review');
+    expect(after).not.toContain('in_review');
   });
 });
 
@@ -266,6 +451,75 @@ describe('host op: fix_document', () => {
     await expect(
       handle({ op: 'fix_document', root, path: '.lovelace/documentation/domain/missing.md' }),
     ).rejects.toThrow(/does not exist/);
+  });
+
+  it('quotes a YAML-coercible filename so the id survives as the string "null"', async () => {
+    const root = fixture();
+    const path = join(root, '.lovelace/documentation/domain/null.md');
+    writeFileSync(path, '# Untitled\n');
+
+    const res = await handle({ op: 'fix_document', root, path: '.lovelace/documentation/domain/null.md' });
+    const document = (res.index as { documents: IndexDocument[] }).documents.find(
+      (d) => d.path === '.lovelace/documentation/domain/null.md',
+    );
+    expect(document?.id).toBe('null');
+    expect((res.issues as Issue[]).some((i) => i.file === '.lovelace/documentation/domain/null.md')).toBe(false);
+  });
+
+  it('prefixes a digit-leading filename so the id is a valid slug with no issues', async () => {
+    const root = fixture();
+    const path = join(root, '.lovelace/documentation/domain/007.md');
+    writeFileSync(path, '# Untitled\n');
+
+    const res = await handle({ op: 'fix_document', root, path: '.lovelace/documentation/domain/007.md' });
+    const document = (res.index as { documents: IndexDocument[] }).documents.find(
+      (d) => d.path === '.lovelace/documentation/domain/007.md',
+    );
+    expect(document?.id).toBe('doc-007');
+    expect((res.issues as Issue[]).some((i) => i.file === '.lovelace/documentation/domain/007.md')).toBe(false);
+  });
+
+  it('create_document also prefixes a digit-leading name, guarding the shared slug helper', async () => {
+    const root = fixture();
+    const res = await handle({
+      op: 'create_document',
+      root,
+      dir: '.lovelace/documentation/domain',
+      name: '2024-plan',
+    });
+    const document = (res.index as { documents: IndexDocument[] }).documents.find(
+      (d) => d.path === '.lovelace/documentation/domain/2024-plan.md',
+    );
+    expect(document?.id).toBe('doc-2024-plan');
+    expect((res.issues as Issue[]).some((i) => i.file === '.lovelace/documentation/domain/2024-plan.md')).toBe(false);
+  });
+
+  it('rejects a non-UTF-8 file rather than mangling it, leaving the bytes untouched', async () => {
+    const root = fixture();
+    const path = join(root, '.lovelace/documentation/domain/binary.md');
+    writeFileSync(path, Buffer.from([0x23, 0x20, 0xe9, 0x0a]));
+    const before = readFileSync(path);
+
+    await expect(
+      handle({ op: 'fix_document', root, path: '.lovelace/documentation/domain/binary.md' }),
+    ).rejects.toThrow(/not UTF-8 text/);
+    const after = readFileSync(path);
+    expect(after.equals(before)).toBe(true);
+  });
+
+  it('create_document also quotes a YAML-coercible name, guarding the shared helper', async () => {
+    const root = fixture();
+    const res = await handle({
+      op: 'create_document',
+      root,
+      dir: '.lovelace/documentation/domain',
+      name: 'null',
+    });
+    const document = (res.index as { documents: IndexDocument[] }).documents.find(
+      (d) => d.path === '.lovelace/documentation/domain/null.md',
+    );
+    expect(document?.id).toBe('null');
+    expect((res.issues as Issue[]).some((i) => i.file === '.lovelace/documentation/domain/null.md')).toBe(false);
   });
 });
 

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { CloseIcon } from './icons';
 import { Dropdown } from './Dropdown';
+import { SessionsModal } from './SessionsModal';
+import { ProblemsModal } from './ProblemsModal';
 import { formatDate } from '../lib/datetime';
 import { DEFAULT_PRESENCE_TIMEOUT_MINUTES } from '../lib/presence';
+import type { LinkResolver, OpenLink } from '../lib/links';
 import type { Snapshot } from '../lib/types';
 
 interface GeneralSettingsProps {
@@ -13,14 +16,22 @@ interface GeneralSettingsProps {
   onSavePresenceTimeout: (minutes: number | null) => Promise<void>;
   /** Open the project folder in the operating system's file manager. */
   onOpenProject: () => void;
+  onOpenTicket: (id: string) => void;
+  resolveLink?: LinkResolver;
+  onOpenLink?: OpenLink;
+  /** A session ID to jump straight to (from search), or null for no pending focus. */
+  focusSession?: string | null;
+  /** Called once a pending focusSession has been consumed. */
+  onFocusSessionHandled?: () => void;
 }
 
 /* The stale cap choices; the default stays out of the file so manifests
    remain clean until a project actually opts into a different window. */
 const PRESENCE_CHOICES = [
+  { minutes: DEFAULT_PRESENCE_TIMEOUT_MINUTES, label: '15 minutes' },
   { minutes: 30, label: '30 minutes' },
   { minutes: 60, label: '1 hour' },
-  { minutes: DEFAULT_PRESENCE_TIMEOUT_MINUTES, label: '2 hours' },
+  { minutes: 120, label: '2 hours' },
   { minutes: 240, label: '4 hours' },
   { minutes: 480, label: '8 hours' },
 ];
@@ -30,8 +41,21 @@ const PRESENCE_CHOICES = [
  * tooling-managed facts (id, path, spec version, creation date) shown
  * read-only.
  */
-export function GeneralSettings({ snapshot, onRename, onSavePresenceTimeout, onOpenProject }: GeneralSettingsProps) {
+export function GeneralSettings({
+  snapshot,
+  onRename,
+  onSavePresenceTimeout,
+  onOpenProject,
+  onOpenTicket,
+  resolveLink,
+  onOpenLink,
+  focusSession,
+  onFocusSessionHandled,
+}: GeneralSettingsProps) {
   const [digestOpen, setDigestOpen] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [sessionsInitialOpen, setSessionsInitialOpen] = useState<string | null>(null);
+  const [problemsOpen, setProblemsOpen] = useState(false);
   useEffect(() => {
     if (!digestOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -40,7 +64,17 @@ export function GeneralSettings({ snapshot, onRename, onSavePresenceTimeout, onO
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [digestOpen]);
+
+  // A session picked from search opens the modal pre-expanded on that
+  // session, then clears the request so re-picking it later still triggers.
+  useEffect(() => {
+    if (!focusSession) return;
+    setSessionsInitialOpen(focusSession);
+    setSessionsOpen(true);
+    onFocusSessionHandled?.();
+  }, [focusSession, onFocusSessionHandled]);
   const m = snapshot.manifest;
+  const errors = snapshot.issues.filter((i) => i.severity === 'error');
   const homePath = snapshot.root.replace(/^\/Users\/[^/]+/, '~');
   const timeout = m.presence_timeout_minutes ?? DEFAULT_PRESENCE_TIMEOUT_MINUTES;
   const timeoutChoices = PRESENCE_CHOICES.some((c) => c.minutes === timeout)
@@ -111,6 +145,26 @@ export function GeneralSettings({ snapshot, onRename, onSavePresenceTimeout, onO
         <button className="btn btn-secondary" onClick={() => setDigestOpen(true)}>
           View digest
         </button>
+        <button
+          className="btn btn-secondary"
+          onClick={() => {
+            setSessionsInitialOpen(null);
+            setSessionsOpen(true);
+          }}
+        >
+          View sessions
+          {snapshot.index.sessions.length > 0 && (
+            <span className="count-note num">{snapshot.index.sessions.length}</span>
+          )}
+        </button>
+        <button className="btn btn-secondary" onClick={() => setProblemsOpen(true)}>
+          View problems
+          {snapshot.issues.length > 0 && (
+            <span className={`count-note num ${errors.length > 0 ? 'snag-error' : 'snag-warning'}`}>
+              {snapshot.issues.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {digestOpen && (
@@ -138,6 +192,33 @@ export function GeneralSettings({ snapshot, onRename, onSavePresenceTimeout, onO
           </div>
         </div>
       )}
+
+      {sessionsOpen && (
+        <SessionsModal
+          // Remount on a new focus so a search pick lands while already open.
+          key={sessionsInitialOpen ?? ''}
+          snapshot={snapshot}
+          initialOpen={sessionsInitialOpen}
+          onClose={() => {
+            setSessionsOpen(false);
+            setSessionsInitialOpen(null);
+          }}
+          onOpenTicket={(id) => {
+            setSessionsOpen(false);
+            onOpenTicket(id);
+          }}
+          resolveLink={resolveLink}
+          onOpenLink={
+            onOpenLink &&
+            ((target) => {
+              setSessionsOpen(false);
+              onOpenLink(target);
+            })
+          }
+        />
+      )}
+
+      {problemsOpen && <ProblemsModal issues={snapshot.issues} onClose={() => setProblemsOpen(false)} />}
     </div>
   );
 }

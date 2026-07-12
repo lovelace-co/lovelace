@@ -1,9 +1,21 @@
-import type { Actor, AutomationRule, GraphLayout, SearchHit, Snapshot, Workflow, WorkflowEdit } from './types';
+import type {
+  Actor,
+  GraphLayout,
+  MigrationPlan,
+  MigrationResult,
+  Schema,
+  SchemaEdit,
+  SearchHit,
+  Snapshot,
+} from './types';
 
 export class HostError extends Error {
   constructor(
     message: string,
     public kind: string,
+    public code?: string,
+    public declared?: string,
+    public supported?: string,
   ) {
     super(message);
     this.name = 'HostError';
@@ -36,31 +48,32 @@ export interface SourceFile {
 
 export interface HostClient {
   detect(root: string): Promise<boolean>;
-  init(root: string, name: string, userName?: string, workflow?: Workflow): Promise<Snapshot>;
-  /** The default workflow, used to seed the init wizard. */
-  defaultWorkflow(): Promise<Workflow>;
+  init(root: string, name: string, userName?: string, schema?: Schema): Promise<Snapshot>;
+  /** The default schema, used to seed the init wizard. */
+  defaultSchema(): Promise<Schema>;
   installClaude(root: string, gitHook: boolean): Promise<InstallClaudeResult>;
   snapshot(root: string): Promise<Snapshot>;
+  /** The migration plan for a project declaring an older spec major (ADR-0011); a dry run, no files change. */
+  migrationPlan(root: string): Promise<MigrationPlan>;
+  /** Runs the migration chain; the project reloads through the normal snapshot path afterwards. */
+  migrateProject(root: string): Promise<MigrationResult>;
   createTicket(root: string, type: string, fields: Record<string, unknown>, status?: string): Promise<Snapshot>;
   updateTicket(
     root: string,
     id: string,
     fields: Record<string, unknown>,
-    options?: { actor?: string; force?: boolean },
+    options?: { actor?: string },
   ): Promise<Snapshot>;
   deleteTicket(root: string, id: string): Promise<Snapshot>;
   setColumnOrder(root: string, status: string, ids: string[]): Promise<Snapshot>;
   /** Persist manual graph node positions (machine-local; not indexed). */
   setGraphLayout(root: string, layout: GraphLayout): Promise<Snapshot>;
-  testTransition(root: string, id: string, to: string): Promise<AutomationRule[]>;
-  /** Replace the project's on_transition automation rules (validated by core). */
-  setAutomations(root: string, rules: AutomationRule[]): Promise<Snapshot>;
   /**
-   * Persist a workflow-editor save: statuses, types, transitions, priorities
-   * and fields, with renames that cascade to existing tickets (validated by
+   * Persist a schema-editor save: statuses, types (with their fields) and
+   * priorities, with renames that cascade to existing tickets (validated by
    * core, which blocks removals that would strand tickets).
    */
-  writeWorkflow(root: string, edit: WorkflowEdit): Promise<Snapshot>;
+  writeSchema(root: string, edit: SchemaEdit): Promise<Snapshot>;
   /** Edit the manifest's user-editable fields (the project name). */
   writeManifest(
     root: string,
@@ -71,8 +84,6 @@ export interface HostClient {
    * and no removal of an actor still referenced by a ticket, session or comment).
    */
   writeActors(root: string, actors: Actor[]): Promise<Snapshot>;
-  /** The automation run history (actions.log). */
-  actionLog(root: string): Promise<string>;
   readFile(root: string, path: string): Promise<string>;
   /** List repo files for the reference picker (tracked + untracked, non-ignored, excluding .lovelace/). */
   listFiles(root: string): Promise<string[]>;
@@ -102,13 +113,13 @@ export interface HostClient {
   /** Open the project folder in the operating system's file manager. */
   revealProject(root: string): Promise<void>;
   /** Watch for external changes; returns an unsubscribe function. */
-  watch(root: string, onChange: () => void): Promise<() => void>;
+  watch(root: string, onChange: (change: { presenceOnly: boolean }) => void): Promise<() => void>;
 }
 
 interface HostResponse {
   ok: boolean;
   data?: unknown;
-  error?: { kind: string; message: string };
+  error?: { kind: string; message: string; code?: string; declared?: string; supported?: string };
 }
 
 function assertShell(): void {
@@ -126,7 +137,13 @@ async function tauriRequest(payload: Record<string, unknown>): Promise<unknown> 
   const raw = await invoke<string>('core_request', { request: JSON.stringify(payload) });
   const response = JSON.parse(raw) as HostResponse;
   if (!response.ok) {
-    throw new HostError(response.error?.message ?? 'unknown host error', response.error?.kind ?? 'internal');
+    throw new HostError(
+      response.error?.message ?? 'unknown host error',
+      response.error?.kind ?? 'internal',
+      response.error?.code,
+      response.error?.declared,
+      response.error?.supported,
+    );
   }
   return response.data;
 }
@@ -137,19 +154,19 @@ export class TauriHost implements HostClient {
     return data.hasLovelace;
   }
 
-  init(root: string, name: string, userName?: string, workflow?: Workflow): Promise<Snapshot> {
+  init(root: string, name: string, userName?: string, schema?: Schema): Promise<Snapshot> {
     return tauriRequest({
       op: 'init',
       root,
       name,
       userName,
-      ...(workflow !== undefined ? { workflow } : {}),
+      ...(schema !== undefined ? { schema } : {}),
     }) as Promise<Snapshot>;
   }
 
-  async defaultWorkflow(): Promise<Workflow> {
-    const data = (await tauriRequest({ op: 'default_workflow' })) as { workflow: Workflow };
-    return data.workflow;
+  async defaultSchema(): Promise<Schema> {
+    const data = (await tauriRequest({ op: 'default_schema' })) as { schema: Schema };
+    return data.schema;
   }
 
   async installClaude(root: string, gitHook: boolean): Promise<InstallClaudeResult> {
@@ -160,6 +177,15 @@ export class TauriHost implements HostClient {
 
   snapshot(root: string): Promise<Snapshot> {
     return tauriRequest({ op: 'snapshot', root }) as Promise<Snapshot>;
+  }
+
+  async migrationPlan(root: string): Promise<MigrationPlan> {
+    const data = (await tauriRequest({ op: 'migration_plan', root })) as { plan: MigrationPlan };
+    return data.plan;
+  }
+
+  migrateProject(root: string): Promise<MigrationResult> {
+    return tauriRequest({ op: 'migrate_project', root }) as Promise<MigrationResult>;
   }
 
   createTicket(root: string, type: string, fields: Record<string, unknown>, status?: string): Promise<Snapshot> {
@@ -176,7 +202,7 @@ export class TauriHost implements HostClient {
     root: string,
     id: string,
     fields: Record<string, unknown>,
-    options?: { actor?: string; force?: boolean },
+    options?: { actor?: string },
   ): Promise<Snapshot> {
     return tauriRequest({
       op: 'update_ticket',
@@ -184,7 +210,6 @@ export class TauriHost implements HostClient {
       id,
       fields,
       ...(options?.actor !== undefined ? { actor: options.actor } : {}),
-      ...(options?.force === true ? { force: true } : {}),
     }) as Promise<Snapshot>;
   }
 
@@ -200,19 +225,8 @@ export class TauriHost implements HostClient {
     return tauriRequest({ op: 'set_graph_layout', root, layout }) as Promise<Snapshot>;
   }
 
-  async testTransition(root: string, id: string, to: string): Promise<AutomationRule[]> {
-    const data = (await tauriRequest({ op: 'test_transition', root, id, to })) as {
-      rules: AutomationRule[];
-    };
-    return data.rules;
-  }
-
-  setAutomations(root: string, rules: AutomationRule[]): Promise<Snapshot> {
-    return tauriRequest({ op: 'set_automations', root, rules }) as Promise<Snapshot>;
-  }
-
-  writeWorkflow(root: string, edit: WorkflowEdit): Promise<Snapshot> {
-    return tauriRequest({ op: 'write_workflow', root, edit }) as Promise<Snapshot>;
+  writeSchema(root: string, edit: SchemaEdit): Promise<Snapshot> {
+    return tauriRequest({ op: 'write_schema', root, edit }) as Promise<Snapshot>;
   }
 
   writeManifest(
@@ -224,11 +238,6 @@ export class TauriHost implements HostClient {
 
   writeActors(root: string, actors: Actor[]): Promise<Snapshot> {
     return tauriRequest({ op: 'write_actors', root, actors }) as Promise<Snapshot>;
-  }
-
-  async actionLog(root: string): Promise<string> {
-    const data = (await tauriRequest({ op: 'action_log', root })) as { log: string };
-    return data.log;
   }
 
   async readFile(root: string, path: string): Promise<string> {
@@ -310,12 +319,12 @@ export class TauriHost implements HostClient {
     return typeof picked === 'string' ? picked : null;
   }
 
-  async watch(root: string, onChange: () => void): Promise<() => void> {
+  async watch(root: string, onChange: (change: { presenceOnly: boolean }) => void): Promise<() => void> {
     const { invoke } = await import('@tauri-apps/api/core');
     const { listen } = await import('@tauri-apps/api/event');
     await invoke('watch_project', { root });
-    const unlisten = await listen<{ root: string }>('lovelace://changed', (event) => {
-      if (event.payload.root === root) onChange();
+    const unlisten = await listen<{ root: string; presenceOnly?: boolean }>('lovelace://changed', (event) => {
+      if (event.payload.root === root) onChange({ presenceOnly: event.payload.presenceOnly ?? false });
     });
     return () => {
       void unlisten();

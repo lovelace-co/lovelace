@@ -23,6 +23,8 @@ interface DropdownProps {
    * so it is stable across selections without wasting space.
    */
   width?: number | string;
+  /** Set false to drop the selectable empty choice, for required fields. */
+  allowEmpty?: boolean;
 }
 
 /**
@@ -40,6 +42,7 @@ export function Dropdown({
   disabled = false,
   className = '',
   width,
+  allowEmpty = true,
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -102,7 +105,7 @@ export function Dropdown({
       >
         <span className="dropdown-box">
           <span className="dropdown-sizer" aria-hidden>
-            {[placeholder, ...options.map((o) => o.label)].map((label, i) => (
+            {[...(allowEmpty ? [placeholder] : []), ...options.map((o) => o.label)].map((label, i) => (
               <span key={i}>{label}</span>
             ))}
           </span>
@@ -113,15 +116,17 @@ export function Dropdown({
       {open &&
         createPortal(
           <div ref={panelRef} className="dropdown-panel" style={position} role="listbox" aria-label={ariaLabel}>
-            <button
-              type="button"
-              role="option"
-              aria-selected={value === ''}
-              className={`dropdown-option empty${highlight === -1 ? ' highlight' : ''}`}
-              onClick={() => pick('')}
-            >
-              {placeholder}
-            </button>
+            {allowEmpty && (
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === ''}
+                className={`dropdown-option empty${highlight === -1 ? ' highlight' : ''}`}
+                onClick={() => pick('')}
+              >
+                {placeholder}
+              </button>
+            )}
             {options.map((option, i) => (
               <button
                 key={option.value}

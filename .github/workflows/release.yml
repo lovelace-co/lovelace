@@ -1,0 +1,311 @@
+name: release
+
+# Pushing a v* tag builds, signs and stages a complete release: platform
+# installers, Tauri updater packages with .sig files, and a mechanically
+# generated latest.json, all attached to a draft GitHub Release. See
+# docs/RELEASING.md for the process this workflow replaces.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  # Where the update packages this workflow uploads will live. Ticket
+  # T-0117 decides the binaries' final public home; until then this is the
+  # one line to change.
+  RELEASE_BASE_URL: https://github.com/lovelace-co/lovelace-monorepo/releases/download/${{ github.ref_name }}
+
+jobs:
+  build:
+    name: build (${{ matrix.id }})
+    runs-on: ${{ matrix.runs_on }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: darwin-aarch64
+            runs_on: macos-latest
+            os_family: macos
+            rust_target: aarch64-apple-darwin
+            sidecar_triple_arg: ""
+            tauri_extra_args: "--bundles app"
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+            arch_suffix: aarch64
+          - id: darwin-x86_64
+            runs_on: macos-latest
+            os_family: macos
+            rust_target: x86_64-apple-darwin
+            sidecar_triple_arg: "x86_64-apple-darwin"
+            tauri_extra_args: "--bundles app --target x86_64-apple-darwin"
+            bundle_dir: apps/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle
+            arch_suffix: x64
+          - id: windows-x86_64
+            runs_on: windows-latest
+            os_family: windows
+            rust_target: x86_64-pc-windows-msvc
+            sidecar_triple_arg: ""
+            tauri_extra_args: ""
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+            arch_suffix: ""
+          - id: linux-x86_64
+            runs_on: ubuntu-22.04
+            os_family: linux
+            rust_target: x86_64-unknown-linux-gnu
+            sidecar_triple_arg: ""
+            tauri_extra_args: ""
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+            arch_suffix: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      # Early steps: fail before spending any build minutes.
+      - name: Assert version matches the tag
+        id: version_guard
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          TAURI_VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          ROOT_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "v$TAURI_VERSION" ] || [ "$ROOT_VERSION" != "$TAURI_VERSION" ]; then
+            echo "::error::version mismatch: tag is \"$TAG\", apps/desktop/src-tauri/tauri.conf.json version is \"$TAURI_VERSION\", root package.json version is \"$ROOT_VERSION\". All three must agree (tag = v<version>)."
+            exit 1
+          fi
+          echo "version=$TAURI_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Assert updater signing key is configured
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is empty. A release without updater signatures is useless; configure the secret before pushing a release tag."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install Linux system dependencies
+        if: matrix.os_family == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      # Serial on purpose: parallel vitest flakes on watcher timing in this
+      # repo.
+      - name: Test
+        run: pnpm -r --workspace-concurrency=1 test
+
+      - name: Stage sidecars
+        run: ./apps/desktop/scripts/prepare-sidecars.sh ${{ matrix.sidecar_triple_arg }}
+
+      # macOS and Windows code signing degrade gracefully: wire the real
+      # secrets through env only when they are configured, and warn in the
+      # job summary instead of failing when they are not. GitHub cannot use
+      # the secrets context directly in `if:`, so presence is checked with
+      # plain shell here.
+      - name: Configure macOS code signing
+        if: matrix.os_family == 'macos'
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            # Base64 certificates can be line-wrapped, so forward each value
+            # with the multiline-safe heredoc form rather than KEY=VALUE.
+            DELIM="ghadelim_${RANDOM}${RANDOM}"
+            {
+              echo "HAS_APPLE_SIGNING=true"
+              for VAR_NAME in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+                echo "$VAR_NAME<<$DELIM"
+                echo "${!VAR_NAME}"
+                echo "$DELIM"
+              done
+            } >> "$GITHUB_ENV"
+          else
+            echo "HAS_APPLE_SIGNING=false" >> "$GITHUB_ENV"
+            echo "- installers are unsigned: Apple code signing secrets (APPLE_CERTIFICATE and related) are not configured" >> "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Configure Windows code signing
+        if: matrix.os_family == 'windows'
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrEmpty($env:WINDOWS_CERTIFICATE)) {
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- installers are unsigned: WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD secrets are not configured"
+            Add-Content -Path $env:GITHUB_ENV -Value "HAS_WINDOWS_SIGNING=false"
+          } else {
+            $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+            $certPath = Join-Path $env:RUNNER_TEMP "windows-signing.pfx"
+            [IO.File]::WriteAllBytes($certPath, $bytes)
+            $securePassword = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+            $cert = Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword
+            Remove-Item $certPath
+            Add-Content -Path $env:GITHUB_ENV -Value "HAS_WINDOWS_SIGNING=true"
+            Add-Content -Path $env:GITHUB_ENV -Value "WINDOWS_CERT_THUMBPRINT=$($cert.Thumbprint)"
+          }
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+
+      - name: Build with Tauri
+        run: |
+          ARGS=()
+          # tauri_extra_args is a matrix literal we control (space-separated
+          # flags), safe to word-split.
+          # shellcheck disable=SC2206
+          ARGS+=(${{ matrix.tauri_extra_args }})
+          if [ -n "${WINDOWS_CERT_THUMBPRINT:-}" ]; then
+            ARGS+=(--config "{\"bundle\":{\"windows\":{\"certificateThumbprint\":\"$WINDOWS_CERT_THUMBPRINT\",\"digestAlgorithm\":\"sha256\"}}}")
+          fi
+          pnpm --filter @lovelace/desktop exec tauri build "${ARGS[@]}"
+
+      # Tauri's DMG step needs Finder, which headless runners do not have.
+      # Build the .app only (above) and assemble the DMG directly, per
+      # docs/RELEASING.md.
+      - name: Assemble DMG
+        if: matrix.os_family == 'macos'
+        run: |
+          VERSION="${{ steps.version_guard.outputs.version }}"
+          BUNDLE_DIR="${{ matrix.bundle_dir }}"
+          rm -rf dmg-stage
+          mkdir -p dmg-stage
+          cp -R "$BUNDLE_DIR/macos/Lovelace.app" dmg-stage/
+          ln -s /Applications dmg-stage/Applications
+          mkdir -p "$BUNDLE_DIR/dmg"
+          hdiutil create -volname "Lovelace" -srcfolder dmg-stage -ov -format UDZO \
+            "$BUNDLE_DIR/dmg/Lovelace_${VERSION}_${{ matrix.arch_suffix }}.dmg"
+          rm -rf dmg-stage
+
+      - name: Collect release assets
+        run: |
+          set -eu
+          VERSION="${{ steps.version_guard.outputs.version }}"
+          BUNDLE_DIR="${{ matrix.bundle_dir }}"
+          mkdir -p release-assets
+
+          copy_one() {
+            # Copies exactly one file matching a glob; fails clearly
+            # otherwise, since a silently missing installer or signature
+            # would break the release.
+            local pattern="$1"
+            # pattern is a glob we want expanded, not a literal string.
+            # shellcheck disable=SC2206
+            local matches=($pattern)
+            if [ ! -e "${matches[0]:-}" ]; then
+              echo "no file matching $pattern" >&2
+              exit 1
+            fi
+            if [ "${#matches[@]}" -gt 1 ]; then
+              echo "more than one file matching $pattern: ${matches[*]}" >&2
+              exit 1
+            fi
+            cp "${matches[0]}" release-assets/
+          }
+
+          case "${{ matrix.os_family }}" in
+            macos)
+              ARCH="${{ matrix.arch_suffix }}"
+              cp "$BUNDLE_DIR/macos/Lovelace.app.tar.gz" "release-assets/Lovelace_${VERSION}_${ARCH}.app.tar.gz"
+              cp "$BUNDLE_DIR/macos/Lovelace.app.tar.gz.sig" "release-assets/Lovelace_${VERSION}_${ARCH}.app.tar.gz.sig"
+              copy_one "$BUNDLE_DIR/dmg/*.dmg"
+              ;;
+            windows)
+              copy_one "$BUNDLE_DIR/nsis/*.exe"
+              copy_one "$BUNDLE_DIR/nsis/*.exe.sig"
+              copy_one "$BUNDLE_DIR/msi/*.msi"
+              ;;
+            linux)
+              copy_one "$BUNDLE_DIR/appimage/*.AppImage"
+              copy_one "$BUNDLE_DIR/appimage/*.AppImage.sig"
+              copy_one "$BUNDLE_DIR/deb/*.deb"
+              copy_one "$BUNDLE_DIR/rpm/*.rpm"
+              ;;
+          esac
+
+          echo "release-assets contents:"
+          ls -la release-assets
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.id }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  release:
+    name: assemble draft release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download all release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: downloads
+          merge-multiple: true
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble latest.json
+        run: |
+          node scripts/release/latest-json.mjs \
+            --version "${{ steps.version.outputs.version }}" \
+            --base-url "$RELEASE_BASE_URL" \
+            --dir downloads
+
+      - name: Create draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --draft \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            downloads/*

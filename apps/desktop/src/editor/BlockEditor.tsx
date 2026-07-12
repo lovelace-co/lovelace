@@ -136,15 +136,13 @@ export function BlockEditor({
       <WikiLinkContext.Provider value={wikiController}>
         <div className={`lexical-shell${readOnly ? ' read-only' : ''}`} data-testid="block-editor">
           {!readOnly && <Toolbar candidates={candidates} />}
-          <RichTextPlugin
-            contentEditable={
-              <div className="lexical-scroller" ref={(el) => setAnchorElem(el)}>
-                <ContentEditable className="lexical-content" aria-label="document body" />
-              </div>
-            }
-            placeholder={<div className="lexical-placeholder">Type, or press / for blocks</div>}
-            ErrorBoundary={LexicalErrorBoundary}
-          />
+          <div className="lexical-scroller" ref={(el) => setAnchorElem(el)}>
+            <RichTextPlugin
+              contentEditable={<ContentEditable className="lexical-content" aria-label="document body" />}
+              placeholder={<div className="lexical-placeholder">Type, or press / for blocks</div>}
+              ErrorBoundary={LexicalErrorBoundary}
+            />
+          </div>
           {!readOnly && <SlashMenuPlugin candidates={candidates} />}
           {!readOnly && <DragHandlePlugin anchorElem={anchorElem} />}
           <HistoryPlugin />

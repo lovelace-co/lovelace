@@ -26,45 +26,28 @@ export interface Manifest {
   created: string;
   paths: ProjectPaths;
   /**
-   * How long a live agent presence stays believable without its Stop hook
-   * having fired, in minutes. Guards against sessions that die without
-   * cleaning up. Optional; tooling defaults to 120.
+   * How long a live agent presence stays believable without a heartbeat, in
+   * minutes. Guards against sessions that die without cleaning up. Optional;
+   * tooling defaults to 15.
    */
   presence_timeout_minutes?: number;
 }
 
 /**
- * The live agent marker in state/presence.json: written when an agent
- * begins processing a turn, removed when the turn or session ends.
- * Machine-local and gitignored, like the active ticket pointer.
+ * A live agent marker, one file per session under
+ * state/presence/<session-id>.json: written when an agent begins processing
+ * a turn and refreshed by a heartbeat on every tool call, so liveness never
+ * has to be inferred from a stale started_at alone. Machine-local and
+ * gitignored, like the active ticket pointer. A legacy singleton
+ * state/presence.json (pre-3.2 projects) is read as one more entry and
+ * cleaned up on the next presence write.
  */
 export interface AgentPresence {
   ticket: string | null;
   actor: string | null;
   started_at: string;
-}
-
-export interface TypeDef {
-  name: string;
-  id_prefix: string;
-  /** Human-readable singular and plural display names. */
-  label?: string;
-  plural?: string;
-}
-
-export interface StatusDef {
-  name: string;
-  /** Counts as in-progress work (digest, board signal hue, epic progress). */
-  active?: boolean;
-  /** A completion state (dims cards, counts toward epic completion). */
-  complete?: boolean;
-  /** Human-readable display name. */
-  label?: string;
-}
-
-export interface TransitionDef {
-  from: string;
-  to: string[];
+  /** The last heartbeat; freshness checks prefer this over started_at when present. */
+  beat_at?: string;
 }
 
 export type FieldType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'list' | 'reference';
@@ -80,29 +63,34 @@ export interface FieldDef {
   refers_to?: string[];
   required?: boolean;
   default?: unknown;
-  applies_to?: string[];
 }
 
-export interface AutomationWhen {
-  to: string;
-  from?: string;
-  type?: string;
-  [field: string]: unknown;
+export interface TypeDef {
+  name: string;
+  id_prefix: string;
+  /** Human-readable singular and plural display names. */
+  label?: string;
+  plural?: string;
+  /** Fields owned by this ticket type. */
+  fields: FieldDef[];
 }
 
-export interface AutomationRule {
-  when: AutomationWhen;
-  run?: string;
-  agent?: string;
+export interface StatusDef {
+  name: string;
+  /**
+   * The status's meaning to agent tooling: `ready` work an agent can pick
+   * up, `in_progress` active work (surfaced in the digest), or `complete` a
+   * finished state. At most one status may carry a given role.
+   */
+  agent?: 'ready' | 'in_progress' | 'complete';
+  /** Human-readable display name. */
+  label?: string;
 }
 
-export interface Workflow {
+export interface Schema {
   types: TypeDef[];
   statuses: StatusDef[];
-  transitions: TransitionDef[];
   priorities: string[];
-  fields: FieldDef[];
-  on_transition: AutomationRule[];
 }
 
 export interface Actor {
@@ -162,7 +150,7 @@ export interface Project {
   /** Absolute path to the .lovelace directory. */
   dir: string;
   manifest: Manifest;
-  workflow: Workflow;
+  schema: Schema;
   actors: Actor[];
   tickets: Ticket[];
   documents: Document[];
@@ -175,6 +163,3 @@ export interface Project {
 }
 
 export const SESSION_OUTCOMES = ['completed', 'partial', 'abandoned'] as const;
-
-export const SPEC_VERSION = '2.1.0';
-export const SUPPORTED_SPEC_MAJOR = 2;

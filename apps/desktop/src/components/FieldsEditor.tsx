@@ -1,6 +1,7 @@
 import { Fragment, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Dropdown } from './Dropdown';
 import { HoleCheck } from './HoleCheck';
+import { LockIcon } from './icons';
 import { titleCase } from '../lib/format';
 import {
   FIELD_TYPES,
@@ -10,7 +11,7 @@ import {
   blankField,
   type FieldRow,
   type FieldType,
-} from '../lib/workflowRows';
+} from '../lib/schemaRows';
 
 interface FieldsEditorProps {
   fields: FieldRow[];
@@ -22,16 +23,54 @@ interface FieldsEditorProps {
 }
 
 /**
- * The custom-field editor: a header row, the locked Title and Body defaults,
- * then one editable row per user field with a type-specific sub-editor (enum
- * value list, reference targets, list item type). Shared by the init wizard
- * and the workflow editor so the field model lives in one place.
+ * A plain-English summary of a field's type, read at rest instead of the
+ * type dropdown: "enum, 3 values", "reference to Actor", "list of string".
+ */
+function fieldTypeSummary(f: FieldRow): string {
+  if (f.type === 'enum') {
+    if (f.valuesFrom === 'priorities') return 'enum, from Priorities';
+    const n = f.values.length;
+    return `enum, ${n} value${n === 1 ? '' : 's'}`;
+  }
+  if (f.type === 'reference') {
+    return f.refersTo.length > 0 ? `reference to ${f.refersTo.map(titleCase).join(', ')}` : 'reference';
+  }
+  if (f.type === 'list') {
+    const item = f.itemType || 'string';
+    const to = item === 'reference' && f.refersTo.length > 0 ? ` to ${f.refersTo.map(titleCase).join(', ')}` : '';
+    return `list of ${item}${to}`;
+  }
+  return f.type;
+}
+
+/**
+ * The custom-field editor: the Title and Body defaults lead as static rows,
+ * then one quiet row per user field. A field row is read-only at rest and
+ * expands in place into its editor (name/machine wells, type dropdown,
+ * required check, remove, and a type-specific sub-editor) on click; only one
+ * row is open at a time, the same read-first, edit-on-intent model as ticket
+ * bodies and documents. Shared by the init wizard and the schema editor (one
+ * instance per ticket type) so the field model lives in one place.
  */
 export function FieldsEditor({ fields, setFields, priorities, typeNames }: FieldsEditorProps) {
   const refKinds = [...typeNames.filter(Boolean), ...SPECIAL_REF_KINDS];
+  const [expanded, setExpanded] = useState<number | null>(null);
 
   const editField = (i: number, p: Partial<FieldRow>) =>
     setFields((rows) => rows.map((r, j) => (j === i ? applyHuman({ ...r, ...p }, p) : r)));
+
+  const removeField = (i: number) => {
+    setFields((rows) => rows.filter((_, j) => j !== i));
+    setExpanded((cur) => (cur === null || cur === i ? null : cur > i ? cur - 1 : cur));
+  };
+
+  // Appending a field opens it immediately: there is nothing useful to read
+  // in a blank row, so it goes straight to editing.
+  const addField = () => {
+    const opened = fields.length;
+    setFields((rows) => [...rows, blankField()]);
+    setExpanded(opened);
+  };
 
   // Enum value-list editing (and its drag-to-reorder) for the field at index i.
   const enumFrom = useRef<number | null>(null);
@@ -52,26 +91,63 @@ export function FieldsEditor({ fields, setFields, priorities, typeNames }: Field
 
   return (
     <>
-      <div className="wizard-thead cols-field wizard-field-head">
-        <span>Name</span>
-        <span>Machine</span>
-        <span>Type</span>
-        <span>Required</span>
-        <span />
-      </div>
       <div className="wizard-fields">
-        {/* The mandatory defaults lead, shaped like the editable rows but locked. */}
+        {/* The mandatory defaults lead, shaped like the read rows but static: nothing to edit, nothing to open. */}
         <LockedFieldRow human="Title" machine="title" type="string" />
         <LockedFieldRow human="Body" machine="body" type="markdown" />
-        {fields.map((f, i) =>
-          f.machine === 'title' ? null : (
-            <div key={i} className="wizard-frow">
+        {fields.map((f, i) => {
+          // The mandatory title row is pinned above by identity (seeded
+          // from the file's own title field, or synthesised for a new
+          // type), never by machine name: a field renamed to `title` stays
+          // visible so core's duplicate-field rejection makes sense.
+          if (f.locked) return null;
+          if (expanded !== i) {
+            return (
+              <button
+                key={i}
+                type="button"
+                className="field-row field-row-grid"
+                aria-expanded={false}
+                onClick={() => setExpanded(i)}
+              >
+                <span className="field-row-lead">
+                  <span className="field-row-name">{f.human || 'Untitled field'}</span>
+                  <span className="field-row-machine mono subtle">{f.machine}</span>
+                </span>
+                <span className="field-row-type subtle">{fieldTypeSummary(f)}</span>
+                <span className="field-row-note subtle">{f.required ? 'required' : ''}</span>
+              </button>
+            );
+          }
+
+          return (
+            <div key={i} className="field-row-open">
+              <button
+                type="button"
+                className="field-row field-row-header"
+                aria-expanded={true}
+                onClick={() => setExpanded(null)}
+              >
+                <span className="field-row-lead">
+                  <span className="field-row-name">{f.human || 'Untitled field'}</span>
+                  <span className="field-row-machine mono subtle">{f.machine}</span>
+                </span>
+                <span className="field-row-collapse subtle">Done</span>
+              </button>
+
+              <div className="wizard-thead cols-field wizard-field-head">
+                <span>Name</span>
+                <span>Machine</span>
+                <span>Type</span>
+                <span>Required</span>
+                <span />
+              </div>
               <div className="wizard-trow cols-field">
                 <input className="form-input" aria-label={`field ${i} label`} value={f.human} placeholder="Name" onChange={(e) => editField(i, { human: e.target.value })} />
                 <input className="form-input mono" aria-label={`field ${i} machine`} value={f.machine} onChange={(e) => editField(i, { machine: e.target.value })} />
                 {fieldTypeCell(f, i)}
                 <HoleCheck className="wizard-cell-check" aria-label={`field ${i} required`} checked={f.required} onChange={(e) => editField(i, { required: e.target.checked })} />
-                <button className="btn btn-secondary btn-icon" aria-label={`remove field ${i}`} onClick={() => setFields((rows) => rows.filter((_, j) => j !== i))}>×</button>
+                <button className="btn btn-secondary btn-icon" aria-label={`remove field ${i}`} onClick={() => removeField(i)}>×</button>
               </div>
 
               {f.type === 'enum' && (
@@ -212,27 +288,31 @@ export function FieldsEditor({ fields, setFields, priorities, typeNames }: Field
                 </div>
               )}
             </div>
-          ),
-        )}
+          );
+        })}
       </div>
-      <button className="btn btn-secondary wizard-add" onClick={() => setFields((rows) => [...rows, blankField()])}>
+      <button className="btn btn-secondary wizard-add" onClick={addField}>
         Add field
       </button>
     </>
   );
 }
 
-/** A mandatory default field shown in the same shape as the editable rows, disabled. */
+/**
+ * A mandatory default field shown in the same shape as the read rows, but
+ * static: there is nothing to edit, so there is nothing to click.
+ */
 function LockedFieldRow({ human, machine, type }: { human: string; machine: string; type: string }) {
   return (
-    <div className="wizard-frow">
-      <div className="wizard-trow cols-field">
-        <input className="form-input" value={human} readOnly tabIndex={-1} aria-label={`${machine} field name`} />
-        <input className="form-input mono" value={machine} readOnly tabIndex={-1} aria-label={`${machine} field machine`} />
-        <Dropdown aria-label={`${machine} field type`} value={type} disabled width="100%" options={[{ value: type, label: type }]} onChange={() => undefined} />
-        <HoleCheck className="wizard-cell-check" checked readOnly disabled aria-label={`${machine} field required`} />
-        <span className="wizard-locked-tag" title="Built-in and required">locked</span>
-      </div>
+    <div className="field-row-grid field-row-locked">
+      <span className="field-row-lead">
+        <span className="field-row-name">{human}</span>
+        <span className="field-row-machine mono subtle">{machine}</span>
+      </span>
+      <span className="field-row-type subtle">{type}</span>
+      <span className="field-row-note subtle" role="img" aria-label="built in" title="Built in">
+        <LockIcon />
+      </span>
     </div>
   );
 }

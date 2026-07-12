@@ -1,14 +1,15 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TicketDetail } from '../src/views/TicketDetail';
 import { HostProvider } from '../src/state/store';
+import type { ProjectPresence } from '../src/state/store';
 import type { Snapshot } from '../src/lib/types';
 import { FakeHost } from './fakeHost';
 import fixture from './fixtures/snapshot.json';
 
 const snapshot = fixture as unknown as Snapshot;
 
-function renderDetail(ticketId: string) {
+function renderDetail(ticketId: string, presence?: ProjectPresence) {
   const host = new FakeHost();
   host.files.set(
     '.lovelace/tickets/T-0002.md',
@@ -20,6 +21,7 @@ function renderDetail(ticketId: string) {
     <HostProvider host={host}>
       <TicketDetail
         snapshot={snapshot}
+        presence={presence}
         ticketId={ticketId}
         onBack={() => undefined}
         onOpenTicket={onOpenTicket}
@@ -95,7 +97,7 @@ describe('TicketDetail', () => {
 
   it('edits the title inline from the header', () => {
     const { onUpdate } = renderDetail('T-0002');
-    const input = screen.getByLabelText('ticket title') as HTMLInputElement;
+    const input = screen.getByLabelText('ticket title') as HTMLTextAreaElement;
     expect(input.value).toBe('Forecast endpoint');
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: 'Forecast endpoint v2' } });
@@ -105,12 +107,26 @@ describe('TicketDetail', () => {
 
   it('reverts an emptied title instead of saving it', () => {
     const { onUpdate } = renderDetail('T-0002');
-    const input = screen.getByLabelText('ticket title') as HTMLInputElement;
+    const input = screen.getByLabelText('ticket title') as HTMLTextAreaElement;
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.blur(input);
     expect(onUpdate).not.toHaveBeenCalled();
     expect(input.value).toBe('Forecast endpoint');
+  });
+
+  it('commits the title on Enter and prevents the newline the browser would otherwise insert', () => {
+    const { onUpdate } = renderDetail('T-0002');
+    const input = screen.getByLabelText('ticket title') as HTMLTextAreaElement;
+    // Real focus (not just a dispatched event) so the handler's own
+    // currentTarget.blur() call below actually fires a blur event.
+    input.focus();
+    fireEvent.change(input, { target: { value: 'Forecast endpoint v2' } });
+    // fireEvent returns false when the event was cancelled: proof the handler
+    // called preventDefault, so no browser would insert a newline here.
+    const notCancelled = fireEvent.keyDown(input, { key: 'Enter' });
+    expect(notCancelled).toBe(false);
+    expect(onUpdate).toHaveBeenCalledWith('T-0002', { title: 'Forecast endpoint v2' });
   });
 
   it('renders the ticket body Markdown from the file', async () => {
@@ -232,5 +248,103 @@ describe('TicketDetail', () => {
     await waitFor(() => expect(screen.getByText(/The retry logic belongs in core\./)).toBeTruthy());
     // The raw path must not be shown.
     expect(screen.queryByText(new RegExp(commentPath.replace(/[.]/g, '\\.')))).toBeNull();
+  });
+
+  it('shows the status as a dropdown displaying the current status by its human label', () => {
+    // T-0002 is in_progress in the fixture; the status has no explicit label.
+    renderDetail('T-0002');
+    const trigger = screen.getByLabelText('Status');
+    expect(trigger.textContent).toContain('In Progress');
+  });
+
+  it('lists every schema status by label with no empty choice', () => {
+    renderDetail('T-0002');
+    fireEvent.click(screen.getByLabelText('Status'));
+    const listbox = screen.getByRole('listbox', { name: 'Status' });
+    const labels = within(listbox).getAllByRole('option').map((o) => o.textContent);
+    expect(labels).toEqual(['Backlog', 'Todo', 'In Progress', 'In Review', 'Done', 'Cancelled']);
+  });
+
+  it('picking a different status saves it through onUpdate', () => {
+    const { onUpdate } = renderDetail('T-0002');
+    fireEvent.click(screen.getByLabelText('Status'));
+    const listbox = screen.getByRole('listbox', { name: 'Status' });
+    fireEvent.click(within(listbox).getByText('Done'));
+    expect(onUpdate).toHaveBeenCalledWith('T-0002', { status: 'done' });
+  });
+
+  it('picking the currently selected status does not call onUpdate', () => {
+    const { onUpdate } = renderDetail('T-0002');
+    fireEvent.click(screen.getByLabelText('Status'));
+    const listbox = screen.getByRole('listbox', { name: 'Status' });
+    fireEvent.click(within(listbox).getByText('In Progress'));
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it('renders a status outside the schema as its title-cased value and keeps it selected', () => {
+    const withUnknownStatus: Snapshot = {
+      ...snapshot,
+      index: {
+        ...snapshot.index,
+        tickets: snapshot.index.tickets.map((t) => (t.id === 'T-0002' ? { ...t, status: 'blocked' } : t)),
+      },
+    };
+    render(
+      <HostProvider host={new FakeHost()}>
+        <TicketDetail
+          snapshot={withUnknownStatus}
+          ticketId="T-0002"
+          onBack={() => undefined}
+          onOpenTicket={vi.fn()}
+          onUpdate={vi.fn().mockResolvedValue(undefined)}
+          onComment={vi.fn().mockResolvedValue(undefined)}
+        />
+      </HostProvider>,
+    );
+    const trigger = screen.getByLabelText('Status');
+    expect(trigger.textContent).toContain('Blocked');
+    fireEvent.click(trigger);
+    const listbox = screen.getByRole('listbox', { name: 'Status' });
+    const option = within(listbox).getByText('Blocked');
+    expect(option.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('shows a header delete button when onRequestDelete is provided and calls it with the ticket', () => {
+    const host = new FakeHost();
+    const onRequestDelete = vi.fn();
+    render(
+      <HostProvider host={host}>
+        <TicketDetail
+          snapshot={snapshot}
+          ticketId="T-0002"
+          onBack={() => undefined}
+          onOpenTicket={vi.fn()}
+          onUpdate={vi.fn().mockResolvedValue(undefined)}
+          onComment={vi.fn().mockResolvedValue(undefined)}
+          onRequestDelete={onRequestDelete}
+        />
+      </HostProvider>,
+    );
+    const button = screen.getByRole('button', { name: 'Delete ticket' });
+    fireEvent.click(button);
+    expect(onRequestDelete).toHaveBeenCalledTimes(1);
+    expect((onRequestDelete.mock.calls[0]![0] as { id: string }).id).toBe('T-0002');
+  });
+
+  it('shows no header delete button when onRequestDelete is not provided', () => {
+    renderDetail('T-0002');
+    expect(screen.queryByRole('button', { name: 'Delete ticket' })).toBeNull();
+  });
+
+  it('shows the live-work readout in the header when presence lights the open ticket', () => {
+    renderDetail('T-0002', { awake: true, tickets: new Map([['T-0002', 42]]) });
+    const readout = document.querySelector('.view-header .id.live');
+    expect(readout).toBeTruthy();
+    expect(readout?.textContent).toBe('42s · T-0002');
+  });
+
+  it('shows no live-work readout in the header without presence for the open ticket', () => {
+    renderDetail('T-0002');
+    expect(document.querySelector('.view-header .id.live')).toBeNull();
   });
 });

@@ -4,13 +4,13 @@ import { Dropdown } from './Dropdown';
 import { HoleCheck } from './HoleCheck';
 import { CloseIcon } from './icons';
 import { titleCase } from '../lib/format';
-import type { FieldDef, ProjectIndex, Workflow } from '../lib/types';
+import type { FieldDef, ProjectIndex, Schema } from '../lib/types';
 import { enumValuesFor } from '../lib/types';
 
 interface FieldInputProps {
   def: FieldDef;
   value: unknown;
-  workflow: Workflow;
+  schema: Schema;
   index: ProjectIndex;
   actors: Array<{ id: string; name: string }>;
   onChange: (value: unknown) => void;
@@ -34,11 +34,11 @@ function referenceOptions(
 }
 
 /**
- * One schema-driven input. The form is generated from workflow.yaml field
+ * One schema-driven input. The form is generated from schema.yaml field
  * definitions: enum becomes a select, date a date picker, reference an
  * entity picker, list a tag input. Nothing here knows any field by name.
  */
-export function FieldInput({ def, value, workflow, index, actors, onChange }: FieldInputProps) {
+export function FieldInput({ def, value, schema, index, actors, onChange }: FieldInputProps) {
   const [draft, setDraft] = useState('');
 
   switch (def.type) {
@@ -70,7 +70,7 @@ export function FieldInput({ def, value, workflow, index, actors, onChange }: Fi
         />
       );
     case 'enum': {
-      const values = enumValuesFor(workflow, def);
+      const values = enumValuesFor(schema, def);
       return (
         <Dropdown
           aria-label={def.name}

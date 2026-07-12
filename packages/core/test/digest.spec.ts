@@ -14,13 +14,18 @@ function fixture() {
 }
 
 describe('digest', () => {
-  it('orients an agent: in-progress work, recent sessions, warnings', () => {
+  it('orients an agent: in-progress work, ready work, recent sessions, warnings', () => {
     const digest = buildDigest(loadProject(fixture()), { now: FIXED_NOW });
     expect(digest).toContain('Orbit Weather Service');
-    expect(digest).toContain('T-0002');
-    expect(digest).toContain('T-0004');
+    expect(digest).toContain('In progress:');
+    expect(digest).toContain('E-0001 [in_progress]');
+    expect(digest).toContain('T-0002 [in_progress]');
     expect(digest).not.toMatch(/^\s+T-0001/m); // done is not in progress
-    expect(digest).toContain('moves to: in_review'); // legal next statuses for T-0002
+    // in_review carries no agent role, so T-0004 is not "in progress" here.
+    expect(digest).not.toContain('T-0004');
+    expect(digest).not.toContain('moves to:');
+    expect(digest).toContain('Ready to pick up:');
+    expect(digest).toContain('T-0003 [todo]'); // todo is the ready status
     expect(digest).toContain('S-0002 on T-0002: partial');
     expect(digest).toContain('open: Should the 503 test freeze the refresh timer');
     expect(digest).toContain('Warnings');

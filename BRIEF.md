@@ -87,7 +87,7 @@ The intent: a calm instrument for developers working alongside AI agents. Three 
 
 1. No borders. Separation comes from tone steps and whitespace, never lines. Regions are `--bg-0` against `--bg-1`; alternating board columns sit on the `--band` weft; cards rest on `--raise`.
 2. One electric signal. A single cyan (`--current`, darker in light mode) is reserved for agent activity, selection and focus. It is never a background fill.
-3. Heritage as interaction language. Weaving is the continuous: the thread of current slowly circling a live ticket, tonal bands, slow linear motion. Punchcards are the discrete: clicks depress in `steps()` easing and punch a brief hole at the contact point; epic progress renders as literal punch rows, one hole per task, the reading hole ringed in the signal.
+3. Heritage as interaction language. Weaving is the continuous: the thread of current slowly circling a live ticket, tonal bands, slow linear motion. Punchcards are the discrete: clicks depress in `steps()` easing; epic progress renders as literal punch rows, one hole per task, the reading hole ringed in the signal.
 
 The vocabulary:
 

@@ -2,7 +2,7 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { writeFileSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadProject, validateProject, hasErrors, formatIssues } from '../src/index.js';
-import { tempFixture, corrupt, FIXED_NOW } from './helpers.js';
+import { tempFixture, corrupt, unknownKeysFixture, FIXED_NOW } from './helpers.js';
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -31,6 +31,57 @@ describe('the pristine fixture', () => {
     expect(stale).toHaveLength(1);
     expect(stale[0]?.file).toContain('conventions/OVERVIEW.md');
     expect(hasErrors(stale)).toBe(false);
+  });
+});
+
+// ADR-0011: tolerant reads. A construct this tooling does not model is never
+// an error, at any of the four config levels; it is reported once as a
+// warning naming the file and the key.
+describe('unknown keys in manifest.yaml and schema.yaml', () => {
+  function unknownKeysRoot() {
+    const f = unknownKeysFixture();
+    cleanups.push(f.cleanup);
+    return f.root;
+  }
+
+  it('loads without throwing', () => {
+    expect(() => loadProject(unknownKeysRoot())).not.toThrow();
+  });
+
+  it('reports exactly the expected warnings and zero errors from the unknown keys', () => {
+    const issues = validate(unknownKeysRoot());
+    const unknownKeyIssues = issues.filter(
+      (i) => i.rule === 'manifest/unknown-key' || i.rule === 'schema/unknown-key',
+    );
+    expect(hasErrors(unknownKeyIssues)).toBe(false);
+    expect(unknownKeyIssues.every((i) => i.severity === 'warning')).toBe(true);
+
+    const manifestIssue = issues.find((i) => i.rule === 'manifest/unknown-key');
+    expect(manifestIssue?.file).toBe('.lovelace/manifest.yaml');
+    expect(manifestIssue?.message).toContain('"theme"');
+
+    const topLevelIssue = issues.find(
+      (i) => i.rule === 'schema/unknown-key' && i.message.includes('top-level'),
+    );
+    expect(topLevelIssue?.file).toBe('.lovelace/schema.yaml');
+    expect(topLevelIssue?.message).toContain('"board_layout"');
+
+    const typeIssue = issues.find(
+      (i) => i.rule === 'schema/unknown-key' && i.message.startsWith('type "bug"'),
+    );
+    expect(typeIssue?.message).toBe('type "bug" carries unknown key "colour"');
+
+    const statusIssue = issues.find(
+      (i) => i.rule === 'schema/unknown-key' && i.message.startsWith('status "todo"'),
+    );
+    expect(statusIssue?.message).toBe('status "todo" carries unknown key "icon"');
+
+    const fieldIssue = issues.find(
+      (i) => i.rule === 'schema/unknown-key' && i.message.startsWith('field "environment"'),
+    );
+    expect(fieldIssue?.message).toBe('field "environment" of type "bug" carries unknown key "weighting"');
+
+    expect(unknownKeyIssues).toHaveLength(5);
   });
 });
 
@@ -105,12 +156,14 @@ describe('corrupted tickets', () => {
     expect(validate(root).some((i) => i.rule === 'fields/required' && i.message.includes('environment'))).toBe(true);
   });
 
-  it('reports a field applied to the wrong type as an error', () => {
+  it('treats a field from another type as an unknown warning, not an error', () => {
     const root = fixture();
+    // "estimate" is a task field; T-0004 is a bug, which does not declare it.
     corrupt(root, '.lovelace/tickets/T-0004.md', (t) =>
       t.replace('environment: staging', 'environment: staging\nestimate: 2'),
     );
-    expect(validate(root).some((i) => i.rule === 'fields/not-applicable')).toBe(true);
+    const issue = validate(root).find((i) => i.rule === 'fields/unknown' && i.message.includes('estimate'));
+    expect(issue?.severity).toBe('warning');
   });
 
   it('treats unknown frontmatter keys as warnings, not errors', () => {
@@ -190,7 +243,7 @@ describe('corrupted sessions and comments', () => {
   });
 });
 
-describe('documents and workflow rules', () => {
+describe('documents and schema rules', () => {
   it('reports a document without a summary', () => {
     const root = fixture();
     corrupt(root, '.lovelace/documentation/domain/OVERVIEW.md', (t) =>
@@ -207,18 +260,39 @@ describe('documents and workflow rules', () => {
     expect(validate(root).some((i) => i.rule === 'ids/duplicate')).toBe(true);
   });
 
-  it('reports on_transition rules referencing unknown statuses, types and fields', () => {
+  it('reports more than one status sharing an agent role', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/workflow.yaml', (t) =>
-      t
-        .replace('when: { to: staging, type: task }', 'when: { to: shipping, type: story, urgency: high }')
-        .replace('when: { to: done }', 'when: { to: done, from: nowhere }'),
+    corrupt(root, '.lovelace/schema.yaml', (t) =>
+      t.replace('  - name: cancelled', '  - name: cancelled\n    agent: complete'),
     );
     const issues = validate(root);
-    expect(issues.some((i) => i.rule === 'automation/unknown-status' && i.message.includes('shipping'))).toBe(true);
-    expect(issues.some((i) => i.rule === 'automation/unknown-status' && i.message.includes('nowhere'))).toBe(true);
-    expect(issues.some((i) => i.rule === 'automation/unknown-type')).toBe(true);
-    expect(issues.some((i) => i.rule === 'automation/unknown-field')).toBe(true);
+    expect(issues.some((i) => i.rule === 'schema/duplicate-agent-role')).toBe(true);
+  });
+
+  it('reports two types sharing a machine name', () => {
+    const root = fixture();
+    corrupt(root, '.lovelace/schema.yaml', (t) => t.replace('  - name: bug', '  - name: task'));
+    const issues = validate(root);
+    expect(issues.some((i) => i.rule === 'schema/duplicate-type' && i.message.includes('task'))).toBe(true);
+  });
+
+  it('reports two statuses sharing a machine name', () => {
+    const root = fixture();
+    corrupt(root, '.lovelace/schema.yaml', (t) => t.replace('  - name: backlog', '  - name: done'));
+    const issues = validate(root);
+    expect(issues.some((i) => i.rule === 'schema/duplicate-status' && i.message.includes('done'))).toBe(true);
+  });
+
+  it('reports a duplicate field name within a type', () => {
+    const root = fixture();
+    corrupt(root, '.lovelace/schema.yaml', (t) =>
+      t.replace(
+        '      - name: environment\n        type: enum',
+        '      - name: title\n        type: string\n      - name: environment\n        type: enum',
+      ),
+    );
+    const issues = validate(root);
+    expect(issues.some((i) => i.rule === 'schema/duplicate-field' && i.message.includes('bug'))).toBe(true);
   });
 
   it('formats issues as file:line lines', () => {

@@ -8,14 +8,14 @@ import { FieldInput } from './FieldInput';
 
 interface NewTicketModalProps {
   snapshot: Snapshot;
-  /** Column the ticket starts in; defaults to the workflow's first status. */
+  /** Column the ticket starts in; defaults to the schema's first status. */
   initialStatus?: string;
   onClose: () => void;
   onCreate: (type: string, fields: Record<string, unknown>, status?: string) => Promise<void>;
 }
 
 export function NewTicketModal({ snapshot, initialStatus, onClose, onCreate }: NewTicketModalProps) {
-  const [type, setType] = useState(snapshot.workflow.types.find((t) => t.name !== 'epic')?.name ?? snapshot.workflow.types[0]?.name ?? 'task');
+  const [type, setType] = useState(snapshot.schema.types.find((t) => t.name !== 'epic')?.name ?? snapshot.schema.types[0]?.name ?? 'task');
   const [fields, setFields] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +43,7 @@ export function NewTicketModal({ snapshot, initialStatus, onClose, onCreate }: N
         {initialStatus !== undefined && (
           <div className="field-row">
             <span className="label">column</span>
-            <span className="id-chip">{statusLabel(snapshot.workflow.statuses.find((st) => st.name === initialStatus) ?? { name: initialStatus })}</span>
+            <span className="id-chip">{statusLabel(snapshot.schema.statuses.find((st) => st.name === initialStatus) ?? { name: initialStatus })}</span>
           </div>
         )}
         <div className="field-row">
@@ -52,7 +52,7 @@ export function NewTicketModal({ snapshot, initialStatus, onClose, onCreate }: N
             aria-label="ticket type"
             width="100%"
             value={type}
-            options={snapshot.workflow.types.map((t) => ({ value: t.name, label: typeLabel(t) }))}
+            options={snapshot.schema.types.map((t) => ({ value: t.name, label: typeLabel(t) }))}
             onChange={(v) => {
               if (!v) return;
               setType(v);
@@ -69,7 +69,7 @@ export function NewTicketModal({ snapshot, initialStatus, onClose, onCreate }: N
             <FieldInput
               def={def}
               value={fields[def.name]}
-              workflow={snapshot.workflow}
+              schema={snapshot.schema}
               index={snapshot.index}
               actors={snapshot.actors}
               onChange={(value) => setFields((f) => ({ ...f, [def.name]: value }))}
