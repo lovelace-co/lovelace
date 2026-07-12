@@ -116,8 +116,18 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            libfuse2 \
-            patchelf
+            libfuse2
+
+      # linuxdeploy sets an rpath on every ELF in the AppDir with whichever
+      # patchelf is on PATH. Ubuntu 22.04's patchelf 0.14 corrupts the Bun
+      # compiled sidecars doing that (they segfault afterwards; proven on a
+      # branch probe run), so a current patchelf release goes first on PATH.
+      - name: Install patchelf 0.18 (linuxdeploy uses it for rpaths)
+        if: matrix.os_family == 'linux'
+        run: |
+          curl -sL https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz \
+            | sudo tar -xz -C /usr/local ./bin/patchelf
+          patchelf --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
