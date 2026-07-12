@@ -148,7 +148,11 @@ describe('installClaudeAssets', () => {
     const hook = join(root, '.git/hooks/prepare-commit-msg');
     expect(result.written).toContain('.git/hooks/prepare-commit-msg');
     expect(existsSync(hook)).toBe(true);
-    expect(statSync(hook).mode & 0o111).toBeTruthy();
+    // Windows has no executable bit (and Git for Windows runs hooks
+    // regardless); the chmod matters only on POSIX platforms.
+    if (process.platform !== 'win32') {
+      expect(statSync(hook).mode & 0o111).toBeTruthy();
+    }
     expect(readFileSync(hook, 'utf8')).toContain('active_ticket');
   });
 
