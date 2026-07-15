@@ -7,7 +7,7 @@ import { GeneralSettings } from '../components/GeneralSettings';
 import { TeamSettings } from '../components/TeamSettings';
 import { IntegrationsSettings } from '../components/IntegrationsSettings';
 import { useSchemaDraft } from '../lib/useSchemaDraft';
-import type { InstallClaudeResult } from '../lib/host';
+import type { ClaudeInstallStatus, InstallClaudeResult } from '../lib/host';
 import type { LinkResolver, OpenLink } from '../lib/links';
 import type { Actor, SchemaEdit, Snapshot } from '../lib/types';
 
@@ -21,6 +21,7 @@ interface SettingsProps {
   onOpenProject: () => void;
   onSaveActors: (actors: Actor[]) => Promise<void>;
   onInstallClaude: (gitHook: boolean) => Promise<InstallClaudeResult>;
+  onClaudeStatus: () => Promise<ClaudeInstallStatus>;
   /** Reports whether any section has unsaved edits, so leaving Settings can prompt. */
   onDirtyChange: (dirty: boolean) => void;
   onOpenTicket: (id: string) => void;
@@ -61,6 +62,7 @@ export function Settings({
   onOpenProject,
   onSaveActors,
   onInstallClaude,
+  onClaudeStatus,
   onDirtyChange,
   onOpenTicket,
   resolveLink,
@@ -136,7 +138,9 @@ export function Settings({
         {tab === 'team' && (
           <TeamSettings snapshot={snapshot} onSave={onSaveActors} onDirtyChange={setTeamDirty} />
         )}
-        {tab === 'integrations' && <IntegrationsSettings onInstall={onInstallClaude} />}
+        {tab === 'integrations' && (
+          <IntegrationsSettings onInstall={onInstallClaude} onClaudeStatus={onClaudeStatus} />
+        )}
       </div>
     </>
   );

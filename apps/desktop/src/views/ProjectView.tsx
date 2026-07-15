@@ -445,6 +445,7 @@ export function ProjectView({ root }: ProjectViewProps) {
               await apply((h) => h.writeActors(root, actors));
             }}
             onInstallClaude={(gitHook) => host.installClaude(root, gitHook)}
+            onClaudeStatus={() => host.claudeStatus(root)}
             onOpenTicket={setOpenTicket}
             resolveLink={resolveLink}
             onOpenLink={openLink}

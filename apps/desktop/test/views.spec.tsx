@@ -234,7 +234,16 @@ describe('List view', () => {
 });
 
 describe('Settings view', () => {
-  function renderSettings() {
+  function renderSettings(claudeStatus?: { installed: boolean; mcp?: boolean; hooks?: boolean; commands?: boolean }) {
+    const status = {
+      installed: claudeStatus?.installed ?? false,
+      agentsMd: false,
+      claudeMd: false,
+      mcp: claudeStatus?.mcp ?? claudeStatus?.installed ?? false,
+      hooks: claudeStatus?.hooks ?? claudeStatus?.installed ?? false,
+      commands: claudeStatus?.commands ?? claudeStatus?.installed ?? false,
+      gitHook: false,
+    };
     const props = {
       onSaveSchema: vi.fn().mockResolvedValue(undefined),
       onRenameProject: vi.fn().mockResolvedValue(undefined),
@@ -242,6 +251,7 @@ describe('Settings view', () => {
       onOpenProject: vi.fn(),
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
+      onClaudeStatus: vi.fn().mockResolvedValue(status),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -451,6 +461,7 @@ describe('Settings view', () => {
       onOpenProject: vi.fn(),
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
+      onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -501,8 +512,60 @@ describe('Settings view', () => {
   it('installs the Claude Code integration', async () => {
     const props = renderSettings();
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() => expect(screen.getByText('Install Claude Code assets')).toBeTruthy());
     fireEvent.click(screen.getByText('Install Claude Code assets'));
     await waitFor(() => expect(props.onInstallClaude).toHaveBeenCalledWith(true));
+  });
+
+  it('shows "not installed" when no assets are present', async () => {
+    renderSettings({ installed: false });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() =>
+      expect(screen.getByText('Claude Code assets are not installed in this project.')).toBeTruthy(),
+    );
+    expect(screen.getByText('Install Claude Code assets')).toBeTruthy();
+  });
+
+  it('shows "installed" and the Reinstall button when all assets are present', async () => {
+    renderSettings({ installed: true });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() =>
+      expect(screen.getByText('Claude Code assets are installed in this project.')).toBeTruthy(),
+    );
+    expect(screen.getByText('Reinstall Claude Code assets')).toBeTruthy();
+  });
+
+  it('shows "partially installed" with missing pieces when some core assets are absent', async () => {
+    renderSettings({ installed: false, mcp: true, hooks: false, commands: false });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() =>
+      expect(screen.getByText('Claude Code assets are partially installed.')).toBeTruthy(),
+    );
+    expect(screen.getByText(/Missing:/)).toBeTruthy();
+    expect(screen.getByText('Install Claude Code assets')).toBeTruthy();
+  });
+
+  it('refreshes status after a successful install', async () => {
+    const installedStatus = {
+      installed: true,
+      agentsMd: true,
+      claudeMd: true,
+      mcp: true,
+      hooks: true,
+      commands: true,
+      gitHook: false,
+    };
+    const props = renderSettings({ installed: false });
+    // After install, the mock returns the installed status.
+    props.onClaudeStatus.mockResolvedValueOnce({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false })
+      .mockResolvedValue(installedStatus);
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() => expect(screen.getByText('Install Claude Code assets')).toBeTruthy());
+    fireEvent.click(screen.getByText('Install Claude Code assets'));
+    await waitFor(() =>
+      expect(screen.getByText('Claude Code assets are installed in this project.')).toBeTruthy(),
+    );
+    expect(screen.getByText('Reinstall Claude Code assets')).toBeTruthy();
   });
 
   it('reports its dirty state so navigation can be guarded', () => {
@@ -535,6 +598,7 @@ describe('Settings view', () => {
       onOpenProject: vi.fn(),
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
+      onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -573,6 +637,7 @@ describe('Settings view', () => {
       onOpenProject: vi.fn(),
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
+      onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -607,6 +672,7 @@ describe('Settings view', () => {
       onOpenProject: vi.fn(),
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
+      onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -644,6 +710,7 @@ describe('Settings view', () => {
       onOpenProject: vi.fn(),
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
+      onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -664,6 +731,7 @@ describe('Settings view', () => {
       onOpenProject: vi.fn(),
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
+      onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -688,6 +756,7 @@ describe('Settings view', () => {
       onOpenProject: vi.fn(),
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
+      onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };

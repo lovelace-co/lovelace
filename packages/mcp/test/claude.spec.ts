@@ -1,14 +1,21 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { installClaudeAssets } from '../src/claude.js';
+import { detectClaudeAssets, installClaudeAssets } from '../src/claude.js';
 import { tempFixture } from './helpers.js';
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
   while (cleanups.length) cleanups.pop()?.();
 });
+
+function emptyDir(): string {
+  const root = mkdtempSync(join(tmpdir(), 'lovelace-detect-test-'));
+  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+  return root;
+}
 
 function fixture() {
   const f = tempFixture();
@@ -160,5 +167,108 @@ describe('installClaudeAssets', () => {
     const root = fixture();
     const result = installClaudeAssets(root, { ...OPTS, gitHook: true });
     expect(result.manual.some((m) => m.includes('Git'))).toBe(true);
+  });
+});
+
+describe('detectClaudeAssets', () => {
+  it('returns all false on a clean empty directory', () => {
+    const root = emptyDir();
+    const status = detectClaudeAssets(root);
+    expect(status.installed).toBe(false);
+    expect(status.mcp).toBe(false);
+    expect(status.hooks).toBe(false);
+    expect(status.commands).toBe(false);
+    expect(status.agentsMd).toBe(false);
+    expect(status.claudeMd).toBe(false);
+    expect(status.gitHook).toBe(false);
+  });
+
+  it('returns installed: true after a full install', () => {
+    const root = emptyDir();
+    installClaudeAssets(root, OPTS);
+    const status = detectClaudeAssets(root);
+    expect(status.installed).toBe(true);
+    expect(status.mcp).toBe(true);
+    expect(status.hooks).toBe(true);
+    expect(status.commands).toBe(true);
+    expect(status.agentsMd).toBe(true);
+    expect(status.claudeMd).toBe(true);
+    expect(status.gitHook).toBe(false);
+  });
+
+  it('reports gitHook: true after an install with the git hook', () => {
+    const root = emptyDir();
+    execSync('git init -q', { cwd: root });
+    installClaudeAssets(root, { ...OPTS, gitHook: true });
+    const status = detectClaudeAssets(root);
+    expect(status.installed).toBe(true);
+    expect(status.gitHook).toBe(true);
+  });
+
+  it('partial: only .mcp.json present gives mcp: true and installed: false', () => {
+    const root = emptyDir();
+    writeFileSync(join(root, '.mcp.json'), JSON.stringify({ mcpServers: { lovelace: { command: '/x' } } }));
+    const status = detectClaudeAssets(root);
+    expect(status.mcp).toBe(true);
+    expect(status.hooks).toBe(false);
+    expect(status.commands).toBe(false);
+    expect(status.installed).toBe(false);
+  });
+
+  it('partial: only hooks present gives hooks: true and installed: false', () => {
+    const root = emptyDir();
+    mkdirSync(join(root, '.claude'), { recursive: true });
+    writeFileSync(
+      join(root, '.claude', 'settings.json'),
+      JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `${OPTS.helperCommand} digest` }] }] } }),
+    );
+    const status = detectClaudeAssets(root);
+    expect(status.hooks).toBe(true);
+    expect(status.mcp).toBe(false);
+    expect(status.commands).toBe(false);
+    expect(status.installed).toBe(false);
+  });
+
+  it('partial: only commands present gives commands: true and installed: false', () => {
+    const root = emptyDir();
+    mkdirSync(join(root, '.claude', 'commands'), { recursive: true });
+    writeFileSync(join(root, '.claude', 'commands', 'ticket.md'), '# ticket\n');
+    const status = detectClaudeAssets(root);
+    expect(status.commands).toBe(true);
+    expect(status.mcp).toBe(false);
+    expect(status.hooks).toBe(false);
+    expect(status.installed).toBe(false);
+  });
+
+  it('treats malformed .mcp.json as not present rather than throwing', () => {
+    const root = emptyDir();
+    writeFileSync(join(root, '.mcp.json'), '{not valid json');
+    expect(() => detectClaudeAssets(root)).not.toThrow();
+    expect(detectClaudeAssets(root).mcp).toBe(false);
+  });
+
+  it('treats malformed .claude/settings.json as not present rather than throwing', () => {
+    const root = emptyDir();
+    mkdirSync(join(root, '.claude'), { recursive: true });
+    writeFileSync(join(root, '.claude', 'settings.json'), '{bad json');
+    expect(() => detectClaudeAssets(root)).not.toThrow();
+    expect(detectClaudeAssets(root).hooks).toBe(false);
+  });
+
+  it('detects claudeMd only when the section marker is present, not just any CLAUDE.md', () => {
+    const root = emptyDir();
+    writeFileSync(join(root, 'CLAUDE.md'), '# My project\n\nNo lovelace section here.\n');
+    expect(detectClaudeAssets(root).claudeMd).toBe(false);
+    writeFileSync(join(root, 'CLAUDE.md'), '# My project\n\n<!-- lovelace:start -->\n<!-- lovelace:end -->\n');
+    expect(detectClaudeAssets(root).claudeMd).toBe(true);
+  });
+
+  it('detects agentsMd only when the section marker is present', () => {
+    const root = emptyDir();
+    mkdirSync(join(root, '.lovelace'), { recursive: true });
+    writeFileSync(join(root, '.lovelace', 'AGENTS.md'), '# No marker\n');
+    expect(detectClaudeAssets(root).agentsMd).toBe(false);
+    writeFileSync(join(root, '.lovelace', 'AGENTS.md'), '<!-- lovelace:start -->\n# instructions\n<!-- lovelace:end -->\n');
+    expect(detectClaudeAssets(root).agentsMd).toBe(true);
   });
 });
