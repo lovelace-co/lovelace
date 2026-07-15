@@ -10,6 +10,7 @@ import { HostProvider } from '../src/state/store';
 import type { Snapshot } from '../src/lib/types';
 import { FakeHost } from './fakeHost';
 import fixture from './fixtures/snapshot.json';
+import * as os from '../src/lib/os';
 
 const base = fixture as unknown as Snapshot;
 
@@ -672,6 +673,16 @@ describe('Settings view', () => {
     const saved = props.onSaveSchema.mock.calls[0][0];
     const task = saved.types.find((t: { name: string }) => t.name === 'task');
     expect(task.plural).toBe('Tasks');
+  });
+
+  it('General shows a "Report a bug" link that calls openUrl with the mailto address', () => {
+    const openUrlSpy = vi.spyOn(os, 'openUrl').mockResolvedValue(undefined);
+    renderSettings();
+    const link = screen.getByRole('button', { name: 'Report a bug' });
+    expect(link).toBeTruthy();
+    fireEvent.click(link);
+    expect(openUrlSpy).toHaveBeenCalledWith('mailto:contact@lovelace.sh');
+    openUrlSpy.mockRestore();
   });
 
   it('does not report a hand-authored unknown field key as dirty on open, but a real edit still flips it', () => {

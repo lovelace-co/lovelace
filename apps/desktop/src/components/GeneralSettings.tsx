@@ -3,8 +3,10 @@ import { CloseIcon } from './icons';
 import { Dropdown } from './Dropdown';
 import { SessionsModal } from './SessionsModal';
 import { ProblemsModal } from './ProblemsModal';
+import { Toast } from './Toast';
 import { formatDate } from '../lib/datetime';
 import { DEFAULT_PRESENCE_TIMEOUT_MINUTES } from '../lib/presence';
+import { openUrl } from '../lib/os';
 import type { LinkResolver, OpenLink } from '../lib/links';
 import type { Snapshot } from '../lib/types';
 
@@ -56,6 +58,7 @@ export function GeneralSettings({
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessionsInitialOpen, setSessionsInitialOpen] = useState<string | null>(null);
   const [problemsOpen, setProblemsOpen] = useState(false);
+  const [bugError, setBugError] = useState<string | null>(null);
   useEffect(() => {
     if (!digestOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -219,6 +222,22 @@ export function GeneralSettings({
       )}
 
       {problemsOpen && <ProblemsModal issues={snapshot.issues} onClose={() => setProblemsOpen(false)} />}
+
+      {bugError && <Toast onDismiss={() => setBugError(null)}>{bugError}</Toast>}
+
+      <div style={{ marginTop: 'var(--sp-5)' }}>
+        <button
+          type="button"
+          className="link-tertiary"
+          onClick={() => {
+            void openUrl('mailto:contact@lovelace.sh').catch((e) => {
+              setBugError(e instanceof Error ? e.message : 'Could not open the mail app.');
+            });
+          }}
+        >
+          Report a bug
+        </button>
+      </div>
     </div>
   );
 }

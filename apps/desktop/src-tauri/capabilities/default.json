@@ -11,6 +11,8 @@
     "dialog:default",
     "core:window:allow-set-theme",
     "core:window:allow-set-background-color",
+    "opener:allow-open-url",
+    "opener:allow-default-urls",
     {
       "identifier": "opener:allow-open-path",
       "allow": [
