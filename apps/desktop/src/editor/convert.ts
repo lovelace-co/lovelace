@@ -15,6 +15,7 @@ import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { parseBlocks, type Block } from './blocks';
 import { $createVerbatimNode, $isVerbatimNode, VerbatimNode } from './VerbatimNode';
 import { $createWikiLinkNode, $isWikiLinkNode, WikiLinkNode } from './WikiLinkNode';
+import { normalizeEscapedFences, collapseNestedMermaidFences } from '../lib/fences';
 
 /**
  * Markdown <-> Lexical, with two guarantees layered on top of
@@ -86,7 +87,12 @@ export interface PreparedMarkdown {
 
 /** Swaps unsupported blocks for sentinels ahead of conversion. */
 export function prepareMarkdown(source: string): PreparedMarkdown {
-  const blocks = parseBlocks(source).filter((b) => b.kind !== 'blank');
+  // Recover fences Lexical escaped when the user pasted Markdown into a
+  // paragraph, so they land as CodeNodes (with language) instead of text.
+  // Then collapse any outer shell wrapping an inner ```mermaid fence so
+  // Lexical imports a clean CodeNode with lang mermaid on the next edit.
+  const normalised = collapseNestedMermaidFences(normalizeEscapedFences(source));
+  const blocks = parseBlocks(normalised).filter((b) => b.kind !== 'blank');
   const sources: string[] = [];
   const chunks = blocks.map((block) => {
     if (block.kind === 'table' || block.kind === 'raw') {

@@ -1,0 +1,8 @@
+columns:
+  backlog:
+    - T-0005
+  in_progress:
+    - E-0001
+    - T-0002
+  todo:
+    - T-0003

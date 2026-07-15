@@ -32,6 +32,23 @@ export interface InstallClaudeResult {
   manual: string[];
 }
 
+export interface ClaudeInstallStatus {
+  /** True when all three core pieces are present: mcp, hooks, commands. */
+  installed: boolean;
+  /** `.lovelace/AGENTS.md` exists with the Lovelace section. */
+  agentsMd: boolean;
+  /** `CLAUDE.md` contains the Lovelace section marker. */
+  claudeMd: boolean;
+  /** `.mcp.json` exists with an `mcpServers.lovelace` entry. */
+  mcp: boolean;
+  /** `.claude/settings.json` exists with Lovelace hook commands. */
+  hooks: boolean;
+  /** `.claude/commands/ticket.md` exists. */
+  commands: boolean;
+  /** `.git/hooks/prepare-commit-msg` exists and references Lovelace. */
+  gitHook: boolean;
+}
+
 /** The result of reading a file for preview, dispatched on `kind`. */
 export interface SourceFile {
   kind: 'text' | 'image' | 'pdf' | 'binary' | 'missing';
@@ -52,6 +69,8 @@ export interface HostClient {
   /** The default schema, used to seed the init wizard. */
   defaultSchema(): Promise<Schema>;
   installClaude(root: string, gitHook: boolean): Promise<InstallClaudeResult>;
+  /** Detect whether the Claude Code integration assets are present in the project. */
+  claudeStatus(root: string): Promise<ClaudeInstallStatus>;
   snapshot(root: string): Promise<Snapshot>;
   /** The migration plan for a project declaring an older spec major (ADR-0011); a dry run, no files change. */
   migrationPlan(root: string): Promise<MigrationPlan>;
@@ -173,6 +192,10 @@ export class TauriHost implements HostClient {
     // The host process knows where its sibling sidecar binaries live and
     // fills in the command paths itself.
     return (await tauriRequest({ op: 'install_claude', root, gitHook })) as InstallClaudeResult;
+  }
+
+  async claudeStatus(root: string): Promise<ClaudeInstallStatus> {
+    return (await tauriRequest({ op: 'detect_claude', root })) as ClaudeInstallStatus;
   }
 
   snapshot(root: string): Promise<Snapshot> {

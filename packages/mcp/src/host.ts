@@ -51,7 +51,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { parseDocument } from 'yaml';
-import { installClaudeAssets } from './claude.js';
+import { detectClaudeAssets, installClaudeAssets } from './claude.js';
 
 export interface HostRequest {
   op: string;
@@ -266,6 +266,10 @@ export async function handle(request: HostRequest): Promise<Json> {
     case 'write_actors': {
       await writeActors(root, request.actors ?? []);
       return snapshot(root);
+    }
+    case 'detect_claude': {
+      // Plain object for the Json return type; field names match ClaudeInstallStatus.
+      return { ...detectClaudeAssets(root) };
     }
     case 'install_claude': {
       const defaults = siblingCommands();

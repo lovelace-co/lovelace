@@ -273,6 +273,99 @@ mv "$1.lovelace" "$1"
   result.written.push('.git/hooks/prepare-commit-msg');
 }
 
+export interface ClaudeInstallStatus {
+  /** True when all three core pieces are present: mcp, hooks, commands. */
+  installed: boolean;
+  /** `.lovelace/AGENTS.md` exists with the Lovelace section. */
+  agentsMd: boolean;
+  /** `CLAUDE.md` contains the Lovelace section marker. */
+  claudeMd: boolean;
+  /** `.mcp.json` exists with an `mcpServers.lovelace` entry. */
+  mcp: boolean;
+  /** `.claude/settings.json` exists with Lovelace hook commands. */
+  hooks: boolean;
+  /** `.claude/commands/ticket.md` exists. */
+  commands: boolean;
+  /** `.git/hooks/prepare-commit-msg` exists and references Lovelace. */
+  gitHook: boolean;
+}
+
+const KNOWN_HELPER_SUFFIXES = [' digest', 'session-check', ' guard', 'presence-start', 'presence-clear', 'presence-beat', 'track-active'];
+
+/**
+ * Inspects on-disk assets to determine whether the Claude Code integration
+ * has been installed for the given project root. Read-only and resilient to
+ * malformed JSON (treats as not present rather than throwing).
+ */
+export function detectClaudeAssets(root: string): ClaudeInstallStatus {
+  let mcp = false;
+  const mcpPath = join(root, '.mcp.json');
+  if (existsSync(mcpPath)) {
+    try {
+      const raw = JSON.parse(readFileSync(mcpPath, 'utf8')) as { mcpServers?: Record<string, unknown> };
+      mcp = typeof raw.mcpServers === 'object' && raw.mcpServers !== null && 'lovelace' in raw.mcpServers;
+    } catch {
+      // malformed JSON: treat as not present
+    }
+  }
+
+  let hooks = false;
+  const settingsPath = join(root, '.claude', 'settings.json');
+  if (existsSync(settingsPath)) {
+    try {
+      const raw = JSON.parse(readFileSync(settingsPath, 'utf8')) as { hooks?: unknown };
+      if (raw.hooks) {
+        const flat = JSON.stringify(raw.hooks);
+        hooks = KNOWN_HELPER_SUFFIXES.some((suffix) => flat.includes(suffix));
+      }
+    } catch {
+      // malformed JSON: treat as not present
+    }
+  }
+
+  const commands = existsSync(join(root, '.claude', 'commands', 'ticket.md'));
+
+  let agentsMd = false;
+  const agentsPath = join(root, '.lovelace', 'AGENTS.md');
+  if (existsSync(agentsPath)) {
+    try {
+      agentsMd = readFileSync(agentsPath, 'utf8').includes(SECTION_START);
+    } catch {
+      agentsMd = true;
+    }
+  }
+
+  let claudeMd = false;
+  const claudeMdPath = join(root, 'CLAUDE.md');
+  if (existsSync(claudeMdPath)) {
+    try {
+      claudeMd = readFileSync(claudeMdPath, 'utf8').includes(SECTION_START);
+    } catch {
+      // treat as not present
+    }
+  }
+
+  let gitHook = false;
+  const gitHookPath = join(root, '.git', 'hooks', 'prepare-commit-msg');
+  if (existsSync(gitHookPath)) {
+    try {
+      gitHook = readFileSync(gitHookPath, 'utf8').includes('Lovelace');
+    } catch {
+      // treat as not present
+    }
+  }
+
+  return {
+    installed: mcp && hooks && commands,
+    agentsMd,
+    claudeMd,
+    mcp,
+    hooks,
+    commands,
+    gitHook,
+  };
+}
+
 export function installClaudeAssets(root: string, options: ClaudeAssetOptions): ClaudeAssetResult {
   const result: ClaudeAssetResult = { written: [], manual: [] };
   writeAgentsMd(root, result);

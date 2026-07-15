@@ -1,4 +1,4 @@
-import { HostError, type HostClient, type SourceFile } from '../src/lib/host';
+import { HostError, type ClaudeInstallStatus, type HostClient, type SourceFile } from '../src/lib/host';
 import type { MigrationPlan, MigrationResult, SchemaEdit, SearchHit, Snapshot } from '../src/lib/types';
 import fixture from './fixtures/snapshot.json';
 
@@ -55,6 +55,11 @@ export class FakeHost implements HostClient {
   async installClaude(root: string, gitHook: boolean): Promise<{ written: string[]; manual: string[] }> {
     this.record('installClaude', [root, gitHook]);
     return { written: ['CLAUDE.md'], manual: [] };
+  }
+
+  async claudeStatus(root: string): Promise<ClaudeInstallStatus> {
+    this.record('claudeStatus', [root]);
+    return { installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false };
   }
 
   async snapshot(root: string): Promise<Snapshot> {

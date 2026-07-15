@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "lovelace": {
+      "command": "lovelace-mcp",
+      "args": [],
+      "env": {
+        "LOVELACE_ROOT": "."
+      }
+    }
+  }
+}

@@ -22,3 +22,10 @@ export async function openExternally(absPath: string): Promise<void> {
   const { openPath } = await import('@tauri-apps/plugin-opener');
   await openPath(absPath);
 }
+
+/** Open a URL (including mailto: links) with the system's default handler. */
+export async function openUrl(url: string): Promise<void> {
+  if (!inShell()) return;
+  const { openUrl: tauriOpenUrl } = await import('@tauri-apps/plugin-opener');
+  await tauriOpenUrl(url);
+}
