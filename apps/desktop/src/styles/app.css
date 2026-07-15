@@ -1438,6 +1438,61 @@ input[type='checkbox'] {
   line-height: 1.7;
 }
 
+/* ---------- mermaid diagrams ---------- */
+
+.mermaid-diagram {
+  background: var(--raise);
+  border-radius: var(--radius-well);
+  padding: var(--sp-3) var(--sp-3);
+  margin: var(--sp-2) 0;
+  overflow-x: auto;
+  font-family: var(--font-sans);
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.mermaid-diagram--loading {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.mermaid-diagram__loading {
+  color: var(--mist);
+  font-size: var(--size-util);
+}
+
+.mermaid-diagram--error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.mermaid-diagram__error-msg {
+  color: var(--mist);
+  font-size: var(--size-util);
+}
+
+.mermaid-diagram__source {
+  background: var(--bg-0);
+  border-radius: var(--radius-well);
+  padding: var(--sp-2) var(--sp-3);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--size-util);
+  line-height: 1.7;
+}
+
+.mermaid-diagram__source code {
+  background: none;
+  padding: 0;
+  font-family: inherit;
+}
+
 .prose blockquote {
   margin: 0.9em 0;
   padding: 2px 0 2px 16px;

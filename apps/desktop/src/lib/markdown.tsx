@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { MermaidDiagram } from '../components/MermaidDiagram';
+import { normalizeEscapedFences, collapseNestedMermaidFences, extractInnerMermaidFence, matchFenceOpen, isFenceClose } from './fences';
 import type { LinkResolver, OpenLink } from './links';
 
 /**
@@ -8,6 +10,25 @@ import type { LinkResolver, OpenLink } from './links';
  * The block editor handles editing; this keeps read-only views honest without
  * pulling in an HTML pipeline.
  */
+
+const MERMAID_STARTERS =
+  /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram-v2|stateDiagram|erDiagram|journey|gantt|pie|gitGraph|mindmap|timeline|quadrantChart|sankey-beta|xychart-beta|block-beta|C4Context|C4Container|C4Component|C4Dynamic|C4Deployment)\b/i;
+
+/** Language tags that carry no type information and may hide a Mermaid diagram. */
+const GENERIC_LANGS = new Set(['', 'text', 'txt', 'plain']);
+
+/**
+ * Returns true when a fenced code block should be treated as a Mermaid diagram.
+ * Matches explicit `mermaid` tags (any case) and generic/empty tags whose first
+ * non-empty body line begins with a recognised Mermaid diagram type keyword.
+ */
+export function isMermaidFence(lang: string, body: string): boolean {
+  const normalLang = lang.toLowerCase().trim();
+  if (normalLang === 'mermaid') return true;
+  if (!GENERIC_LANGS.has(normalLang)) return false;
+  const firstLine = body.split('\n').find((l) => l.trim() !== '') ?? '';
+  return MERMAID_STARTERS.test(firstLine.trim());
+}
 
 /** Resolver + open handler for `[[id]]` wiki-links; absent = render them inert. */
 interface WikiCtx {
@@ -99,7 +120,10 @@ export function Markdown({
 }) {
   const ctx: WikiCtx | undefined =
     resolveLink && onOpenLink ? { resolve: resolveLink, onOpen: onOpenLink } : undefined;
-  const lines = source.split('\n');
+  // Lexical paragraph export escapes pasted fences as \`\`\`; undo that so
+  // mermaid (and other) fences parse again. Then collapse any outer shell that
+  // wraps an inner ```mermaid fence (Lexical's re-export pattern).
+  const lines = collapseNestedMermaidFences(normalizeEscapedFences(source)).split('\n');
   const blocks: ReactNode[] = [];
   let i = 0;
   let key = 0;
@@ -119,20 +143,33 @@ export function Markdown({
       i += 1;
       continue;
     }
-    if (line.startsWith('```')) {
-      const lang = line.slice(3).trim();
+    const fenceOpen = matchFenceOpen(line);
+    if (fenceOpen) {
       const code: string[] = [];
       i += 1;
-      while (i < lines.length && !(lines[i] ?? '').startsWith('```')) {
+      // A closing line must use the same fence character with length >= opener.
+      while (i < lines.length && !isFenceClose(lines[i] ?? '', fenceOpen)) {
         code.push(lines[i] ?? '');
         i += 1;
       }
-      i += 1;
-      blocks.push(
-        <pre key={key++} data-lang={lang}>
-          <code>{code.join('\n')}</code>
-        </pre>,
-      );
+      i += 1; // skip closing fence line
+      const body = code.join('\n');
+      if (isMermaidFence(fenceOpen.lang, body)) {
+        blocks.push(<MermaidDiagram key={key++} source={body} />);
+      } else {
+        // Defense in depth: if the body is itself a mermaid fence (the outer
+        // shell was not collapsed before reaching here), extract and render it.
+        const innerMermaid = extractInnerMermaidFence(body);
+        if (innerMermaid !== null) {
+          blocks.push(<MermaidDiagram key={key++} source={innerMermaid} />);
+        } else {
+          blocks.push(
+            <pre key={key++} data-lang={fenceOpen.lang}>
+              <code>{body}</code>
+            </pre>,
+          );
+        }
+      }
       continue;
     }
     if (line.startsWith('>')) {
@@ -218,7 +255,12 @@ export function Markdown({
     }
     const para: string[] = [line];
     i += 1;
-    while (i < lines.length && (lines[i] ?? '').trim() !== '' && !/^(#|```|>|\||\s*([-*]|\d+\.)\s)/.test(lines[i] ?? '')) {
+    while (
+      i < lines.length &&
+      (lines[i] ?? '').trim() !== '' &&
+      !matchFenceOpen(lines[i] ?? '') &&
+      !/^(#|>|\||\s*([-*]|\d+\.)\s)/.test(lines[i] ?? '')
+    ) {
       para.push(lines[i] ?? '');
       i += 1;
     }

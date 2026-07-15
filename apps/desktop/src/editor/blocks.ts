@@ -9,6 +9,8 @@
  * Anything else is classified raw: rendered verbatim, not editable.
  */
 
+import { matchFenceOpen, isFenceClose } from '../lib/fences';
+
 export type BlockKind =
   | 'heading'
   | 'paragraph'
@@ -25,7 +27,6 @@ export interface Block {
   source: string;
 }
 
-const FENCE_RE = /^(```|~~~)/;
 const HEADING_RE = /^#{1,6}\s/;
 const LIST_RE = /^\s*([-*+]|\d+\.)\s/;
 const QUOTE_RE = /^>/;
@@ -53,10 +54,11 @@ export function parseBlocks(source: string): Block[] {
       i = end;
       continue;
     }
-    if (FENCE_RE.test(line)) {
-      const fence = line.startsWith('~~~') ? '~~~' : '```';
+    const fenceOpen = matchFenceOpen(line);
+    if (fenceOpen) {
       let end = i + 1;
-      while (end < lines.length && !(lines[end] ?? '').startsWith(fence)) end += 1;
+      // Close must use the same fence character with length >= opener length.
+      while (end < lines.length && !isFenceClose(lines[end] ?? '', fenceOpen)) end += 1;
       take('code', i, Math.min(end + 1, lines.length));
       i = Math.min(end + 1, lines.length);
       continue;
@@ -104,7 +106,7 @@ export function parseBlocks(source: string): Block[] {
     while (
       end < lines.length &&
       (lines[end] ?? '').trim() !== '' &&
-      !FENCE_RE.test(lines[end] ?? '') &&
+      !matchFenceOpen(lines[end] ?? '') &&
       !HEADING_RE.test(lines[end] ?? '') &&
       !QUOTE_RE.test(lines[end] ?? '') &&
       !TABLE_RE.test(lines[end] ?? '') &&
@@ -207,13 +209,14 @@ export function serialiseQuoteLines(lines: string[]): string {
 
 export function codeParts(source: string): { open: string; code: string; close: string } {
   const lines = source.split('\n');
-  const open = lines[0] ?? '```';
+  const openLine = lines[0] ?? '```';
   const last = lines[lines.length - 1] ?? '';
-  const hasClose = lines.length > 1 && /^(```|~~~)/.test(last);
+  const openFence = matchFenceOpen(openLine);
+  const hasClose = lines.length > 1 && openFence !== null && isFenceClose(last, openFence);
   return {
-    open,
+    open: openLine,
     code: lines.slice(1, hasClose ? -1 : undefined).join('\n'),
-    close: hasClose ? last : open.startsWith('~~~') ? '~~~' : '```',
+    close: hasClose ? last : openLine.startsWith('~~~') ? '~~~' : '```',
   };
 }
 
