@@ -533,6 +533,23 @@ describe('Settings view', () => {
       expect(screen.getByText('Claude Code assets are installed in this project.')).toBeTruthy(),
     );
     expect(screen.getByText('Reinstall Claude Code assets')).toBeTruthy();
+    expect(screen.getByText('installed')).toBeTruthy();
+  });
+
+  it('hides the installed badge when not installed or partially installed', async () => {
+    renderSettings({ installed: false });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() =>
+      expect(screen.getByText('Claude Code assets are not installed in this project.')).toBeTruthy(),
+    );
+    expect(screen.queryByText('installed')).toBeNull();
+
+    renderSettings({ installed: false, mcp: true, hooks: false, commands: false });
+    fireEvent.click(screen.getAllByRole('tab', { name: 'Integrations' })[1]!);
+    await waitFor(() =>
+      expect(screen.getByText('Claude Code assets are partially installed.')).toBeTruthy(),
+    );
+    expect(screen.queryByText('installed')).toBeNull();
   });
 
   it('shows "partially installed" with missing pieces when some core assets are absent', async () => {

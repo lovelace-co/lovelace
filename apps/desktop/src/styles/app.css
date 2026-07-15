@@ -1528,6 +1528,21 @@ input[type='checkbox'] {
   padding: 2px 9px;
 }
 
+.badge-installed {
+  font-size: var(--size-util);
+  font-weight: 500;
+  color: var(--current);
+  background: var(--wash-2);
+  border-radius: var(--radius-pill);
+  padding: 2px 9px;
+}
+
+.section-heading--with-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
 /* ---------- digest, problems ---------- */
 
 .digest-pre {

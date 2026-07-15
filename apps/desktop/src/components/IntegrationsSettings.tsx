@@ -90,7 +90,10 @@ export function IntegrationsSettings({ onInstall, onClaudeStatus }: Integrations
   return (
     <div className="settings-section">
       {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
-      <h2 className="section-heading">Claude Code</h2>
+      <h2 className="section-heading section-heading--with-badge">
+        Claude Code
+        {status?.installed && <span className="badge-installed">installed</span>}
+      </h2>
       <p className="subtle" style={{ maxWidth: '58ch', marginBottom: 18 }}>
         Install or reinstall the CLAUDE.md section, the MCP server and the hooks so a Claude Code session
         starts oriented and works tickets through Lovelace. Reinstalling regenerates the Lovelace-owned
