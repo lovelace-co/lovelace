@@ -1795,6 +1795,61 @@ input[type='checkbox'] {
   margin-right: auto;
 }
 
+/* The mermaid source editor: a wider card than .modal so source and preview
+   can sit side by side. */
+.mermaid-modal {
+  width: 56rem;
+  max-width: 92vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--bg-0);
+  border-radius: var(--radius-float);
+  padding: var(--sp-5);
+  animation: pop-rise var(--dur-glide) var(--swift);
+}
+
+.mermaid-modal h2 {
+  font-size: var(--size-anchor);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  margin: 0 0 20px;
+}
+
+.mermaid-modal-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
+}
+
+.mermaid-modal-source {
+  width: 100%;
+  min-height: 20rem;
+  font-family: var(--font-mono);
+  font-size: var(--size-util);
+  line-height: 1.7;
+  color: var(--ink);
+  background: var(--well);
+  border: 0;
+  border-radius: var(--radius-well);
+  padding: var(--sp-3);
+  resize: vertical;
+}
+
+.mermaid-modal-source:focus {
+  outline: 1.5px solid var(--current);
+  outline-offset: 0;
+}
+
+.mermaid-modal-preview {
+  min-height: 20rem;
+  max-height: 32rem;
+  overflow: auto;
+  background: var(--well);
+  border-radius: var(--radius-well);
+  padding: var(--sp-3);
+}
+
 /* ---------- project info card ---------- */
 
 .info-card {
@@ -2949,6 +3004,44 @@ input[type='checkbox'] {
   margin: 10px 0;
   white-space: pre-wrap;
   color: var(--slate);
+}
+
+/* A mermaid block: the diagram itself plus a quiet "Edit diagram" capsule
+   that only materialises on approach, mirroring the drag handle's reveal. */
+.mermaid-block {
+  position: relative;
+  margin: var(--sp-2) 0;
+}
+
+.mermaid-block:has(.mermaid-block-edit) {
+  cursor: pointer;
+}
+
+.mermaid-block-edit {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  height: 28px;
+  padding: 0 var(--sp-3);
+  font-size: var(--size-util);
+  font-weight: 500;
+  color: var(--slate);
+  background: var(--raise);
+  border-radius: var(--radius-pill);
+  opacity: 0;
+  transition: opacity var(--dur-colour) var(--swift), background var(--dur-colour) var(--swift),
+    color var(--dur-colour) var(--swift);
+}
+
+.mermaid-block:hover .mermaid-block-edit,
+.mermaid-block-edit:hover,
+.mermaid-block-edit:focus-visible {
+  opacity: 1;
+}
+
+.mermaid-block-edit:hover {
+  background: var(--wash);
+  color: var(--ink);
 }
 
 .le-bold {

@@ -1,3 +1,22 @@
+const MERMAID_STARTERS =
+  /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram-v2|stateDiagram|erDiagram|journey|gantt|pie|gitGraph|mindmap|timeline|quadrantChart|sankey-beta|xychart-beta|block-beta|C4Context|C4Container|C4Component|C4Dynamic|C4Deployment)\b/i;
+
+/** Language tags that carry no type information and may hide a Mermaid diagram. */
+const GENERIC_LANGS = new Set(['', 'text', 'txt', 'plain']);
+
+/**
+ * Returns true when a fenced code block should be treated as a Mermaid diagram.
+ * Matches explicit `mermaid` tags (any case) and generic/empty tags whose first
+ * non-empty body line begins with a recognised Mermaid diagram type keyword.
+ */
+export function isMermaidFence(lang: string, body: string): boolean {
+  const normalLang = lang.toLowerCase().trim();
+  if (normalLang === 'mermaid') return true;
+  if (!GENERIC_LANGS.has(normalLang)) return false;
+  const firstLine = body.split('\n').find((l) => l.trim() !== '') ?? '';
+  return MERMAID_STARTERS.test(firstLine.trim());
+}
+
 /**
  * Lexical's markdown export escapes literal backticks in paragraph text as
  * \` so a pasted fence becomes \`\`\`mermaid on disk. That form is not a

@@ -8,14 +8,16 @@ import {
   CHECK_LIST,
   TRANSFORMERS,
   type ElementTransformer,
+  type MultilineElementTransformer,
   type TextMatchTransformer,
   type Transformer,
 } from '@lexical/markdown';
 import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { parseBlocks, type Block } from './blocks';
+import { $createMermaidNode, $isMermaidNode, MermaidNode } from './MermaidNode';
 import { $createVerbatimNode, $isVerbatimNode, VerbatimNode } from './VerbatimNode';
 import { $createWikiLinkNode, $isWikiLinkNode, WikiLinkNode } from './WikiLinkNode';
-import { normalizeEscapedFences, collapseNestedMermaidFences } from '../lib/fences';
+import { normalizeEscapedFences, collapseNestedMermaidFences, isMermaidFence } from '../lib/fences';
 
 /**
  * Markdown <-> Lexical, with two guarantees layered on top of
@@ -38,6 +40,7 @@ export const EDITOR_NODES = [
   LinkNode,
   VerbatimNode,
   WikiLinkNode,
+  MermaidNode,
 ];
 
 const SENTINEL = '⁣LOVELACE-VERBATIM-';
@@ -73,8 +76,51 @@ const WIKILINK: TextMatchTransformer = {
   type: 'text-match',
 };
 
-/** CHECK_LIST must outrank the bullet transformer or `- [ ]` reads as a bullet. */
-const BASE_TRANSFORMERS: Transformer[] = [CHECK_LIST, WIKILINK, ...TRANSFORMERS];
+/**
+ * A ```mermaid fence (and heuristic generic/empty-lang fences whose body
+ * looks like a diagram, matching isMermaidFence) imports as a MermaidNode
+ * instead of a CodeNode. `regExpEnd` is required (not optional), which also
+ * keeps this transformer out of the typing-shortcut path: a typed ```mermaid
+ * still makes a CodeNode, and only a full import re-parses it as a diagram.
+ *
+ * `regExpStart` matches exactly three backticks (the negative lookahead
+ * excludes a fourth). The built-in CODE transformer is fence-length-aware:
+ * it records the opener's exact backtick run and reuses it on export, so a
+ * 4+-backtick fence round-trips correctly through CODE regardless of what
+ * bare ``` lines appear in its body. Matching those here too would close at
+ * the first such line, corrupting otherwise-legal CommonMark on a zero-edit
+ * save. A 4+-backtick ```mermaid fence therefore stays a CodeNode in the live
+ * editor (rare in practice; usually the author is quoting a fence, where a
+ * code block is the right rendering anyway); read mode still renders it as a
+ * diagram regardless of fence length.
+ */
+const MERMAID: MultilineElementTransformer = {
+  type: 'multiline-element',
+  dependencies: [MermaidNode],
+  regExpStart: /^[ \t]*```(?!`)([\w-]*)[ \t]*$/,
+  regExpEnd: /^[ \t]*`{3,}[ \t]*$/,
+  export: (node) => ($isMermaidNode(node) ? `\`\`\`mermaid\n${node.getSource()}\n\`\`\`` : null),
+  replace: (rootNode, children, startMatch, _endMatch, linesInBetween, isImport) => {
+    if (!isImport || children !== null || linesInBetween === null) return false;
+    // The default multiline importer includes the empty remainders of the
+    // fence lines themselves (regExpStart/regExpEnd are full-line-anchored);
+    // drop exactly one from each end, never more, so a diagram body that
+    // legitimately starts or ends with a blank line keeps every byte.
+    const body = [...linesInBetween];
+    if (body[0] === '') body.shift();
+    if (body[body.length - 1] === '') body.pop();
+    const source = body.join('\n');
+    if (!isMermaidFence(startMatch[1] ?? '', source)) return false;
+    rootNode.append($createMermaidNode(source));
+  },
+};
+
+/**
+ * CHECK_LIST must outrank the bullet transformer or `- [ ]` reads as a bullet.
+ * MERMAID must come before the built-in TRANSFORMERS so it outranks CODE; a
+ * `replace` returning false falls through to CODE for non-mermaid fences.
+ */
+const BASE_TRANSFORMERS: Transformer[] = [CHECK_LIST, WIKILINK, MERMAID, ...TRANSFORMERS];
 
 export function buildTransformers(sources: string[]): Transformer[] {
   return [verbatimTransformer(sources), ...BASE_TRANSFORMERS];
