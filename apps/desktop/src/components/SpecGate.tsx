@@ -40,6 +40,18 @@ export function SpecGate({ code, declared, supported, plan, migrating, migrateEr
           <p className="spec-gate-body">
             It declares format {declared}; this Lovelace works with {major}.x.
           </p>
+          {plan && plan.releaseNotes.length > 0 && (
+            <div className="spec-gate-notes">
+              <h2 className="panel-heading">What's changing</h2>
+              <ul className="subtle">
+                {plan.releaseNotes.map((note) => (
+                  <li key={note.version}>
+                    <strong>{note.version}</strong>: {note.description}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {plan && (
             <div className="spec-gate-plan">
               {plan.steps.map((step, i) => (

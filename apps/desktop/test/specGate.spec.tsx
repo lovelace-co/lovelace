@@ -12,6 +12,10 @@ const plan: MigrationPlan = {
       changes: ['nest 4 fields under their types', 'rename workflow.yaml to schema.yaml'],
     },
   ],
+  releaseNotes: [
+    { version: '3.0.0', description: 'renames workflow.yaml to schema.yaml.' },
+    { version: '3.1.0', description: 'documents the version semantics.' },
+  ],
 };
 
 describe('SpecGate', () => {
@@ -55,6 +59,27 @@ describe('SpecGate', () => {
     expect(button.disabled).toBe(false);
     fireEvent.click(button);
     expect(onMigrate).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the release notes as a section ahead of the technical plan', () => {
+    render(
+      <SpecGate code="spec-needs-migration" declared="2.1.0" supported="3.0.0" plan={plan} />,
+    );
+    expect(screen.getByRole('heading', { name: "What's changing" })).toBeTruthy();
+    expect(screen.getByText(/renames workflow\.yaml to schema\.yaml\./)).toBeTruthy();
+    expect(screen.getByText(/documents the version semantics\./)).toBeTruthy();
+  });
+
+  it('renders no release-notes section when the plan has none', () => {
+    render(
+      <SpecGate
+        code="spec-needs-migration"
+        declared="2.1.0"
+        supported="3.0.0"
+        plan={{ ...plan, releaseNotes: [] }}
+      />,
+    );
+    expect(screen.queryByRole('heading', { name: "What's changing" })).toBeNull();
   });
 
   it('disables the button while migrating and surfaces a failure message', () => {

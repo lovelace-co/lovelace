@@ -2121,6 +2121,16 @@ input[type='checkbox'] {
   gap: var(--sp-2);
 }
 
+/* The release notes read the same way, ahead of the technical plan below. */
+.spec-gate-notes {
+  width: 100%;
+  max-width: 30rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
 /* ---------- block editor ---------- */
 
 .block-editor {
