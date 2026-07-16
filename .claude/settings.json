@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js digest"
+            "command": "node ./packages/mcp/dist/helper.js digest"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js session-check"
+            "command": "node ./packages/mcp/dist/helper.js session-check"
           }
         ]
       }
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js guard"
+            "command": "node ./packages/mcp/dist/helper.js guard"
           }
         ],
         "matcher": "Edit|Write"
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js presence-start"
+            "command": "node ./packages/mcp/dist/helper.js presence-start"
           }
         ]
       }
@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js presence-clear"
+            "command": "node ./packages/mcp/dist/helper.js presence-clear"
           }
         ]
       }
@@ -56,7 +56,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js track-active"
+            "command": "node ./packages/mcp/dist/helper.js track-active"
           }
         ],
         "matcher": "mcp__lovelace__set_active_ticket"
@@ -65,7 +65,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/helper.js presence-beat"
+            "command": "node ./packages/mcp/dist/helper.js presence-beat"
           }
         ]
       }
