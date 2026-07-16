@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { MermaidDiagram } from '../components/MermaidDiagram';
-import { normalizeEscapedFences, collapseNestedMermaidFences, extractInnerMermaidFence, matchFenceOpen, isFenceClose } from './fences';
+import { normalizeEscapedFences, collapseNestedMermaidFences, extractInnerMermaidFence, matchFenceOpen, isFenceClose, isMermaidFence } from './fences';
 import type { LinkResolver, OpenLink } from './links';
 
 /**
@@ -11,24 +11,9 @@ import type { LinkResolver, OpenLink } from './links';
  * pulling in an HTML pipeline.
  */
 
-const MERMAID_STARTERS =
-  /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram-v2|stateDiagram|erDiagram|journey|gantt|pie|gitGraph|mindmap|timeline|quadrantChart|sankey-beta|xychart-beta|block-beta|C4Context|C4Container|C4Component|C4Dynamic|C4Deployment)\b/i;
-
-/** Language tags that carry no type information and may hide a Mermaid diagram. */
-const GENERIC_LANGS = new Set(['', 'text', 'txt', 'plain']);
-
-/**
- * Returns true when a fenced code block should be treated as a Mermaid diagram.
- * Matches explicit `mermaid` tags (any case) and generic/empty tags whose first
- * non-empty body line begins with a recognised Mermaid diagram type keyword.
- */
-export function isMermaidFence(lang: string, body: string): boolean {
-  const normalLang = lang.toLowerCase().trim();
-  if (normalLang === 'mermaid') return true;
-  if (!GENERIC_LANGS.has(normalLang)) return false;
-  const firstLine = body.split('\n').find((l) => l.trim() !== '') ?? '';
-  return MERMAID_STARTERS.test(firstLine.trim());
-}
+// The mermaid heuristic lives in ./fences (pure string logic, no React); it is
+// re-exported here so callers that import it alongside Markdown are unaffected.
+export { isMermaidFence } from './fences';
 
 /** Resolver + open handler for `[[id]]` wiki-links; absent = render them inert. */
 interface WikiCtx {

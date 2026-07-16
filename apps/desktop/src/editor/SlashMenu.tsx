@@ -23,6 +23,7 @@ import {
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { LinkKind, ReferenceCandidate } from '../lib/links';
+import { insertMermaid } from './MermaidNode';
 import { $createWikiLinkNode } from './WikiLinkNode';
 
 /** One entry in the unified insert menu, tagged with the section it belongs to. */
@@ -72,6 +73,7 @@ function formatOptions(): SlashOption[] {
     new SlashOption('Task list', 'Punchable checkboxes', ['todo', 'task', 'check'], (e) => e.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined), 'Format'),
     new SlashOption('Quote', 'Pulled aside', ['quote', 'blockquote'], blockSetter(() => $createQuoteNode()), 'Format'),
     new SlashOption('Code block', 'Fenced code', ['code', 'fence'], blockSetter(() => $createCodeNode()), 'Format'),
+    new SlashOption('Diagram', 'Mermaid diagram', ['mermaid', 'diagram', 'flowchart', 'chart'], (e) => insertMermaid(e), 'Format'),
   ];
 }
 

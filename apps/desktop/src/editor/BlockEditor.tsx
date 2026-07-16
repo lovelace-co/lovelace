@@ -42,6 +42,8 @@ import { ReferencePicker } from '../components/ReferencePicker';
 import type { LinkResolver, OpenLink, ReferenceCandidate } from '../lib/links';
 import { buildTransformers, EDITOR_NODES, prepareMarkdown, reconcile } from './convert';
 import { DragHandlePlugin } from './DragHandlePlugin';
+import { insertMermaid } from './MermaidNode';
+import { MermaidModalPlugin } from './MermaidModalPlugin';
 import { SlashMenuPlugin } from './SlashMenu';
 import { $createWikiLinkNode, WikiLinkContext, type WikiLinkController } from './WikiLinkNode';
 
@@ -145,6 +147,7 @@ export function BlockEditor({
           </div>
           {!readOnly && <SlashMenuPlugin candidates={candidates} />}
           {!readOnly && <DragHandlePlugin anchorElem={anchorElem} />}
+          {!readOnly && <MermaidModalPlugin />}
           <HistoryPlugin />
           <ListPlugin />
           <CheckListPlugin />
@@ -222,6 +225,7 @@ const BLOCK_OPTIONS = [
   ['check', 'Task list'],
   ['quote', 'Quote'],
   ['code', 'Code block'],
+  ['diagram', 'Diagram'],
 ] as const;
 
 type BlockType = (typeof BLOCK_OPTIONS)[number][0];
@@ -290,6 +294,9 @@ function Toolbar({ candidates = [] }: { candidates?: ReferenceCandidate[] }) {
     if (type === 'bullet') return editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
     if (type === 'number') return editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
     if (type === 'check') return editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined);
+    // A diagram is a decorator, not an element block: $setBlocksType cannot
+    // convert into it, so insert a fresh mermaid block instead.
+    if (type === 'diagram') return insertMermaid(editor);
     editor.update(() => {
       const selection = $getSelection();
       if (!$isRangeSelection(selection)) return;

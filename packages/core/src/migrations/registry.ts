@@ -8,6 +8,8 @@ import { MutationError } from '../mutate.js';
 import type { MutationContext } from '../mutate.js';
 import type { ValidationIssue } from '../types.js';
 import { SUPPORTED_SPEC_MAJOR } from '../version.js';
+import { changelogBetween } from '../changelog.js';
+import type { ChangelogEntry } from '../changelog.js';
 import type { MigrationPlan, MigrationStep } from './types.js';
 import { v2ToV3 } from './v2-to-v3.js';
 
@@ -74,11 +76,19 @@ function readDeclaredSpecVersion(root: string): string {
  * SPEC_VERSION: the declared version is a floor (ADR-0011), and a migration
  * never claims a minor or patch no step produced.
  */
-export function planProjectMigration(root: string): { declared: string; target: string; steps: MigrationPlan[] } {
+export function planProjectMigration(
+  root: string,
+): { declared: string; target: string; steps: MigrationPlan[]; releaseNotes: ChangelogEntry[] } {
   const declared = readDeclaredSpecVersion(root);
   const steps = migrationPath(Number(declared.split('.')[0]));
   const lastStep = steps[steps.length - 1];
-  return { declared, target: `${lastStep.to}.0.0`, steps: steps.map((step) => step.plan(root)) };
+  const target = `${lastStep.to}.0.0`;
+  return {
+    declared,
+    target,
+    steps: steps.map((step) => step.plan(root)),
+    releaseNotes: changelogBetween(declared, target),
+  };
 }
 
 /**

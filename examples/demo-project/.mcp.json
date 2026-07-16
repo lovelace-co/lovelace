@@ -1,8 +1,10 @@
 {
   "mcpServers": {
     "lovelace": {
-      "command": "lovelace-mcp",
-      "args": [],
+      "command": "node",
+      "args": [
+        "../../packages/mcp/dist/server.js"
+      ],
       "env": {
         "LOVELACE_ROOT": "."
       }

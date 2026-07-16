@@ -151,6 +151,8 @@ export interface MigrationPlan {
   declared: string;
   target: string;
   steps: MigrationPlanStep[];
+  /** SPEC.md changelog entries strictly newer than declared, up to and including target. */
+  releaseNotes: { version: string; description: string }[];
 }
 
 /** The result of running the migration chain. */

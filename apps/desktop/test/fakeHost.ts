@@ -25,6 +25,7 @@ export class FakeHost implements HostClient {
         changes: ['nest 4 fields under their types', 'rename workflow.yaml to schema.yaml'],
       },
     ],
+    releaseNotes: [{ version: '3.0.0', description: 'renames workflow.yaml to schema.yaml.' }],
   };
   migrationResultData: MigrationResult = {
     declared: '2.1.0',

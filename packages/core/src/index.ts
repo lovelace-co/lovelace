@@ -63,3 +63,5 @@ export { defaultSchema, serializeSchema } from './schema-config.js';
 export { watchProject } from './watch.js';
 export { migrationPath, planProjectMigration, migrateProject } from './migrations/registry.js';
 export type { MigrationPlan, MigrationStep } from './migrations/types.js';
+export { changelogBetween, SPEC_CHANGELOG } from './changelog.js';
+export type { ChangelogEntry } from './changelog.js';

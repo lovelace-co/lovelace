@@ -81,6 +81,17 @@ describe('planProjectMigration', () => {
     expect(readFileSync(join(root, '.lovelace/manifest.yaml'), 'utf8')).toBe(manifestBefore);
   });
 
+  it('includes release notes from the changelog, declared exclusive and target inclusive', () => {
+    const root = v2Root();
+    const result = planProjectMigration(root);
+
+    // Declared is 2.0.0, target is 3.0.0: every changelog entry strictly
+    // above 2.0.0 up to and including 3.0.0, ascending, and nothing above.
+    expect(result.releaseNotes.map((n) => n.version)).toEqual(['2.1.0', '3.0.0']);
+    expect(result.releaseNotes[0]!.description).toMatch(/presence_timeout_minutes/);
+    expect(result.releaseNotes[1]!.description).toMatch(/renames `workflow\.yaml` to `schema\.yaml`/);
+  });
+
   it('reports removal of state/agent_instructions.json and index/actions.log when present', () => {
     const root = v2Root();
     mkdirSync(join(root, '.lovelace/state'), { recursive: true });

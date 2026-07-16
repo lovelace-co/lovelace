@@ -3,7 +3,7 @@
     "lovelace": {
       "command": "node",
       "args": [
-        "/Users/lambros/Apps/lovelace/lovelace-co/lovelace/packages/mcp/dist/server.js"
+        "./packages/mcp/dist/server.js"
       ],
       "env": {
         "LOVELACE_ROOT": "."
