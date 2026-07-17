@@ -22,6 +22,7 @@ import {
 import type { Schema, FieldDef } from '@lovelace/core';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { APP_VERSION } from './version.js';
 
 function agentActor(root: string): string {
   const project = loadProject(root);
@@ -156,7 +157,7 @@ function text(value: unknown): { content: Array<{ type: 'text'; text: string }> 
 }
 
 export function buildServer(root: string): McpServer {
-  const server = new McpServer({ name: 'lovelace', version: '0.1.0' });
+  const server = new McpServer({ name: 'lovelace', version: APP_VERSION });
 
   // A snapshot of the schema taken at registration: it drives the generated
   // tool descriptions and the create_ticket type enum below. Core reloads

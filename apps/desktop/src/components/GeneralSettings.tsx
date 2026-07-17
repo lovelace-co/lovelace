@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { CloseIcon } from './icons';
 import { Dropdown } from './Dropdown';
 import { SessionsModal } from './SessionsModal';
@@ -59,6 +60,12 @@ export function GeneralSettings({
   const [sessionsInitialOpen, setSessionsInitialOpen] = useState<string | null>(null);
   const [problemsOpen, setProblemsOpen] = useState(false);
   const [bugError, setBugError] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  useEffect(() => {
+    void getVersion()
+      .then(setAppVersion)
+      .catch(() => undefined);
+  }, []);
   useEffect(() => {
     if (!digestOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -237,6 +244,7 @@ export function GeneralSettings({
         >
           Report a bug
         </button>
+        {appVersion && <p className="subtle">Lovelace {appVersion}</p>}
       </div>
     </div>
   );

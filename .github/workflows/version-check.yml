@@ -1,0 +1,17 @@
+name: version-check
+
+# Checks every version declaration site against the canonical root
+# package.json version on every pull request, so drift is caught before it
+# reaches the release workflow.
+
+on: [pull_request, workflow_dispatch]
+
+jobs:
+  version-check:
+    name: version-check
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version sync
+        run: node scripts/release/sync-version.mjs check
