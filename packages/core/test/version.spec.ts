@@ -6,18 +6,19 @@ describe('classifySpecVersion', () => {
     expect(classifySpecVersion('4.0.0')).toBe('too-new');
   });
 
-  it('classifies a lower major as needs-migration', () => {
-    expect(classifySpecVersion('2.1.0')).toBe('needs-migration');
+  // Unreachable while the supported major is 0: no major sits below it. The
+  // case re-engages when a breaking bump raises the spec major.
+  it.skip('classifies a lower major as needs-migration', () => {
+    expect(classifySpecVersion('0.0.1')).toBe('needs-migration');
   });
 
   it('classifies the same major as ok regardless of minor or patch', () => {
-    expect(classifySpecVersion('3.0.0')).toBe('ok');
-    expect(classifySpecVersion('3.9.9')).toBe('ok');
+    expect(classifySpecVersion('0.0.1')).toBe('ok');
+    expect(classifySpecVersion('0.9.9')).toBe('ok');
   });
 
-  it('classifies both the 3.0.0 floor and the current 3.2.0 as ok (ADR-0011: the declared version is a floor)', () => {
-    expect(classifySpecVersion('3.0.0')).toBe('ok');
-    expect(classifySpecVersion('3.2.0')).toBe('ok');
+  it('classifies the current 0.1.0 as ok (ADR-0011: the declared version is a floor)', () => {
+    expect(classifySpecVersion('0.1.0')).toBe('ok');
   });
 
   it('throws on a malformed version instead of comparing NaN', () => {
@@ -34,7 +35,7 @@ describe('SUPPORTED_SPEC_MAJOR', () => {
 });
 
 describe('SPEC_VERSION', () => {
-  it('is 3.2.0 (ADR-0011: tolerant reads and non-destructive writes)', () => {
-    expect(SPEC_VERSION).toBe('3.2.0');
+  it('is 0.1.0 (T-0109: the pre-release line matches the app version)', () => {
+    expect(SPEC_VERSION).toBe('0.1.0');
   });
 });

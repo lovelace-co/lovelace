@@ -1,3 +1,8 @@
+// Every suite here is skipped, not deleted (T-0109): the spec is renumbered
+// to 0.1.0 for the pre-release line, so with a supported major of 0 the
+// migration registry and the 2-to-3 step are retained but unreachable (a 2.x
+// or 3.x declaration now classifies as too-new, and nothing sits below major
+// 0). The suites re-engage when a breaking bump raises the spec major.
 import { describe, expect, it, afterEach } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -29,7 +34,7 @@ function fixtureRoot() {
   return f.root;
 }
 
-describe('migrationPath', () => {
+describe.skip('migrationPath', () => {
   it('chains from a declared major up to the supported major', () => {
     const steps = migrationPath(2);
     expect(steps.map((s) => `${s.from}->${s.to}`)).toEqual(['2->3']);
@@ -48,7 +53,7 @@ describe('migrationPath', () => {
   });
 });
 
-describe('planProjectMigration', () => {
+describe.skip('planProjectMigration', () => {
   it('lists the expected step and change lines without touching files', () => {
     const root = v2Root();
     const workflowBefore = readFileSync(join(root, '.lovelace/workflow.yaml'), 'utf8');
@@ -104,7 +109,7 @@ describe('planProjectMigration', () => {
   });
 });
 
-describe('migrateProject', () => {
+describe.skip('migrateProject', () => {
   it('rewrites workflow.yaml into schema.yaml, patches the manifest, and leaves a clean, reindexable project', () => {
     const root = v2Root();
     const dir = join(root, '.lovelace');
@@ -217,7 +222,7 @@ describe('migrateProject', () => {
   });
 });
 
-describe('hostile 2.x input', () => {
+describe.skip('hostile 2.x input', () => {
   it('refuses a missing workflow.yaml, naming the file', () => {
     const root = v2Root();
     rmSync(join(root, '.lovelace/workflow.yaml'));

@@ -29,25 +29,25 @@ describe('manifest', () => {
     const root = fixture();
     const manifest = loadManifest(join(root, '.lovelace'));
     expect(manifest.name).toBe('Orbit Weather Service');
-    expect(manifest.spec_version).toBe('3.0.0');
+    expect(manifest.spec_version).toBe('0.1.0');
     expect(manifest.paths.tickets).toBe('tickets');
   });
 
   it('refuses an unknown major spec version with a clear error', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('3.0.0', '4.0.0'));
-    expect(() => loadManifest(join(root, '.lovelace'))).toThrowError(/supports 3\.x/);
+    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('0.1.0', '4.0.0'));
+    expect(() => loadManifest(join(root, '.lovelace'))).toThrowError(/supports 0\.x/);
   });
 
   it('tolerates a newer minor version', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('3.0.0', '3.9.0'));
-    expect(loadManifest(join(root, '.lovelace')).spec_version).toBe('3.9.0');
+    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('0.1.0', '0.9.0'));
+    expect(loadManifest(join(root, '.lovelace')).spec_version).toBe('0.9.0');
   });
 
   it('a too-new project carries code, declared and supported on the ConfigError', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('3.0.0', '4.0.0'));
+    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('0.1.0', '4.0.0'));
     try {
       loadManifest(join(root, '.lovelace'));
       expect.unreachable('should have thrown');
@@ -60,9 +60,11 @@ describe('manifest', () => {
     }
   });
 
-  it('an older project carries code, declared and supported on the ConfigError', () => {
+  // Unreachable while the supported major is 0: no major sits below it. The
+  // case re-engages when a breaking bump raises the spec major.
+  it.skip('an older project carries code, declared and supported on the ConfigError', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('3.0.0', '2.1.0'));
+    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('0.1.0', '0.0.1'));
     try {
       loadManifest(join(root, '.lovelace'));
       expect.unreachable('should have thrown');
@@ -70,15 +72,16 @@ describe('manifest', () => {
       expect(e).toBeInstanceOf(ConfigError);
       const err = e as ConfigError;
       expect(err.code).toBe('spec-needs-migration');
-      expect(err.declared).toBe('2.1.0');
+      expect(err.declared).toBe('0.0.1');
       expect(err.supported).toBe(SPEC_VERSION);
       expect(err.message).toContain('migrate');
     }
   });
 
-  it('loadProject wraps the ConfigError into a ProjectError, preserving code, declared and supported', () => {
+  // Same skip reason as above: needs-migration cannot occur below major 0.
+  it.skip('loadProject wraps the ConfigError into a ProjectError, preserving code, declared and supported', () => {
     const root = fixture();
-    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('3.0.0', '2.1.0'));
+    corrupt(root, '.lovelace/manifest.yaml', (t) => t.replace('0.1.0', '0.0.1'));
     try {
       loadProject(root);
       expect.unreachable('should have thrown');
@@ -86,7 +89,7 @@ describe('manifest', () => {
       expect(e).toBeInstanceOf(ProjectError);
       const err = e as ProjectError;
       expect(err.code).toBe('spec-needs-migration');
-      expect(err.declared).toBe('2.1.0');
+      expect(err.declared).toBe('0.0.1');
       expect(err.supported).toBe(SPEC_VERSION);
     }
   });

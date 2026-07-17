@@ -267,16 +267,18 @@ describe('the MCP server', () => {
     );
   });
 
-  it('surfaces the migration classification for a project older than the supported major', async () => {
+  it('surfaces the version classification for a project newer than the supported major', async () => {
+    // The too-new branch is the reachable spec mismatch while the supported
+    // major is 0 (T-0109); nothing can classify needs-migration below it.
     const root = fixture();
     const manifestPath = join(root, '.lovelace/manifest.yaml');
-    writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replace('3.0.0', '2.1.0'));
+    writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replace('0.1.0', '4.0.0'));
 
     const client = await connect(root);
     const result = await client.callTool({ name: 'search', arguments: { query: 'weather' } });
     expect(result.isError).toBe(true);
     const content = result.content as Array<{ type: string; text: string }>;
-    expect(content[0]?.text).toContain('migrate');
+    expect(content[0]?.text).toContain('update lovelace');
   });
 
   it('falls back to the static descriptions and surfaces the config error per call when schema.yaml is broken', async () => {
