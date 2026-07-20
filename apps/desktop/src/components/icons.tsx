@@ -24,6 +24,7 @@ import {
   DocumentPlusIcon,
   TrashIcon as HeroTrashIcon,
   LockClosedIcon,
+  ShareIcon,
 } from '@heroicons/react/24/outline';
 
 /* Heroicons (outline) under the app's semantic names. Each wrapper bakes in a
@@ -84,6 +85,9 @@ export const FileIcon = make(DocumentIcon, 15);
 
 /** Ticket: the work item, for the reference toolbar. */
 export const TicketIcon = make(HeroTicketIcon, 15);
+
+/** Diagram: nodes and edges, for inserting a mermaid block. */
+export const DiagramIcon = make(ShareIcon, 15);
 
 /** Folder: the drawer. */
 export const FolderIcon = make(HeroFolderIcon, 15);

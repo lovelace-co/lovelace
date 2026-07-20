@@ -152,6 +152,14 @@ describe('BlockEditor component (Lexical)', () => {
     expect(next).toContain('Appended line.');
   });
 
+  it('the toolbar diagram button inserts a mermaid block and opens its modal (T-0136)', async () => {
+    renderEditor('hello\n');
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('insert a diagram'));
+    });
+    expect(screen.getByRole('heading', { name: 'New diagram' })).toBeTruthy();
+  });
+
   it('the link button opens an in-app dialog instead of window.prompt (T-0134)', () => {
     const promptSpy = vi.spyOn(window, 'prompt');
     renderEditor('Some body.\n');

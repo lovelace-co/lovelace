@@ -38,7 +38,7 @@ import {
 } from 'lexical';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from '../components/Dropdown';
-import { DocsIcon, FileIcon, TicketIcon } from '../components/icons';
+import { DiagramIcon, DocsIcon, FileIcon, TicketIcon } from '../components/icons';
 import { LinkPicker } from '../components/LinkPicker';
 import { ReferencePicker } from '../components/ReferencePicker';
 import type { LinkResolver, OpenLink, ReferenceCandidate } from '../lib/links';
@@ -407,6 +407,9 @@ function Toolbar({ candidates = [] }: { candidates?: ReferenceCandidate[] }) {
       </button>
       <button className="tool" aria-label="link a file" title="Link a file" onClick={() => setPicker('file')}>
         <FileIcon />
+      </button>
+      <button className="tool" aria-label="insert a diagram" title="Insert a diagram" onClick={() => insertMermaid(editor)}>
+        <DiagramIcon />
       </button>
       {picker && (
         <ReferencePicker
