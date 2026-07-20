@@ -6,6 +6,7 @@ import {
   INSERT_UNORDERED_LIST_COMMAND,
 } from '@lexical/list';
 import { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown';
+import { AutoFocusPlugin } from '@lexical/react/LexicalAutoFocusPlugin';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { CheckListPlugin } from '@lexical/react/LexicalCheckListPlugin';
@@ -145,6 +146,9 @@ export function BlockEditor({
               ErrorBoundary={LexicalErrorBoundary}
             />
           </div>
+          {/* Editors mount on intent (Edit, Add a comment), so the click that
+              created this editor expects the caret to be in it already. */}
+          {!readOnly && <AutoFocusPlugin />}
           {!readOnly && <SlashMenuPlugin candidates={candidates} />}
           {!readOnly && <DragHandlePlugin anchorElem={anchorElem} />}
           {!readOnly && <MermaidModalPlugin />}

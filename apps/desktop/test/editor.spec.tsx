@@ -108,6 +108,13 @@ describe('BlockEditor component (Lexical)', () => {
     expect(screen.getByText('A paragraph.')).toBeTruthy();
     expect(screen.queryByRole('toolbar')).toBeNull();
     expect(document.querySelector('.lexical-content')?.getAttribute('contenteditable')).toBe('false');
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('takes keyboard focus on mount, so Edit then type just works (T-0131)', async () => {
+    renderEditor('Some body.\n');
+    const content = document.querySelector('.lexical-content')!;
+    await waitFor(() => expect(document.activeElement).toBe(content));
   });
 
   it('task items render as punch holes with their checked state', () => {
