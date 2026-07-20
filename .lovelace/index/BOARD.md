@@ -28,7 +28,7 @@ _Empty._
 | T-0136 | Add a toolbar button to insert a mermaid diagram in the block editor | task |  |
 | T-0137 | Schema editor row styles leak into modal form rows and the diagram template label is lowercase | bug |  |
 
-## done (123)
+## done (124)
 
 | ID | Title | Type | Assignee |
 | --- | --- | --- | --- |
@@ -155,6 +155,7 @@ _Empty._
 | T-0133 | Remove references to Lambros Photios | bug |  |
 | T-0134 | Link button in the block editor toolbar does nothing when clicked | bug |  |
 | T-0135 | Link a ticket, document and file icons are not vertically centred in the editor toolbar | bug |  |
+| T-0138 | Report a bug link uses the wrong email domain | bug |  |
 
 ## cancelled (0)
 
