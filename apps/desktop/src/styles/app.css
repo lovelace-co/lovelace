@@ -2817,6 +2817,9 @@ input[type='checkbox'] {
 }
 
 .lexical-toolbar .tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
