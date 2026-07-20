@@ -20,7 +20,7 @@ describe('initProject', () => {
   it('scaffolds a project that validates cleanly', () => {
     const root = mkdtempSync(join(tmpdir(), 'lovelace-init-'));
     cleanups.push(() => rmSync(root, { recursive: true, force: true }));
-    const created = initProject(root, { name: 'Fresh Start', userName: 'Lambros', now: FIXED_NOW });
+    const created = initProject(root, { name: 'Fresh Start', userName: 'Ada', now: FIXED_NOW });
     expect(created).toContain('.lovelace/manifest.yaml');
     expect(created).toContain('.gitignore');
     const gitignore = readFileSync(join(root, '.gitignore'), 'utf8');

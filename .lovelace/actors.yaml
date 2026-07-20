@@ -1,6 +1,6 @@
 actors:
   - id: me
-    name: Lambros Photios
+    name: Fredy
     kind: human
   - id: claude
     name: Claude Code
