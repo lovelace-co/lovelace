@@ -120,9 +120,8 @@ verification against the committed pubkey still applies, and a debug
 build also accepts a plain `http://` endpoint (a release build requires
 `https://`).
 
-1. In a second checkout, bump `version` in
-   `apps/desktop/src-tauri/tauri.conf.json` and the root `package.json`
-   to something above the running version, for example `9.9.9`.
+1. In a second checkout, run `pnpm version:set 9.9.9` to bump every
+   version declaration above the running version.
 2. Build the update artifact there with the signing key:
 
    ```sh
@@ -160,6 +159,22 @@ build also accepts a plain `http://` endpoint (a release build requires
 
 ## Version bumps
 
-Bump `version` in `apps/desktop/src-tauri/tauri.conf.json` and the root
-`package.json` together. The updater compares against the running version,
-so a release without a bump will never be offered.
+The root `package.json` `version` is the canonical declaration. Run
+`pnpm version:set <x.y.z>` to update every other site in one step: the four
+package.json files (root, `packages/core`, `packages/mcp`,
+`apps/desktop`), `apps/desktop/src-tauri/tauri.conf.json`,
+`apps/desktop/src-tauri/Cargo.toml` and its matching entry in
+`apps/desktop/src-tauri/Cargo.lock`, and the MCP server's `APP_VERSION`
+constant in `packages/mcp/src/version.ts`. Run `pnpm version:check` to
+confirm every site agrees; this guards CI, and the release workflow
+refuses to build a tag whose version does not match.
+
+Once every site is updated, commit the change and tag `v<version>`. The
+updater compares against the running version, so a release without a
+bump will never be offered.
+
+At promotion time, the marketing website repository's `CURRENT_VERSION`
+in `src/consts.ts` (the sibling `../website` repo) must be updated by
+hand so the download buttons track the release. The staged publishing
+procedure that carries the release from this repository to the website
+is owned by ticket T-0117.

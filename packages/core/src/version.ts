@@ -3,7 +3,7 @@
  * validation, the host envelope, the app - routes version comparisons
  * through classifySpecVersion instead of comparing majors by hand.
  */
-export const SPEC_VERSION = '3.2.0';
+export const SPEC_VERSION = '0.1.0';
 export const SUPPORTED_SPEC_MAJOR = Number(SPEC_VERSION.split('.')[0]);
 
 /**

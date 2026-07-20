@@ -11,7 +11,9 @@
     "sidecars": "./apps/desktop/scripts/prepare-sidecars.sh",
     "app:build": "pnpm --filter @lovelace/desktop exec tauri build",
     "app:dev": "LOVELACE_HOST_JS=\"$(pwd)/packages/mcp/dist/host.js\" pnpm --filter @lovelace/desktop exec tauri dev",
-    "watch:packages": "pnpm --parallel --filter @lovelace/core --filter @lovelace/mcp exec tsc -p tsconfig.json --watch --preserveWatchOutput"
+    "watch:packages": "pnpm --parallel --filter @lovelace/core --filter @lovelace/mcp exec tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "version:set": "node scripts/release/sync-version.mjs set",
+    "version:check": "node scripts/release/sync-version.mjs check"
   },
   "packageManager": "pnpm@10.12.1"
 }

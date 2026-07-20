@@ -1,6 +1,6 @@
 # Lovelace Format Specification
 
-Version 3.2.0
+Version 0.1.0
 
 This document specifies the on-disk format of a Lovelace project. It is written so that a developer who has never seen Lovelace can create a valid `.lovelace/` directory by hand using only this document. Files conforming to this specification are the single source of truth for a project; anything derived from them (indexes, boards, digests) can be regenerated at any time.
 
@@ -82,7 +82,7 @@ Document files other than ADRs are identified by their repository-relative path;
 
 ## 4. Spec versioning
 
-This specification is versioned with semver. The current version is `3.2.0`.
+This specification is versioned with semver. The current version is `0.1.0`.
 
 - The manifest declares the spec version the project conforms to. Tooling reads `manifest.yaml` before parsing anything else.
 - A major version changes the shape of the format, and tooling refuses to operate across a major boundary. A project declaring a major above the tooling's own is refused with a clear error naming both versions and telling the user to update Lovelace. A project declaring a major below the tooling's own is not opened as-is either; it is offered a migration instead.
@@ -109,7 +109,7 @@ Changes by version:
 ## 5. manifest.yaml
 
 ```yaml
-spec_version: 3.2.0        # required, semver string
+spec_version: 0.1.0        # required, semver string
 project_id: 7f3a9c2e       # required, stable opaque string, assigned at init
 name: My Project           # required, display name
 created: 2026-06-10        # required, ISO date

@@ -109,7 +109,9 @@ describe('host op: error envelope', () => {
   it('carries code, declared, supported and file for a spec-mismatched project', async () => {
     const root = fixture();
     const manifestPath = join(root, '.lovelace/manifest.yaml');
-    writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replace('3.0.0', '2.1.0'));
+    // The too-new branch is the reachable spec mismatch while the supported
+    // major is 0 (T-0109); nothing can classify needs-migration below it.
+    writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replace('0.1.0', '4.0.0'));
 
     try {
       await handle({ op: 'snapshot', root });
@@ -118,8 +120,8 @@ describe('host op: error envelope', () => {
       const envelope = errorEnvelope(e);
       expect(envelope.ok).toBe(false);
       expect(envelope.error.kind).toBe('project');
-      expect(envelope.error.code).toBe('spec-needs-migration');
-      expect(envelope.error.declared).toBe('2.1.0');
+      expect(envelope.error.code).toBe('spec-too-new');
+      expect(envelope.error.declared).toBe('4.0.0');
       expect(envelope.error.supported).toBe(SPEC_VERSION);
       expect(envelope.error.file).toContain('manifest.yaml');
     }
@@ -177,10 +179,13 @@ function toV2Fixture(root: string): void {
   rmSync(join(root, '.lovelace/schema.yaml'));
   writeFileSync(join(root, '.lovelace/workflow.yaml'), V2_WORKFLOW_YAML);
   const manifestPath = join(root, '.lovelace/manifest.yaml');
-  writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replace('spec_version: 3.0.0', 'spec_version: 2.0.0'));
+  writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replace('spec_version: 0.1.0', 'spec_version: 2.0.0'));
 }
 
-describe('host ops: migration', () => {
+// Skipped, not deleted (T-0109): the spec is renumbered to 0.1.0, so a 2.x
+// declaration classifies as too-new and the migration ops are unreachable
+// until a breaking bump raises the spec major.
+describe.skip('host ops: migration', () => {
   it('migration_plan returns the plan for a 2.x fixture without touching files', async () => {
     const root = fixture();
     toV2Fixture(root);

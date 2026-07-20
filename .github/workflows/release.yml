@@ -70,13 +70,16 @@ jobs:
         id: version_guard
         run: |
           TAG="${GITHUB_REF_NAME}"
-          TAURI_VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
           ROOT_VERSION=$(node -p "require('./package.json').version")
-          if [ "$TAG" != "v$TAURI_VERSION" ] || [ "$ROOT_VERSION" != "$TAURI_VERSION" ]; then
-            echo "::error::version mismatch: tag is \"$TAG\", apps/desktop/src-tauri/tauri.conf.json version is \"$TAURI_VERSION\", root package.json version is \"$ROOT_VERSION\". All three must agree (tag = v<version>)."
+          if [ "$TAG" != "v$ROOT_VERSION" ]; then
+            echo "::error::version mismatch: tag is \"$TAG\", root package.json version is \"$ROOT_VERSION\". The tag must be v<version>."
             exit 1
           fi
-          echo "version=$TAURI_VERSION" >> "$GITHUB_OUTPUT"
+          if ! node scripts/release/sync-version.mjs check; then
+            echo "::error::every version declaration site must match root package.json; run pnpm version:set to fix."
+            exit 1
+          fi
+          echo "version=$ROOT_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Assert updater signing key is configured
         run: |
