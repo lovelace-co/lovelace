@@ -1,6 +1,6 @@
 import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
 export const FIXTURE_ROOT = resolve(__dirname, '../../../examples/demo-project');
 
@@ -16,8 +16,9 @@ export function tempFixture(): { root: string; cleanup: () => void } {
   cpSync(FIXTURE_ROOT, root, {
     recursive: true,
     filter: (src) => {
-      const base = src.split('/').pop() ?? '';
-      return !CLAUDE_RESIDUE.has(base);
+      // cpSync hands the filter OS-native separators (backslashes on
+      // Windows), so derive the basename with node:path, never split('/').
+      return !CLAUDE_RESIDUE.has(basename(src));
     },
   });
   return {
