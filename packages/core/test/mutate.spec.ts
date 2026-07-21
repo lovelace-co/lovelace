@@ -49,7 +49,9 @@ describe('ID assignment', () => {
     const root = fixture();
     const project = loadProject(root);
     const id = await nextId(project.dir, project.manifest, 'T');
-    expect(id).toBe('T-0005');
+    // Tracks the demo fixture's ticket count: T-0001 through T-0005 already
+    // exist, so the next assigned ID is T-0006.
+    expect(id).toBe('T-0006');
   });
 
   it('assigns unique IDs under concurrency', async () => {
@@ -70,7 +72,9 @@ describe('createTicket', () => {
       { type: 'task', fields: { title: 'Current conditions endpoint', estimate: 2 } },
       ctx,
     );
-    expect(ticket.id).toBe('T-0005');
+    // Tracks the demo fixture's ticket count: the next assigned ID after
+    // T-0001 through T-0005 is T-0006.
+    expect(ticket.id).toBe('T-0006');
     expect(ticket.status).toBe('backlog');
     expect(ticket.fields.title).toBe('Current conditions endpoint');
     const issues = validateProject(loadProject(root), { now: FIXED_NOW });
@@ -108,8 +112,10 @@ describe('createTicket', () => {
     const ticket = await createTicket(root, { type: 'task', fields: { title: 'No body ticket' } }, ctx);
     expect(ticket.body).toBe('');
     const content = readFileSync(join(root, ticket.path), 'utf8');
+    // Tracks the demo fixture's ticket count: the next assigned ID after
+    // T-0001 through T-0005 is T-0006.
     expect(content).toBe(
-      '---\nid: T-0005\ntype: task\nstatus: backlog\ncreated: 2026-06-10T12:00:00Z\nupdated: 2026-06-10T12:00:00Z\ntitle: No body ticket\n---\n',
+      '---\nid: T-0006\ntype: task\nstatus: backlog\ncreated: 2026-06-10T12:00:00Z\nupdated: 2026-06-10T12:00:00Z\ntitle: No body ticket\n---\n',
     );
   });
 
@@ -133,8 +139,10 @@ describe('createTicket', () => {
     );
     expect(ticket.body.trim()).toBe('## Description\n\nCustom text.');
     const content = readFileSync(join(root, ticket.path), 'utf8');
+    // Tracks the demo fixture's ticket count: the next assigned ID after
+    // T-0001 through T-0005 is T-0006.
     expect(content).toBe(
-      '---\nid: T-0005\ntype: task\nstatus: backlog\ncreated: 2026-06-10T12:00:00Z\nupdated: 2026-06-10T12:00:00Z\ntitle: Has a body\n---\n\n## Description\n\nCustom text.\n',
+      '---\nid: T-0006\ntype: task\nstatus: backlog\ncreated: 2026-06-10T12:00:00Z\nupdated: 2026-06-10T12:00:00Z\ntitle: Has a body\n---\n\n## Description\n\nCustom text.\n',
     );
   });
 
@@ -145,7 +153,9 @@ describe('createTicket', () => {
     ).rejects.toThrow(
       /unknown field "prio" for type "task"; defined fields: title, parent, depends_on, assignee, priority, estimate/,
     );
-    expect(existsSync(join(root, '.lovelace/tickets/T-0005.md'))).toBe(false);
+    // Tracks the demo fixture's ticket count: the rejected create would
+    // otherwise have landed at T-0006, the next ID after T-0001 through T-0005.
+    expect(existsSync(join(root, '.lovelace/tickets/T-0006.md'))).toBe(false);
   });
 
   it('redirects a fields.body key to the body parameter', async () => {
@@ -153,7 +163,9 @@ describe('createTicket', () => {
     await expect(
       createTicket(root, { type: 'task', fields: { title: 'x', body: 'nope' } }, ctx),
     ).rejects.toThrow('"body" is not a frontmatter field; pass the ticket body with the body parameter');
-    expect(existsSync(join(root, '.lovelace/tickets/T-0005.md'))).toBe(false);
+    // Tracks the demo fixture's ticket count: the rejected create would
+    // otherwise have landed at T-0006, the next ID after T-0001 through T-0005.
+    expect(existsSync(join(root, '.lovelace/tickets/T-0006.md'))).toBe(false);
   });
 });
 
@@ -380,8 +392,10 @@ describe('active ticket state', () => {
     await createTicket(root, { type: 'task', fields: { title: 'One' } }, ctx);
     rmSync(join(root, '.lovelace/state'), { recursive: true, force: true });
     const ticket = await createTicket(root, { type: 'task', fields: { title: 'Two' } }, ctx);
-    expect(ticket.id).toBe('T-0006');
-    expect(existsSync(join(root, '.lovelace/tickets/T-0006.md'))).toBe(true);
+    // Tracks the demo fixture's ticket count: "One" above takes T-0006 (the
+    // next ID after T-0001 through T-0005), so "Two" rescans to T-0007.
+    expect(ticket.id).toBe('T-0007');
+    expect(existsSync(join(root, '.lovelace/tickets/T-0007.md'))).toBe(true);
   });
 });
 

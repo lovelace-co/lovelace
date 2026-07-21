@@ -35,6 +35,9 @@ describe('host ops: delete and board order', () => {
 
   it('set_column_order persists order and surfaces it as boardOrder', async () => {
     const root = fixture();
+    // The demo fixture ships its own board-order.yaml (added alongside
+    // T-0005); remove it so "before" reflects a project with no manual order yet.
+    rmSync(join(root, '.lovelace/board-order.yaml'), { force: true });
     const before = await handle({ op: 'snapshot', root });
     expect(before.boardOrder).toEqual({});
     const todo = (before.index as { tickets: IndexTicket[] }).tickets

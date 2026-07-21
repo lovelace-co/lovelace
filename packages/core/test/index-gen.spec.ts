@@ -48,12 +48,15 @@ describe('index.json', () => {
   it('contains every entity with frontmatter and summary, sorted', () => {
     const root = fixture();
     const index = buildIndex(loadProject(root)) as Record<string, unknown[]>;
+    // Tracks the demo fixture's ticket count: T-0001 through T-0005 exist,
+    // so this list moves whenever a ticket is added to or removed from it.
     expect((index.tickets as Array<{ id: string }>).map((t) => t.id)).toEqual([
       'E-0001',
       'T-0001',
       'T-0002',
       'T-0003',
       'T-0004',
+      'T-0005',
     ]);
     const documents = index.documents as Array<{ id: string; summary: string }>;
     expect(documents.length).toBe(6);

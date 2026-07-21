@@ -92,7 +92,9 @@ describe('the MCP server', () => {
       }),
     );
     const ticket = created.ticket as { id: string; status: string };
-    expect(ticket.id).toBe('T-0005');
+    // Tracks the demo fixture's ticket count: the next assigned ID after
+    // T-0001 through T-0005 is T-0006.
+    expect(ticket.id).toBe('T-0006');
     expect(ticket.status).toBe('backlog');
 
     const moved = parse(

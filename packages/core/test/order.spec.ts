@@ -1,4 +1,6 @@
 import { describe, expect, it, afterEach } from 'vitest';
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { setColumnOrder, readBoardOrder, loadProject } from '../src/index.js';
 import { tempFixture } from './helpers.js';
 
@@ -49,6 +51,9 @@ describe('board order', () => {
   it('returns an empty map when no order file exists', () => {
     const root = fixture();
     const project = loadProject(root);
+    // The demo fixture ships its own board-order.yaml (added alongside
+    // T-0005); remove it here to exercise the true no-file fallback.
+    rmSync(join(project.dir, 'board-order.yaml'), { force: true });
     expect(readBoardOrder(project.dir)).toEqual({});
   });
 });
