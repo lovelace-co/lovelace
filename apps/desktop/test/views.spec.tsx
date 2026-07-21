@@ -681,7 +681,7 @@ describe('Settings view', () => {
     const link = screen.getByRole('button', { name: 'Report a bug' });
     expect(link).toBeTruthy();
     fireEvent.click(link);
-    expect(openUrlSpy).toHaveBeenCalledWith('mailto:contact@lovelace.sh');
+    expect(openUrlSpy).toHaveBeenCalledWith('mailto:contact@lovelace.co');
     openUrlSpy.mockRestore();
   });
 

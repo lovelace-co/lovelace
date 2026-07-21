@@ -237,7 +237,7 @@ export function GeneralSettings({
           type="button"
           className="link-tertiary"
           onClick={() => {
-            void openUrl('mailto:contact@lovelace.sh').catch((e) => {
+            void openUrl('mailto:contact@lovelace.co').catch((e) => {
               setBugError(e instanceof Error ? e.message : 'Could not open the mail app.');
             });
           }}

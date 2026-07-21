@@ -1,11 +1,12 @@
 import { $createCodeNode } from '@lexical/code';
-import { TOGGLE_LINK_COMMAND } from '@lexical/link';
+import { $createLinkNode, $isLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link';
 import {
   INSERT_CHECK_LIST_COMMAND,
   INSERT_ORDERED_LIST_COMMAND,
   INSERT_UNORDERED_LIST_COMMAND,
 } from '@lexical/list';
 import { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown';
+import { AutoFocusPlugin } from '@lexical/react/LexicalAutoFocusPlugin';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { CheckListPlugin } from '@lexical/react/LexicalCheckListPlugin';
@@ -37,7 +38,8 @@ import {
 } from 'lexical';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from '../components/Dropdown';
-import { DocsIcon, FileIcon, TicketIcon } from '../components/icons';
+import { DiagramIcon, DocsIcon, FileIcon, TicketIcon } from '../components/icons';
+import { LinkPicker } from '../components/LinkPicker';
 import { ReferencePicker } from '../components/ReferencePicker';
 import type { LinkResolver, OpenLink, ReferenceCandidate } from '../lib/links';
 import { buildTransformers, EDITOR_NODES, prepareMarkdown, reconcile } from './convert';
@@ -145,6 +147,9 @@ export function BlockEditor({
               ErrorBoundary={LexicalErrorBoundary}
             />
           </div>
+          {/* Editors mount on intent (Edit, Add a comment), so the click that
+              created this editor expects the caret to be in it already. */}
+          {!readOnly && <AutoFocusPlugin />}
           {!readOnly && <SlashMenuPlugin candidates={candidates} />}
           {!readOnly && <DragHandlePlugin anchorElem={anchorElem} />}
           {!readOnly && <MermaidModalPlugin />}
@@ -239,6 +244,50 @@ function Toolbar({ candidates = [] }: { candidates?: ReferenceCandidate[] }) {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [picker, setPicker] = useState<'ticket' | 'document' | 'file' | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  // Captured at open time, from the same editor.read as linkUrl, since the
+  // DOM selection can move once the modal steals focus.
+  const [linkCollapsed, setLinkCollapsed] = useState(false);
+  const [linkInside, setLinkInside] = useState(false);
+
+  const openLinkPicker = () => {
+    editor.read(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) return;
+      const anchor = selection.anchor.getNode();
+      const link = $findMatchingParent(anchor, $isLinkNode);
+      setLinkUrl(link ? link.getURL() : '');
+      setLinkInside(link !== null);
+      setLinkCollapsed(selection.isCollapsed());
+      setLinkOpen(true);
+    });
+  };
+
+  const submitLink = (url: string) => {
+    if (linkCollapsed && !linkInside) {
+      // Mirrors insertReference below: the URL becomes its own link text,
+      // followed by a space so typing continues outside the link.
+      editor.update(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) return;
+        const link = $createLinkNode(url);
+        link.append($createTextNode(url));
+        selection.insertNodes([link]);
+        const space = $createTextNode(' ');
+        link.insertAfter(space);
+        space.select(1, 1);
+      });
+    } else {
+      editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
+    }
+    setLinkOpen(false);
+  };
+
+  const removeLink = () => {
+    editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
+    setLinkOpen(false);
+  };
 
   /** Insert a reference chip at the current selection (retained across the picker). */
   const insertReference = (token: string) => {
@@ -346,14 +395,7 @@ function Toolbar({ candidates = [] }: { candidates?: ReferenceCandidate[] }) {
       >
         {'<>'}
       </button>
-      <button
-        className="tool"
-        aria-label="link"
-        onClick={() => {
-          const url = window.prompt('Link URL');
-          if (url) editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
-        }}
-      >
+      <button className="tool" aria-label="link" onClick={openLinkPicker}>
         ∞
       </button>
       <span className="tool-gap" />
@@ -366,12 +408,23 @@ function Toolbar({ candidates = [] }: { candidates?: ReferenceCandidate[] }) {
       <button className="tool" aria-label="link a file" title="Link a file" onClick={() => setPicker('file')}>
         <FileIcon />
       </button>
+      <button className="tool" aria-label="insert a diagram" title="Insert a diagram" onClick={() => insertMermaid(editor)}>
+        <DiagramIcon />
+      </button>
       {picker && (
         <ReferencePicker
           title={pickerTitle}
           candidates={candidates.filter((c) => c.kind === picker)}
           onPick={insertReference}
           onClose={() => setPicker(null)}
+        />
+      )}
+      {linkOpen && (
+        <LinkPicker
+          initialUrl={linkUrl}
+          onSubmit={submitLink}
+          onRemove={linkInside ? removeLink : undefined}
+          onClose={() => setLinkOpen(false)}
         />
       )}
     </div>

@@ -2,7 +2,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { $createParagraphNode, $createTextNode, $getRoot, type LexicalEditor } from 'lexical';
+import { $isLinkNode } from '@lexical/link';
+import { $createParagraphNode, $createTextNode, $getRoot, $isElementNode, $isTextNode, type LexicalEditor } from 'lexical';
 import { BlockEditor } from '../src/editor/BlockEditor';
 import { editBlock, parseBlocks, serialiseBlocks } from '../src/editor/blocks';
 import { normalFormOf } from '../src/editor/convert';
@@ -108,6 +109,13 @@ describe('BlockEditor component (Lexical)', () => {
     expect(screen.getByText('A paragraph.')).toBeTruthy();
     expect(screen.queryByRole('toolbar')).toBeNull();
     expect(document.querySelector('.lexical-content')?.getAttribute('contenteditable')).toBe('false');
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('takes keyboard focus on mount, so Edit then type just works (T-0131)', async () => {
+    renderEditor('Some body.\n');
+    const content = document.querySelector('.lexical-content')!;
+    await waitFor(() => expect(document.activeElement).toBe(content));
   });
 
   it('task items render as punch holes with their checked state', () => {
@@ -142,6 +150,88 @@ describe('BlockEditor component (Lexical)', () => {
     expect(next).toContain('* odd  bullet');
     expect(next).toContain('Old text.');
     expect(next).toContain('Appended line.');
+  });
+
+  it('the toolbar diagram button inserts a mermaid block and opens its modal (T-0136)', async () => {
+    renderEditor('hello\n');
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('insert a diagram'));
+    });
+    expect(screen.getByRole('heading', { name: 'New diagram' })).toBeTruthy();
+  });
+
+  it('the link button opens an in-app dialog instead of window.prompt (T-0134)', () => {
+    const promptSpy = vi.spyOn(window, 'prompt');
+    renderEditor('Some body.\n');
+    fireEvent.click(screen.getByLabelText('link'));
+    expect(screen.getByRole('dialog', { name: 'Link a URL' })).toBeTruthy();
+    expect(screen.getByLabelText('link url')).toBeTruthy();
+    expect(promptSpy).not.toHaveBeenCalled();
+  });
+
+  it('linking selected text wraps it in a markdown link (T-0134)', async () => {
+    const source = 'Some body.\n';
+    const { onChange, editor } = renderEditor(source);
+    await act(async () => {
+      editor().update(() => {
+        const paragraph = $getRoot().getFirstChild();
+        if (!$isElementNode(paragraph)) throw new Error('expected an element node');
+        const text = paragraph.getFirstChild();
+        if (!$isTextNode(text)) throw new Error('expected a text node');
+        text.select(0, text.getTextContent().length);
+      });
+    });
+    fireEvent.click(screen.getByLabelText('link'));
+    const input = screen.getByLabelText('link url');
+    fireEvent.change(input, { target: { value: 'https://example.com' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await act(async () => {
+      document.querySelector('.lexical-content')?.dispatchEvent(new FocusEvent('blur'));
+    });
+    expect(onChange).toHaveBeenCalled();
+    const next = onChange.mock.calls[onChange.mock.calls.length - 1]![0] as string;
+    expect(next).toContain('https://example.com');
+    expect(next).toContain('](');
+    expect(screen.queryByRole('dialog', { name: 'Link a URL' })).toBeNull();
+  });
+
+  it('Escape closes the link dialog without emitting a change (T-0134)', () => {
+    const { onChange } = renderEditor('Some body.\n');
+    fireEvent.click(screen.getByLabelText('link'));
+    const input = screen.getByLabelText('link url');
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Link a URL' })).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('clicking inside an existing link prefills its URL and offers Remove (T-0134)', async () => {
+    const source = 'Visit [docs](https://old.example) now.\n';
+    const { onChange, editor } = renderEditor(source);
+    await act(async () => {
+      editor().update(() => {
+        const paragraph = $getRoot().getFirstChild();
+        if (!$isElementNode(paragraph)) throw new Error('expected an element node');
+        const linkNode = paragraph.getChildren().find($isLinkNode);
+        if (!linkNode) throw new Error('expected a link node');
+        const text = linkNode.getFirstChild();
+        if (!$isTextNode(text)) throw new Error('expected a text node');
+        text.select(1, 1);
+      });
+    });
+    fireEvent.click(screen.getByLabelText('link'));
+    const input = screen.getByLabelText('link url') as HTMLInputElement;
+    expect(input.value).toBe('https://old.example');
+    const removeButton = screen.getByRole('button', { name: 'Remove link' });
+    await act(async () => {
+      fireEvent.pointerDown(removeButton);
+    });
+    await act(async () => {
+      document.querySelector('.lexical-content')?.dispatchEvent(new FocusEvent('blur'));
+    });
+    expect(onChange).toHaveBeenCalled();
+    const next = onChange.mock.calls[onChange.mock.calls.length - 1]![0] as string;
+    expect(next).not.toContain('](https://old.example)');
+    expect(next).toContain('docs');
   });
 });
 

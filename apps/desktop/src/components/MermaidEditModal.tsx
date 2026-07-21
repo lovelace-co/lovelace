@@ -59,7 +59,7 @@ export function MermaidEditModal({ initialSource, isNew, onSave, onCancel }: Mer
         <h2>{isNew ? 'New diagram' : 'Edit diagram'}</h2>
         {isNew && (
           <div className="field-row">
-            <span className="label">template</span>
+            <span className="label">Template</span>
             <Dropdown
               aria-label="diagram template"
               width="100%"

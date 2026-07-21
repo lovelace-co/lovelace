@@ -42,12 +42,12 @@ export function NewTicketModal({ snapshot, initialStatus, onClose, onCreate }: N
         <h2>New ticket</h2>
         {initialStatus !== undefined && (
           <div className="field-row">
-            <span className="label">column</span>
+            <span className="label">Column</span>
             <span className="id-chip">{statusLabel(snapshot.schema.statuses.find((st) => st.name === initialStatus) ?? { name: initialStatus })}</span>
           </div>
         )}
         <div className="field-row">
-          <span className="label">type</span>
+          <span className="label">Type</span>
           <Dropdown
             aria-label="ticket type"
             width="100%"

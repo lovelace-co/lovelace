@@ -2817,6 +2817,9 @@ input[type='checkbox'] {
 }
 
 .lexical-toolbar .tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
@@ -4206,12 +4209,14 @@ input[type='checkbox'] {
   border-radius: var(--radius-seat);
 }
 
-.field-row {
+/* Scoped to the schema editor's interactive button rows; the plain div
+   .field-row used by modal and settings forms must not gain a hover wash. */
+button.field-row {
   text-align: left;
   transition: background var(--dur-colour) var(--swift);
 }
 
-.field-row:hover {
+button.field-row:hover {
   background: var(--wash);
 }
 
