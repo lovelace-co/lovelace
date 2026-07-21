@@ -16,6 +16,9 @@
 *.rs eol=lf
 *.sh eol=lf
 *.toml eol=lf
+# Cargo.lock has no extension so the pins above miss it; cargo itself always
+# writes LF, and the version sync script parses it on every platform.
+Cargo.lock eol=lf
 
 # Sidecar binaries and image/icon assets are never diffed or line-ended.
 apps/desktop/src-tauri/binaries/** binary

@@ -67,7 +67,10 @@ function packageSection(content, label) {
   return { start, end };
 }
 
-const CARGO_VERSION_RE = /^version = "([^"]+)"$/m;
+// Tolerates and preserves a trailing carriage return: Cargo.lock is not
+// covered by the .gitattributes extension pins on older checkouts, so a
+// Windows autocrlf checkout can hand this script CRLF content.
+const CARGO_VERSION_RE = /^version = "([^"]+)"(\r?)$/m;
 
 function readCargoTomlVersion(content, label) {
   const { start, end } = packageSection(content, label);
@@ -83,16 +86,15 @@ function writeCargoTomlVersion(content, version, label) {
   if (!CARGO_VERSION_RE.test(section)) {
     fail(`could not find a version line in the [package] section of ${label}`);
   }
-  const updated = section.replace(CARGO_VERSION_RE, `version = "${version}"`);
+  const updated = section.replace(CARGO_VERSION_RE, (_match, _old, cr) => `version = "${version}"${cr}`);
   return content.slice(0, start) + updated + content.slice(end);
 }
 
 /** The lovelace-desktop [[package]] block in Cargo.lock: from its name line to the next [[package]]. */
 function lovelaceDesktopBlock(content, label) {
-  const marker = '[[package]]\nname = "lovelace-desktop"\n';
-  const markerStart = content.indexOf(marker);
-  if (markerStart === -1) fail(`could not find the lovelace-desktop [[package]] block in ${label}`);
-  const start = markerStart + marker.length;
+  const marker = content.match(/\[\[package\]\]\r?\nname = "lovelace-desktop"\r?\n/);
+  if (!marker) fail(`could not find the lovelace-desktop [[package]] block in ${label}`);
+  const start = marker.index + marker[0].length;
   const nextBlock = content.slice(start).search(/\n\[\[package\]\]/);
   const end = nextBlock === -1 ? content.length : start + nextBlock;
   return { start, end };
@@ -112,7 +114,7 @@ function writeCargoLockVersion(content, version, label) {
   if (!CARGO_VERSION_RE.test(block)) {
     fail(`could not find a version line in the lovelace-desktop block of ${label}`);
   }
-  const updated = block.replace(CARGO_VERSION_RE, `version = "${version}"`);
+  const updated = block.replace(CARGO_VERSION_RE, (_match, _old, cr) => `version = "${version}"${cr}`);
   return content.slice(0, start) + updated + content.slice(end);
 }
 
