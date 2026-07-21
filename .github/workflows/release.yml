@@ -228,6 +228,29 @@ jobs:
           fi
           pnpm --filter @lovelace/desktop exec tauri build "${ARGS[@]}"
 
+      # The hardened runtime forbids JIT without the allow-jit entitlement,
+      # and the sidecars are Bun-compiled: a signed build whose entitlements
+      # regressed ships sidecars that abort on their first request (T-0142).
+      # Executing one from inside the signed bundle is the only honest check.
+      - name: Verify bundled sidecar integrity (macOS)
+        if: matrix.os_family == 'macos'
+        run: |
+          SIDE="${{ matrix.bundle_dir }}/macos/Lovelace.app/Contents/MacOS/lovelace-host"
+          OUT=$("$SIDE" '{"op":"probe"}' 2>&1 || true)
+          echo "$OUT" | grep -q "unknown op" || { echo "::error::bundled macOS sidecar is not executable or crashed: $OUT"; exit 1; }
+
+      # Attach the notarisation ticket so Gatekeeper can verify offline
+      # (T-0141). The updater .app.tar.gz was archived during bundling and
+      # stays unstapled; updater installs replace an app already online.
+      - name: Staple the notarisation ticket
+        if: matrix.os_family == 'macos'
+        run: |
+          if [ "$HAS_APPLE_SIGNING" = "true" ]; then
+            xcrun stapler staple "${{ matrix.bundle_dir }}/macos/Lovelace.app"
+          else
+            echo "skipping staple: unsigned build"
+          fi
+
       # Tauri's DMG step needs Finder, which headless runners do not have.
       # Build the .app only (above) and assemble the DMG directly, per
       # docs/RELEASING.md.

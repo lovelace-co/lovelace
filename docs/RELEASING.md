@@ -75,7 +75,13 @@ Without these steps installers work but show OS security warnings.
   `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
   and for notarisation `APPLE_ID`, `APPLE_PASSWORD` (app-specific) and
   `APPLE_TEAM_ID` in the build environment. Tauri signs and notarises
-  automatically when they are present.
+  automatically when they are present. Signing applies
+  `src-tauri/entitlements.plist` to every binary in the bundle: the
+  `com.apple.security.cs.allow-jit` entitlement is required because the
+  hardened runtime otherwise blocks the Bun sidecars' JIT and they abort on
+  their first request. The pipeline executes a sidecar from inside the signed
+  bundle as a gate, then staples the notarisation ticket to the app before
+  DMG assembly so Gatekeeper can verify offline.
 - **Windows:** a code-signing certificate (EV recommended). Set
   `WINDOWS_CERTIFICATE` and `WINDOWS_CERTIFICATE_PASSWORD`, or configure
   `bundle.windows.signCommand` for a cloud signer (Azure Trusted Signing).
