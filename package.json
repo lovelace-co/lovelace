@@ -15,5 +15,9 @@
     "version:set": "node scripts/release/sync-version.mjs set",
     "version:check": "node scripts/release/sync-version.mjs check"
   },
-  "packageManager": "pnpm@10.12.1"
+  "packageManager": "pnpm@10.12.1",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
 }
