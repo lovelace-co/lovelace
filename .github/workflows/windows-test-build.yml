@@ -1,0 +1,62 @@
+name: windows-test-build
+
+# One-off unsigned Windows installer for manual testing. Push the
+# windows-test-build branch to run it; the NSIS .exe is uploaded as a
+# workflow artifact. This is not a release: no signing, no updater
+# packages, no draft release. Delete the branch when done.
+
+on:
+  push:
+    branches:
+      - windows-test-build
+
+jobs:
+  build:
+    name: build (windows-x86_64, unsigned)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Stage sidecars
+        run: ./apps/desktop/scripts/prepare-sidecars.sh
+
+      # Unsigned, NSIS only, and no updater artifacts so the build does
+      # not require the updater signing key.
+      - name: Build with Tauri
+        run: >-
+          pnpm --filter @lovelace/desktop exec tauri build
+          --config '{"bundle":{"targets":["nsis"],"createUpdaterArtifacts":false}}'
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lovelace-windows-x64-unsigned
+          path: apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 7
