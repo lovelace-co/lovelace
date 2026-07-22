@@ -46,7 +46,8 @@ describe('schema serialization', () => {
     ]);
     expect(parsed.statuses.find((s) => s.name === 'todo')?.agent).toBe('ready');
     expect(parsed.statuses.find((s) => s.name === 'in_progress')?.agent).toBe('in_progress');
-    expect(parsed.statuses.find((s) => s.name === 'done')?.agent).toBe('complete');
+    expect(parsed.statuses.find((s) => s.name === 'in_review')?.agent).toBe('complete');
+    expect(parsed.statuses.find((s) => s.name === 'done')?.agent).toBeUndefined();
     expect(parsed.priorities).toEqual(['urgent', 'high', 'medium', 'low']);
     const task = parsed.types.find((t) => t.name === 'task');
     expect(task?.fields.find((f) => f.name === 'title')?.required).toBe(true);

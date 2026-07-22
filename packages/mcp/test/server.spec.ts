@@ -245,7 +245,8 @@ describe('the MCP server', () => {
     const statuses = result.statuses as Array<{ name: string; agent?: string }>;
     expect(statuses.find((s) => s.name === 'todo')?.agent).toBe('ready');
     expect(statuses.find((s) => s.name === 'in_progress')?.agent).toBe('in_progress');
-    expect(statuses.find((s) => s.name === 'done')?.agent).toBe('complete');
+    expect(statuses.find((s) => s.name === 'in_review')?.agent).toBe('complete');
+    expect(statuses.find((s) => s.name === 'done')?.agent).toBeUndefined();
     expect(statuses.find((s) => s.name === 'backlog')?.agent).toBeUndefined();
 
     expect(result.priorities).toEqual(['urgent', 'high', 'medium', 'low']);

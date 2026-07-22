@@ -61,8 +61,8 @@ statuses:
   - name: in_progress
     agent: in_progress
   - name: in_review
-  - name: done
     agent: complete
+  - name: done
   - name: cancelled
 
 priorities: [urgent, high, medium, low]
