@@ -7,6 +7,7 @@ dist-bin/
 *.tsbuildinfo
 coverage/
 apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/binaries/
 
 # Lovelace derived state (regenerable from the files)
 .lovelace/index/index.json
