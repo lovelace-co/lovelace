@@ -2,9 +2,9 @@
 
 Local-first project management for software teams that build with AI coding agents. Tickets, documentation, architecture decisions and agent session history live as plain Markdown files in a `.lovelace/` directory inside your repository, and Lovelace is the desktop app that runs them: macOS, Linux and Windows, with no server, no database, no account and no cloud.
 
-[![Lovelace demo](.github/lovelace-demo-poster.png)](.github/lovelace-demo.mp4)
+![Lovelace demo](.github/lovelace-demo.gif)
 
-**[Watch the demo](.github/lovelace-demo.mp4)** (45 seconds): initialise a project, define your own statuses, create a ticket, browse the documentation tree and the link graph.
+**[Watch the full-quality demo](.github/lovelace-demo.mp4)** (45 seconds): initialise a project, define your own statuses, create a ticket, browse the documentation tree and the link graph.
 
 This repository is its own proof. Lovelace manages the development of Lovelace: the 139 tickets, 144 agent session records and 12 architecture decision records behind the app sit in [`.lovelace/`](.lovelace) at the root of this repo, written by the same tools that ship in the download. When a Claude Code session works on this codebase it reads its orientation from those files, works a ticket, and writes a session record before it finishes. Git carries the whole history, so you can read every decision that led here.
 
