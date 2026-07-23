@@ -168,6 +168,108 @@ describe('installClaudeAssets', () => {
     const result = installClaudeAssets(root, { ...OPTS, gitHook: true });
     expect(result.manual.some((m) => m.includes('Git'))).toBe(true);
   });
+
+  it('normalises a Windows path with a space, quoting hook commands but leaving .mcp.json unquoted', () => {
+    const root = fixture();
+    const opts = {
+      mcpCommand: 'C:\\Users\\Fredy Lievano\\AppData\\Local\\Lovelace\\lovelace-mcp.exe',
+      helperCommand: 'C:\\Users\\Fredy Lievano\\AppData\\Local\\Lovelace\\lovelace-agent.exe',
+    };
+    installClaudeAssets(root, opts);
+    const expected = '"C:/Users/Fredy Lievano/AppData/Local/Lovelace/lovelace-agent.exe"';
+    const settings = JSON.parse(readFileSync(join(root, '.claude/settings.json'), 'utf8'));
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe(`${expected} digest`);
+    expect(settings.hooks.Stop[0].hooks[0].command).toBe(`${expected} session-check`);
+    expect(settings.hooks.UserPromptSubmit[0].hooks[0].command).toBe(`${expected} presence-start`);
+
+    const mcp = JSON.parse(readFileSync(join(root, '.mcp.json'), 'utf8'));
+    expect(mcp.mcpServers.lovelace.command).toBe('C:/Users/Fredy Lievano/AppData/Local/Lovelace/lovelace-mcp.exe');
+    expect(mcp.mcpServers.lovelace.args).toEqual([]);
+  });
+
+  it('normalises a Windows path without a space, leaving hook commands unquoted', () => {
+    const root = fixture();
+    const opts = {
+      mcpCommand: 'C:\\Users\\FredyLievano\\AppData\\Local\\Lovelace\\lovelace-mcp.exe',
+      helperCommand: 'C:\\Users\\FredyLievano\\AppData\\Local\\Lovelace\\lovelace-agent.exe',
+    };
+    installClaudeAssets(root, opts);
+    const settings = JSON.parse(readFileSync(join(root, '.claude/settings.json'), 'utf8'));
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe(
+      'C:/Users/FredyLievano/AppData/Local/Lovelace/lovelace-agent.exe digest',
+    );
+  });
+
+  it('quotes only the script path for the dev node command shape, and splits it as one arg in .mcp.json', () => {
+    const root = fixture();
+    const opts = { mcpCommand: 'node /dev path/server.js', helperCommand: 'node /dev path/helper.js' };
+    installClaudeAssets(root, opts);
+    const settings = JSON.parse(readFileSync(join(root, '.claude/settings.json'), 'utf8'));
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe('node "/dev path/helper.js" digest');
+    const mcp = JSON.parse(readFileSync(join(root, '.mcp.json'), 'utf8'));
+    expect(mcp.mcpServers.lovelace.command).toBe('node');
+    expect(mcp.mcpServers.lovelace.args).toEqual(['/dev path/server.js']);
+  });
+
+  it('migrates stale backslash-format Lovelace hooks on reinstall, keeping a user hook intact', () => {
+    const root = fixture();
+    const winOpts = {
+      mcpCommand: 'C:\\Users\\FredyLievano\\AppData\\Local\\Lovelace\\lovelace-mcp.exe',
+      helperCommand: 'C:\\Users\\FredyLievano\\AppData\\Local\\Lovelace\\lovelace-agent.exe',
+    };
+    mkdirSync(join(root, '.claude'), { recursive: true });
+    writeFileSync(
+      join(root, '.claude/settings.json'),
+      JSON.stringify({
+        hooks: {
+          SessionStart: [
+            { hooks: [{ type: 'command', command: 'C:\\Users\\FredyLievano\\AppData\\Local\\Lovelace\\lovelace-agent.exe digest' }] },
+            { hooks: [{ type: 'command', command: 'echo hi' }] },
+          ],
+          Stop: [
+            {
+              hooks: [
+                { type: 'command', command: 'C:\\Users\\FredyLievano\\AppData\\Local\\Lovelace\\lovelace-agent.exe session-check' },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    installClaudeAssets(root, winOpts);
+    const settings = JSON.parse(readFileSync(join(root, '.claude/settings.json'), 'utf8'));
+
+    const sessionStartCommands = settings.hooks.SessionStart.flatMap((e: { hooks: Array<{ command: string }> }) =>
+      e.hooks.map((h) => h.command),
+    );
+    expect(sessionStartCommands).toContain('C:/Users/FredyLievano/AppData/Local/Lovelace/lovelace-agent.exe digest');
+    expect(sessionStartCommands).toContain('echo hi');
+    expect(sessionStartCommands).not.toContain(
+      'C:\\Users\\FredyLievano\\AppData\\Local\\Lovelace\\lovelace-agent.exe digest',
+    );
+    expect(settings.hooks.SessionStart).toHaveLength(2);
+
+    const stopCommands = settings.hooks.Stop.flatMap((e: { hooks: Array<{ command: string }> }) => e.hooks.map((h) => h.command));
+    expect(stopCommands).toContain('C:/Users/FredyLievano/AppData/Local/Lovelace/lovelace-agent.exe session-check');
+    expect(settings.hooks.Stop).toHaveLength(1);
+  });
+
+  it('is idempotent with Windows paths: installing twice does not duplicate any entry', () => {
+    const root = fixture();
+    const winOpts = {
+      mcpCommand: 'C:\\Users\\FredyLievano\\AppData\\Local\\Lovelace\\lovelace-mcp.exe',
+      helperCommand: 'C:\\Users\\FredyLievano\\AppData\\Local\\Lovelace\\lovelace-agent.exe',
+    };
+    installClaudeAssets(root, winOpts);
+    const first = readFileSync(join(root, '.claude/settings.json'), 'utf8');
+    installClaudeAssets(root, winOpts);
+    const second = readFileSync(join(root, '.claude/settings.json'), 'utf8');
+    expect(second).toBe(first);
+    const settings = JSON.parse(second);
+    expect(settings.hooks.Stop).toHaveLength(1);
+    expect(settings.hooks.PostToolUse).toHaveLength(2);
+    expect(settings.hooks.SessionEnd).toHaveLength(1);
+  });
 });
 
 describe('detectClaudeAssets', () => {

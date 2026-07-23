@@ -66,6 +66,7 @@ The desktop app has a deliberate visual language. These are settled decisions, r
 - Spec 3.0 removed transitions and automations entirely; a ticket may move to any status defined in schema.yaml. Lovelace is an orchestrator, not a CI system: no retries, queues or scheduling.
 - All app mutations route through core validation. The app must never be able to produce a file the validator rejects.
 - From the end of Phase 4, this repository dogfoods itself: read `.lovelace/documentation/index.md` at session start, work from tickets, and write a session record before finishing.
+- Project documentation belongs under `.lovelace/documentation/`, never a `docs/` folder at the repository root or elsewhere in the tree. Tickets exist only in `.lovelace/tickets/` and are created and changed only through the Lovelace MCP tools.
 
 ## Model roles: you orchestrate, the programmer implements
 

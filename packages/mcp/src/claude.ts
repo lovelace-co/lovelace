@@ -61,6 +61,10 @@ This project's tickets, documentation and session history live in \`.lovelace/\`
 - Read \`.lovelace/documentation/index.md\` for the project summary and reading order.
 - When working a ticket, read the ticket, its parent, its dependencies, and the last two session records referencing it.
 
+## Where files live
+- Tickets live only in \`.lovelace/tickets/\`, created and changed only through the Lovelace MCP tools.
+- Project documentation lives only under \`.lovelace/documentation/\`. Write every plan, decision record, guide or other project document there. Never write project documentation to a \`docs/\` folder at the repository root or anywhere else in the application tree; files outside \`.lovelace/documentation/\` are not validated or indexed and stay invisible to the project.
+
 ## Working with tickets
 - Mutate tickets only through the Lovelace MCP tools (create_ticket, update_ticket); never edit files in \`.lovelace/tickets/\` directly. Documents under \`.lovelace/documentation/\` may be edited directly.
 - Every document must start with a YAML frontmatter block between \`---\` lines carrying \`id\` (a unique kebab-case slug), \`type: document\` and \`summary\` (one or two sentences). A file without this block fails validation and stays out of the project's documentation.
@@ -126,10 +130,22 @@ function writeAgentsMd(root: string, result: ClaudeAssetResult): void {
   result.written.push('.lovelace/AGENTS.md (section appended)');
 }
 
+/**
+ * Splits a `mcpCommand`/`helperCommand` string into the two shapes it can
+ * take: a bare binary path (returned whole, since a Windows install
+ * directory can itself contain a space) or the dev `node /path/script.js`
+ * form, split into the `node` command and the script path as one argument.
+ */
+function parseCommand(raw: string): { command: string; args: string[] } {
+  if (raw.startsWith('node ')) {
+    return { command: 'node', args: [raw.slice('node '.length).trim()] };
+  }
+  return { command: raw, args: [] };
+}
+
 function writeMcpJson(root: string, options: ClaudeAssetOptions, result: ClaudeAssetResult): void {
   const path = join(root, '.mcp.json');
-  // "node /path/server.js" style commands split into command plus args.
-  const [command = '', ...args] = options.mcpCommand.split(' ');
+  const { command, args } = parseCommand(options.mcpCommand);
   const entry = {
     command,
     args,
@@ -151,6 +167,43 @@ function writeMcpJson(root: string, options: ClaudeAssetOptions, result: ClaudeA
   result.written.push('.mcp.json');
 }
 
+/** Quotes `value` with double quotes only when it contains a space, since bash needs the quoting only then. */
+function quoteIfSpaced(value: string): string {
+  return value.includes(' ') ? `"${value}"` : value;
+}
+
+/**
+ * Builds the hook command's leading binary/script portion: the bare path
+ * (quoted only if it has a space), or `node <script>` with the script path
+ * quoted only if it has a space. Unlike `.mcp.json`, hook commands run
+ * through bash, so quoting here (never in `.mcp.json`) is what lets a
+ * spaced Windows install path survive.
+ */
+function hookCommandPrefix(rawCommand: string): string {
+  const { command, args } = parseCommand(rawCommand);
+  if (command === 'node') {
+    return `node ${quoteIfSpaced(args[0] ?? '')}`;
+  }
+  return quoteIfSpaced(command);
+}
+
+const HOOK_SUBCOMMANDS = ['digest', 'session-check', 'guard', 'presence-start', 'presence-clear', 'presence-beat', 'track-active'];
+
+/**
+ * True when `command` looks like a Lovelace helper hook written in an
+ * older command format (for example the pre-fix Windows backslash path)
+ * that this install is about to replace, rather than a user-authored hook
+ * that happens to share a word with one.
+ */
+function isStaleHelperCommand(command: string | undefined, expected: ReadonlySet<string>): boolean {
+  if (!command) return false;
+  const looksLikeHelper = command.includes('lovelace-agent') || command.includes('helper.js');
+  if (!looksLikeHelper) return false;
+  const matchesSubcommand = HOOK_SUBCOMMANDS.some((sub) => command.endsWith(` ${sub}`));
+  if (!matchesSubcommand) return false;
+  return !expected.has(command);
+}
+
 function writeHooks(root: string, options: ClaudeAssetOptions, result: ClaudeAssetResult): void {
   const dir = join(root, '.claude');
   mkdirSync(dir, { recursive: true });
@@ -164,8 +217,31 @@ function writeHooks(root: string, options: ClaudeAssetOptions, result: ClaudeAss
       return;
     }
   }
-  const helper = options.helperCommand;
+  const helper = hookCommandPrefix(options.helperCommand);
   const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>;
+  const commands = {
+    digest: `${helper} digest`,
+    sessionCheck: `${helper} session-check`,
+    guard: `${helper} guard`,
+    presenceStart: `${helper} presence-start`,
+    presenceClear: `${helper} presence-clear`,
+    trackActive: `${helper} track-active`,
+    presenceBeat: `${helper} presence-beat`,
+  };
+  const expected = new Set(Object.values(commands));
+  // Migration: an older install (in particular a pre-fix Windows install,
+  // whose backslash path bash strips into "command not found") wrote a
+  // stale-format Lovelace hook command; drop it so this install's ensure()
+  // below replaces it instead of leaving both side by side. A hook is only
+  // ever judged stale by isStaleHelperCommand, so a user-authored hook is
+  // left untouched.
+  for (const event of Object.keys(hooks)) {
+    const list = hooks[event];
+    if (!Array.isArray(list)) continue;
+    hooks[event] = (list as Array<{ matcher?: string; hooks: Array<{ command: string }> }>).filter(
+      (entry) => !entry.hooks?.every((h) => isStaleHelperCommand(h.command, expected)),
+    );
+  }
   const ensure = (event: string, matcher: string | undefined, command: string) => {
     const list = (hooks[event] ?? []) as Array<{ matcher?: string; hooks: Array<{ command: string }> }>;
     const exists = list.some((h) => h.hooks?.some((x) => x.command === command));
@@ -189,20 +265,20 @@ function writeHooks(root: string, options: ClaudeAssetOptions, result: ClaudeAss
       (entry) => !entry.hooks?.every((h) => h.command?.endsWith(' presence-clear')),
     );
   }
-  ensure('SessionStart', undefined, `${helper} digest`);
-  ensure('Stop', undefined, `${helper} session-check`);
-  ensure('PreToolUse', 'Edit|Write', `${helper} guard`);
+  ensure('SessionStart', undefined, commands.digest);
+  ensure('Stop', undefined, commands.sessionCheck);
+  ensure('PreToolUse', 'Edit|Write', commands.guard);
   // The live-agent marker: written at turn start, cleared when a passing
   // stop lets the turn end or the session ends outright (ADR-0012).
-  ensure('UserPromptSubmit', undefined, `${helper} presence-start`);
-  ensure('SessionEnd', undefined, `${helper} presence-clear`);
+  ensure('UserPromptSubmit', undefined, commands.presenceStart);
+  ensure('SessionEnd', undefined, commands.presenceClear);
   // Per-session active-ticket marker, so concurrent sessions do not share
   // the singleton slot that session-check enforces on Stop.
-  ensure('PostToolUse', 'mcp__lovelace__set_active_ticket', `${helper} track-active`);
+  ensure('PostToolUse', 'mcp__lovelace__set_active_ticket', commands.trackActive);
   // The heartbeat: refreshes every session's presence entry on every tool
   // call, so the ring survives between prompts without relying on a
   // started_at that never moves.
-  ensure('PostToolUse', undefined, `${helper} presence-beat`);
+  ensure('PostToolUse', undefined, commands.presenceBeat);
   settings.hooks = hooks;
   writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`);
   result.written.push('.claude/settings.json');
@@ -367,12 +443,22 @@ export function detectClaudeAssets(root: string): ClaudeInstallStatus {
 }
 
 export function installClaudeAssets(root: string, options: ClaudeAssetOptions): ClaudeAssetResult {
+  // Claude Code runs hook commands through bash, which strips unquoted
+  // backslashes, so a raw Windows path (from process.execPath) breaks every
+  // hook with "command not found". Forward slashes work in bash, in Claude
+  // Code and in the Windows file APIs, and POSIX sidecar paths never
+  // contain a backslash, so this is a no-op on macOS/Linux.
+  const normalised: ClaudeAssetOptions = {
+    ...options,
+    mcpCommand: options.mcpCommand.replace(/\\/g, '/'),
+    helperCommand: options.helperCommand.replace(/\\/g, '/'),
+  };
   const result: ClaudeAssetResult = { written: [], manual: [] };
   writeAgentsMd(root, result);
   writeClaudeMd(root, result);
-  writeMcpJson(root, options, result);
-  writeHooks(root, options, result);
+  writeMcpJson(root, normalised, result);
+  writeHooks(root, normalised, result);
   writeCommands(root, result);
-  if (options.gitHook) writeGitHook(root, result);
+  if (normalised.gitHook) writeGitHook(root, result);
   return result;
 }

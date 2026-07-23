@@ -132,8 +132,8 @@ describe('schema', () => {
     const schema = loadSchema(join(root, '.lovelace'));
     expect(schema.statuses.find((s) => s.name === 'todo')?.agent).toBe('ready');
     expect(schema.statuses.find((s) => s.name === 'in_progress')?.agent).toBe('in_progress');
-    expect(schema.statuses.find((s) => s.name === 'done')?.agent).toBe('complete');
-    expect(schema.statuses.find((s) => s.name === 'in_review')?.agent).toBeUndefined();
+    expect(schema.statuses.find((s) => s.name === 'in_review')?.agent).toBe('complete');
+    expect(schema.statuses.find((s) => s.name === 'done')?.agent).toBeUndefined();
   });
 });
 
