@@ -1,10 +1,16 @@
 # Lovelace
 
-Lovelace is a local-first, file-based project management tool for software development teams that rely heavily on AI coding agents. What Obsidian is to Notion, Lovelace is to Jira and Linear: a desktop application for macOS, Linux and Windows that works entirely on local files, with no server, no database and no cloud component.
+Local-first project management for software teams that build with AI coding agents. Tickets, documentation, architecture decisions and agent session history live as plain Markdown files in a `.lovelace/` directory inside your repository, and Lovelace is the desktop app that runs them: macOS, Linux and Windows, with no server, no database, no account and no cloud.
 
-Project state lives as plain Markdown files with YAML frontmatter inside a `.lovelace/` directory in your repository. The files are the source of truth; everything else (indexes, boards, digests) is derived from them and can be regenerated at any time. Coding agents already live in the filesystem and in Git, so putting tickets, documents, architectural decisions and agent session history where the agents already are gives them full project context natively, with Git providing the audit trail.
+[![Lovelace demo](.github/lovelace-demo-poster.png)](.github/lovelace-demo.mp4)
 
-The product is the desktop app, built with Tauri (Rust shell, React and TypeScript frontend). A small headless helper and an MCP server ship with the app as self-contained sidecar binaries, so users do not need Node installed. There is no standalone user-facing CLI.
+**[Watch the demo](.github/lovelace-demo.mp4)** (45 seconds): initialise a project, define your own statuses, create a ticket, browse the documentation tree and the link graph.
+
+This repository is its own proof. Lovelace manages the development of Lovelace: the 139 tickets, 144 agent session records and 12 architecture decision records behind the app sit in [`.lovelace/`](.lovelace) at the root of this repo, written by the same tools that ship in the download. When a Claude Code session works on this codebase it reads its orientation from those files, works a ticket, and writes a session record before it finishes. Git carries the whole history, so you can read every decision that led here.
+
+## Why local files
+
+Coding agents already live in the filesystem and in Git. Putting tickets, documents and session history where the agents already are gives them full project context natively, with Git as the audit trail. The files are the source of truth; everything else (indexes, boards, digests) is derived from them and can be regenerated at any time. What Obsidian is to Notion, Lovelace is to Jira and Linear.
 
 ## How it works
 
@@ -43,47 +49,6 @@ The rules that hold everywhere:
 - The format is versioned (currently spec 3.2.0). Tooling refuses major versions it does not understand and offers a migration for older projects.
 
 The complete on-disk format is specified in [SPEC.md](SPEC.md), written so a developer can create a valid `.lovelace/` directory by hand using only that document. [BRIEF.md](BRIEF.md) describes what is being built and in what order.
-
-## Installation
-
-### For users
-
-Download the installer for your platform from the Lovelace website. macOS produces `.app` and `.dmg`, Windows `.msi` and `.exe`, Linux `.deb`, `.rpm` and `.AppImage`. The app auto-updates via the Tauri updater; the update check is the only network call the app ever makes. No telemetry.
-
-### Building from source
-
-Prerequisites:
-
-- Node 22 or later
-- pnpm 10 (`corepack enable` or `npm install -g pnpm`)
-- The Rust toolchain (for the Tauri shell and to resolve the target triple)
-- Bun (to compile the sidecar binaries)
-- Tauri platform dependencies: Xcode command line tools on macOS, WebView2 on Windows, `webkit2gtk` and friends on Linux (see the Tauri v2 prerequisites guide)
-
-Then:
-
-```sh
-pnpm install
-pnpm build        # type-checks and builds every package
-pnpm test         # full test suite
-```
-
-To run the app in development:
-
-```sh
-pnpm app:dev
-```
-
-Development runs against `packages/mcp/dist/host.js` directly (via `LOVELACE_HOST_JS`), so a plain `pnpm build` is enough to pick up host changes.
-
-To produce a packaged production build, compile the sidecars first or the app ships stale ones:
-
-```sh
-pnpm sidecars     # Bun-compiles host, agent and MCP binaries into src-tauri/binaries/
-pnpm app:build    # installers land under apps/desktop/src-tauri/target/release/bundle/
-```
-
-The full release pipeline (signing, notarisation, update artifacts, `latest.json`) is documented in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Using Lovelace
 
@@ -125,6 +90,47 @@ The MCP server exposes exactly eight tools:
 | `search` | Plain text search across entity bodies and titles |
 
 Every mutation triggers a re-index. A fresh agent session starts oriented: the digest hook injects in-progress tickets, recent session records and validation warnings, all under roughly 1,500 tokens.
+
+## Installation
+
+### For users
+
+Download the installer for your platform from [lovelace.co](https://lovelace.co). macOS gets `.app` and `.dmg`, Windows `.msi` and `.exe`, Linux `.deb`, `.rpm` and `.AppImage`. The app auto-updates via the Tauri updater; the update check is the only network call the app ever makes. No telemetry.
+
+### Building from source
+
+Prerequisites:
+
+- Node 22 or later
+- pnpm 10 (`corepack enable` or `npm install -g pnpm`)
+- The Rust toolchain (for the Tauri shell and to resolve the target triple)
+- Bun (to compile the sidecar binaries)
+- Tauri platform dependencies: Xcode command line tools on macOS, WebView2 on Windows, `webkit2gtk` and friends on Linux (see the Tauri v2 prerequisites guide)
+
+Then:
+
+```sh
+pnpm install
+pnpm build        # type-checks and builds every package
+pnpm test         # full test suite
+```
+
+To run the app in development:
+
+```sh
+pnpm app:dev
+```
+
+Development runs against `packages/mcp/dist/host.js` directly (via `LOVELACE_HOST_JS`), so a plain `pnpm build` is enough to pick up host changes.
+
+To produce a packaged production build, compile the sidecars first or the app ships stale ones:
+
+```sh
+pnpm sidecars     # Bun-compiles host, agent and MCP binaries into src-tauri/binaries/
+pnpm app:build    # installers land under apps/desktop/src-tauri/target/release/bundle/
+```
+
+The compiled sidecar binaries are not tracked in the repository; `pnpm sidecars` produces them locally and the release pipeline compiles them fresh per platform. The full release process (signing, notarisation, update artifacts, `latest.json`) is documented in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Repository structure
 
@@ -176,7 +182,7 @@ The Tauri app. It reads and writes only through `packages/core` (via the host si
 - `src/lib/`: host IPC, formatting and display-name resolvers, date and time via the OS locale, links, presence, and platform helpers.
 - `src/state/`: the application store and theming.
 - `src/styles/`: the design tokens (`tokens.css`) and application styles. The visual language is documented in `docs/design/lovelace-design-system.md`.
-- `src-tauri/`: the Rust shell, Tauri configuration, capabilities and bundled sidecar binaries.
+- `src-tauri/`: the Rust shell, Tauri configuration and capabilities. Sidecar binaries are compiled into `src-tauri/binaries/` by `pnpm sidecars` and are not tracked.
 
 ### examples/demo-project
 
@@ -195,8 +201,12 @@ pnpm app:build         # produce platform installers
 
 Testing conventions: `packages/core` has tests for every schema and validation rule, the MCP server has integration tests over the demo fixture, and app components have deterministic rendering tests from `index.json` fixtures.
 
-This repository dogfoods itself: its own tickets, documents and session history live in its `.lovelace/` directory, managed through the app and through Claude Code sessions running against the same files.
+## Contributing
+
+Lovelace is developed in the open and everything is here to read, including the tickets and session records that steer it. We are a two-person team and the roadmap runs through the tickets in `.lovelace/`, so we are not taking external code contributions at this stage. Bug reports and questions are welcome as GitHub issues. If this changes, this section will change with it.
 
 ## Licence
 
-Not yet declared.
+Lovelace is free software, licensed under the GNU Affero General Public License version 3.0 ([AGPL-3.0-only](LICENSE)). Use it, read it, build it, fork it. If you distribute a modified version, or offer one to others over a network, the same licence requires you to publish your source.
+
+Copyright 2026 ADACA PROJECTS PTY LTD.
