@@ -14,7 +14,7 @@ env:
   # Where the update packages this workflow uploads will live. Ticket
   # T-0117 decides the binaries' final public home; until then this is the
   # one line to change.
-  RELEASE_BASE_URL: https://github.com/lovelace-co/lovelace-monorepo/releases/download/${{ github.ref_name }}
+  RELEASE_BASE_URL: https://github.com/lovelace-co/lovelace/releases/download/${{ github.ref_name }}
 
 jobs:
   build:
