@@ -1,14 +1,19 @@
 name: windows-test-build
 
 # One-off unsigned Windows installer for manual testing. Push the
-# windows-test-build branch to run it; the NSIS .exe is uploaded as a
-# workflow artifact. This is not a release: no signing, no updater
-# packages, no draft release. Delete the branch when done.
+# windows-test-build branch to run it; the NSIS .exe is attached to the
+# windows-test prerelease, since release assets do not count against the
+# Actions artifact storage quota. This is not a real release: no signing,
+# no updater packages. Delete the branch and the windows-test prerelease
+# when done.
 
 on:
   push:
     branches:
       - windows-test-build
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -53,10 +58,16 @@ jobs:
           pnpm --filter @lovelace/desktop exec tauri build
           --config '{"bundle":{"targets":["nsis"],"createUpdaterArtifacts":false}}'
 
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lovelace-windows-x64-unsigned
-          path: apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
-          if-no-files-found: error
-          retention-days: 7
+      - name: Attach installer to the windows-test prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          EXE=$(ls apps/desktop/src-tauri/target/release/bundle/nsis/*.exe)
+          if ! gh release view windows-test > /dev/null 2>&1; then
+            gh release create windows-test \
+              --prerelease \
+              --title "windows test build (unsigned)" \
+              --notes "Unsigned Windows installer for manual testing, built from the windows-test-build branch. Not a release."
+          fi
+          gh release upload windows-test "$EXE" --clobber
+          echo "uploaded: $EXE" >> "$GITHUB_STEP_SUMMARY"
