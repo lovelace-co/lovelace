@@ -8,6 +8,8 @@ import { Toast } from './Toast';
 import { formatDate } from '../lib/datetime';
 import { DEFAULT_PRESENCE_TIMEOUT_MINUTES } from '../lib/presence';
 import { openUrl } from '../lib/os';
+import { cliInstall, cliStatus, cliUninstall, isShell } from '../lib/cli';
+import type { CliInstall, CliStatus } from '../lib/cli';
 import type { LinkResolver, OpenLink } from '../lib/links';
 import type { Snapshot } from '../lib/types';
 
@@ -26,6 +28,12 @@ interface GeneralSettingsProps {
   focusSession?: string | null;
   /** Called once a pending focusSession has been consumed. */
   onFocusSessionHandled?: () => void;
+  /** Check whether the `lovelace` command is on PATH. Defaults to the real Tauri command; tests inject a fake. */
+  onCliStatus?: () => Promise<CliStatus>;
+  /** Install (or repair) the `lovelace` launcher. Defaults to the real Tauri command; tests inject a fake. */
+  onCliInstall?: () => Promise<CliInstall>;
+  /** Remove the `lovelace` launcher. Defaults to the real Tauri command; tests inject a fake. */
+  onCliUninstall?: () => Promise<void>;
 }
 
 /* The stale cap choices; the default stays out of the file so manifests
@@ -54,6 +62,9 @@ export function GeneralSettings({
   onOpenLink,
   focusSession,
   onFocusSessionHandled,
+  onCliStatus = cliStatus,
+  onCliInstall = cliInstall,
+  onCliUninstall = cliUninstall,
 }: GeneralSettingsProps) {
   const [digestOpen, setDigestOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -61,11 +72,45 @@ export function GeneralSettings({
   const [problemsOpen, setProblemsOpen] = useState(false);
   const [bugError, setBugError] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [cliState, setCliState] = useState<CliStatus | null>(null);
+  const [cliStateLoading, setCliStateLoading] = useState(true);
+  // Which action is in flight, if any; drives both buttons' disabled state
+  // and lets the button that was actually clicked show its own "-ing" label.
+  const [cliBusy, setCliBusy] = useState<'install' | 'uninstall' | null>(null);
+  const [cliResult, setCliResult] = useState<CliInstall | null>(null);
+  const [cliError, setCliError] = useState<string | null>(null);
+
+  // Not passing these props at all (the real app) leaves them equal to the
+  // Tauri-backed defaults, so the section only shows outside the app shell
+  // when a test has deliberately substituted fakes.
+  const cliPropsInjected = onCliStatus !== cliStatus || onCliInstall !== cliInstall || onCliUninstall !== cliUninstall;
+  const showCli = isShell() || cliPropsInjected;
+
   useEffect(() => {
     void getVersion()
       .then(setAppVersion)
       .catch(() => undefined);
   }, []);
+  useEffect(() => {
+    if (!showCli) return;
+    let cancelled = false;
+    setCliStateLoading(true);
+    void onCliStatus().then(
+      (s) => {
+        if (!cancelled) {
+          setCliState(s);
+          setCliStateLoading(false);
+        }
+      },
+      () => {
+        if (!cancelled) setCliStateLoading(false);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCli, onCliStatus]);
   useEffect(() => {
     if (!digestOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -90,6 +135,43 @@ export function GeneralSettings({
   const timeoutChoices = PRESENCE_CHOICES.some((c) => c.minutes === timeout)
     ? PRESENCE_CHOICES
     : [...PRESENCE_CHOICES, { minutes: timeout, label: `${timeout} minutes` }].sort((a, b) => a.minutes - b.minutes);
+
+  const refreshCliState = async () => {
+    try {
+      setCliState(await onCliStatus());
+    } catch {
+      // silently ignore status refresh failure
+    }
+  };
+
+  const installCli = async () => {
+    setCliBusy('install');
+    setCliError(null);
+    setCliResult(null);
+    try {
+      const r = await onCliInstall();
+      setCliResult(r);
+      await refreshCliState();
+    } catch (e) {
+      setCliError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCliBusy(null);
+    }
+  };
+
+  const uninstallCli = async () => {
+    setCliBusy('uninstall');
+    setCliError(null);
+    setCliResult(null);
+    try {
+      await onCliUninstall();
+      await refreshCliState();
+    } catch (e) {
+      setCliError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCliBusy(null);
+    }
+  };
 
   return (
     <div className="settings-section">
@@ -231,6 +313,70 @@ export function GeneralSettings({
       {problemsOpen && <ProblemsModal issues={snapshot.issues} onClose={() => setProblemsOpen(false)} />}
 
       {bugError && <Toast onDismiss={() => setBugError(null)}>{bugError}</Toast>}
+
+      {showCli && (
+        <div style={{ marginTop: 'var(--sp-6)' }}>
+          <h2 className="section-heading">Command line</h2>
+          <p className="subtle" style={{ maxWidth: '58ch', marginBottom: 18 }}>
+            Install a 'lovelace' command that opens or activates this app from a terminal. It carries no
+            flags or subcommands; it only opens the app.
+          </p>
+
+          {cliStateLoading ? (
+            <p className="subtle">Checking...</p>
+          ) : cliState?.installed ? (
+            <>
+              <p className="subtle" data-testid="cli-status-summary">
+                The 'lovelace' command is installed at <span className="mono">{cliState.location}</span>.
+              </p>
+              {!cliState.current && (
+                <p className="subtle" style={{ marginTop: 6 }}>
+                  The installed command points at an old location.
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                {!cliState.current && (
+                  <button className="btn btn-secondary" onClick={() => void installCli()} disabled={cliBusy !== null}>
+                    {cliBusy === 'install' ? 'Reinstalling...' : "Reinstall 'lovelace' command in PATH"}
+                  </button>
+                )}
+                <button className="btn btn-secondary" onClick={() => void uninstallCli()} disabled={cliBusy !== null}>
+                  {cliBusy === 'uninstall' ? 'Removing...' : "Remove 'lovelace' command from PATH"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="subtle" data-testid="cli-status-summary">
+                The 'lovelace' command is not on your PATH.
+              </p>
+              <div style={{ marginTop: 18 }}>
+                <button className="btn btn-secondary" onClick={() => void installCli()} disabled={cliBusy !== null}>
+                  {cliBusy === 'install' ? 'Installing...' : "Install 'lovelace' command in PATH"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {cliError && (
+            <div className="settings-result" style={{ marginTop: 18 }}>
+              <p className="subtle">{cliError}</p>
+            </div>
+          )}
+          {cliResult && !cliError && (
+            <div className="settings-result" style={{ marginTop: 18 }}>
+              <p className="subtle">
+                Installed at <span className="mono">{cliResult.location}</span>.
+              </p>
+              {cliResult.note && (
+                <p className="subtle" style={{ marginTop: 6 }}>
+                  {cliResult.note}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ marginTop: 'var(--sp-5)' }}>
         <button

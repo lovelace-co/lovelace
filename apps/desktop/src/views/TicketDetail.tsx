@@ -3,8 +3,9 @@ import { Dropdown } from '../components/Dropdown';
 import { EmptyState } from '../components/EmptyState';
 import { FieldInput } from '../components/FieldInput';
 import { Toast } from '../components/Toast';
-import { AddIcon, ArrowLeftIcon, EditIcon, TrashIcon } from '../components/icons';
+import { AddIcon, ArrowLeftIcon, CheckIcon, CopyIcon, EditIcon, TrashIcon } from '../components/icons';
 import { BlockEditor } from '../editor/BlockEditor';
+import { copyText } from '../lib/clipboard';
 import { formatDateTime, formatDateTimeShort } from '../lib/datetime';
 import { fieldLabel, statusLabel, titleCase, typeLabel } from '../lib/format';
 import { STATUS_HUE_CSS, statusHue } from '../lib/loom';
@@ -67,6 +68,28 @@ export function TicketDetail({
   const [titleDraft, setTitleDraft] = useState(ticket?.title ?? '');
   const titleFocused = useRef(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  const [idCopied, setIdCopied] = useState(false);
+  const idCopyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Revert the tick back to the copy icon after a beat, and on unmount.
+  useEffect(() => {
+    return () => {
+      if (idCopyTimeout.current) clearTimeout(idCopyTimeout.current);
+    };
+  }, []);
+
+  const copyTicketId = (id: string) => {
+    if (idCopyTimeout.current) clearTimeout(idCopyTimeout.current);
+    void copyText(id).then(
+      () => {
+        setIdCopied(true);
+        idCopyTimeout.current = setTimeout(() => setIdCopied(false), 1500);
+      },
+      () => {
+        // Copy failed; leave the icon as-is rather than showing a false tick.
+      },
+    );
+  };
 
   // Keep the editable title in sync with the file, except while editing.
   useEffect(() => {
@@ -465,7 +488,18 @@ export function TicketDetail({
             <div className="props-list">
               <div className="prop">
                 <span className="prop-label">{titleCase('id')}</span>
-                <span className="prop-value">{ticket.id}</span>
+                <span className="prop-value prop-value-id">
+                  {ticket.id}
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-icon btn-icon-sm"
+                    onClick={() => copyTicketId(ticket.id)}
+                    aria-label="Copy ticket ID"
+                    title="Copy ticket ID"
+                  >
+                    {idCopied ? <CheckIcon /> : <CopyIcon />}
+                  </button>
+                </span>
               </div>
               <div className="prop">
                 <span className="prop-label">{titleCase('type')}</span>

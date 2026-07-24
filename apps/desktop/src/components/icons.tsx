@@ -25,6 +25,8 @@ import {
   TrashIcon as HeroTrashIcon,
   LockClosedIcon,
   ShareIcon,
+  ClipboardDocumentIcon,
+  CheckIcon as HeroCheckIcon,
 } from '@heroicons/react/24/outline';
 
 /* Heroicons (outline) under the app's semantic names. Each wrapper bakes in a
@@ -110,6 +112,12 @@ export const CloseIcon = make(XMarkIcon, 16);
 
 /** Date: the datepicker trigger. */
 export const CalendarIcon = make(HeroCalendarIcon, 15);
+
+/** Copy: duplicate to the clipboard. */
+export const CopyIcon = make(ClipboardDocumentIcon, 14);
+
+/** Check: a completed action, for copy feedback. */
+export const CheckIcon = make(HeroCheckIcon, 14);
 
 /** Graph: connected documents, drawn as three linked nodes. */
 export function GraphIcon(props: SVGProps<SVGSVGElement>) {

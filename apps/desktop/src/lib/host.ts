@@ -49,6 +49,23 @@ export interface ClaudeInstallStatus {
   gitHook: boolean;
 }
 
+export interface OpenCodeInstallStatus {
+  /** True when all three core pieces are present: mcp, hooks, commands. */
+  installed: boolean;
+  /** `opencode.json` exists with an `mcp.lovelace` entry (strict JSON only). */
+  mcp: boolean;
+  /** `.opencode/plugins/lovelace.js` exists and carries the Lovelace marker. */
+  hooks: boolean;
+  /** `.opencode/commands/ticket.md` exists. */
+  commands: boolean;
+  /** Root `AGENTS.md` contains the Lovelace section marker. */
+  agentsMd: boolean;
+  /** `.lovelace/AGENTS.md` contains the Lovelace section marker. */
+  lovelaceAgentsMd: boolean;
+  /** `.git/hooks/prepare-commit-msg` exists and references Lovelace. */
+  gitHook: boolean;
+}
+
 /** The result of reading a file for preview, dispatched on `kind`. */
 export interface SourceFile {
   kind: 'text' | 'image' | 'pdf' | 'binary' | 'missing';
@@ -71,6 +88,9 @@ export interface HostClient {
   installClaude(root: string, gitHook: boolean): Promise<InstallClaudeResult>;
   /** Detect whether the Claude Code integration assets are present in the project. */
   claudeStatus(root: string): Promise<ClaudeInstallStatus>;
+  installOpenCode(root: string, gitHook: boolean): Promise<InstallClaudeResult>;
+  /** Detect whether the OpenCode integration assets are present in the project. */
+  openCodeStatus(root: string): Promise<OpenCodeInstallStatus>;
   snapshot(root: string): Promise<Snapshot>;
   /** The migration plan for a project declaring an older spec major (ADR-0011); a dry run, no files change. */
   migrationPlan(root: string): Promise<MigrationPlan>;
@@ -196,6 +216,16 @@ export class TauriHost implements HostClient {
 
   async claudeStatus(root: string): Promise<ClaudeInstallStatus> {
     return (await tauriRequest({ op: 'detect_claude', root })) as ClaudeInstallStatus;
+  }
+
+  async installOpenCode(root: string, gitHook: boolean): Promise<InstallClaudeResult> {
+    // The host process knows where its sibling sidecar binaries live and
+    // fills in the command paths itself.
+    return (await tauriRequest({ op: 'install_opencode', root, gitHook })) as InstallClaudeResult;
+  }
+
+  async openCodeStatus(root: string): Promise<OpenCodeInstallStatus> {
+    return (await tauriRequest({ op: 'detect_opencode', root })) as OpenCodeInstallStatus;
   }
 
   snapshot(root: string): Promise<Snapshot> {
