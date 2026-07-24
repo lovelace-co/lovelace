@@ -1,3 +1,6 @@
+mod cli;
+
+use cli::{cli_command_install, cli_command_status, cli_command_uninstall};
 use notify::{RecursiveMode, Watcher};
 use serde_json::json;
 use std::collections::HashMap;
@@ -406,7 +409,10 @@ pub fn run() {
             new_window,
             apply_window_theme,
             install_update,
-            staged_update
+            staged_update,
+            cli_command_status,
+            cli_command_install,
+            cli_command_uninstall
         ])
         .on_menu_event(|app, event| match event.id().as_ref() {
             // Tab and window management live in the web UI; the macOS menu
