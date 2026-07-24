@@ -1,4 +1,10 @@
-import { HostError, type ClaudeInstallStatus, type HostClient, type SourceFile } from '../src/lib/host';
+import {
+  HostError,
+  type ClaudeInstallStatus,
+  type HostClient,
+  type OpenCodeInstallStatus,
+  type SourceFile,
+} from '../src/lib/host';
 import type { MigrationPlan, MigrationResult, SchemaEdit, SearchHit, Snapshot } from '../src/lib/types';
 import fixture from './fixtures/snapshot.json';
 
@@ -61,6 +67,24 @@ export class FakeHost implements HostClient {
   async claudeStatus(root: string): Promise<ClaudeInstallStatus> {
     this.record('claudeStatus', [root]);
     return { installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false };
+  }
+
+  async installOpenCode(root: string, gitHook: boolean): Promise<{ written: string[]; manual: string[] }> {
+    this.record('installOpenCode', [root, gitHook]);
+    return { written: ['opencode.json'], manual: [] };
+  }
+
+  async openCodeStatus(root: string): Promise<OpenCodeInstallStatus> {
+    this.record('openCodeStatus', [root]);
+    return {
+      installed: false,
+      mcp: false,
+      hooks: false,
+      commands: false,
+      agentsMd: false,
+      lovelaceAgentsMd: false,
+      gitHook: false,
+    };
   }
 
   async snapshot(root: string): Promise<Snapshot> {

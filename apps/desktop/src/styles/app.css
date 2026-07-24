@@ -203,6 +203,13 @@ a {
   justify-content: center;
 }
 
+/* A smaller icon capsule for controls that sit inline with text, such as the
+   copy affordance beside the ticket ID; keeps the same species, just quieter. */
+.btn-icon-sm {
+  width: 24px;
+  height: 24px;
+}
+
 .tag {
   font-size: var(--size-util);
   line-height: 1;
@@ -1315,6 +1322,13 @@ input[type='checkbox'] {
   font-size: 13px;
   color: var(--ink);
   word-break: break-word;
+}
+
+/* The ID row's value carries a copy affordance beside the text, centred with it. */
+.prop-value-id {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
 }
 
 .prop-control {

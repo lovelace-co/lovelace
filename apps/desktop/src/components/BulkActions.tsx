@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Dropdown } from './Dropdown';
 import { statusLabel } from '../lib/format';
+import { copyText } from '../lib/clipboard';
 import type { IndexComment, IndexSession, SchemaStatus } from '../lib/types';
 
 interface BulkActionsProps {
@@ -66,7 +67,7 @@ export function BulkActions({ selected, statuses, index, onMove, onDelete, onCle
         <button
           className="btn btn-secondary"
           onClick={() => {
-            void navigator.clipboard.writeText(selected.join(', ')).then(() => {
+            void copyText(selected.join(', ')).then(() => {
               setCopied(true);
               window.setTimeout(() => setCopied(false), 1500);
             });

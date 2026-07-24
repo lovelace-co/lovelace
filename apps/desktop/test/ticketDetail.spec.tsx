@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TicketDetail } from '../src/views/TicketDetail';
 import { HostProvider } from '../src/state/store';
 import type { ProjectPresence } from '../src/state/store';
@@ -346,5 +346,65 @@ describe('TicketDetail', () => {
   it('shows no live-work readout in the header without presence for the open ticket', () => {
     renderDetail('T-0002');
     expect(document.querySelector('.view-header .id.live')).toBeNull();
+  });
+
+  describe('copy ticket id', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('renders a copy button in the ID row', () => {
+      renderDetail('T-0002');
+      const button = screen.getByRole('button', { name: 'Copy ticket ID' });
+      const row = screen.getByText('ID', { selector: '.prop-label' }).closest('.prop')!;
+      expect(row.contains(button)).toBe(true);
+    });
+
+    it('copies the bare ticket ID, exact casing, to the clipboard', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      renderDetail('T-0002');
+      const button = screen.getByRole('button', { name: 'Copy ticket ID' });
+      await act(async () => {
+        fireEvent.click(button);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(writeText).toHaveBeenCalledWith('T-0002');
+    });
+
+    it('shows a tick after copying and reverts to the copy icon after the timeout', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      renderDetail('T-0002');
+      const button = screen.getByRole('button', { name: 'Copy ticket ID' });
+      const restingIcon = button.innerHTML;
+      await act(async () => {
+        fireEvent.click(button);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(button.innerHTML).not.toBe(restingIcon);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+      expect(button.innerHTML).toBe(restingIcon);
+    });
+
+    it('does not show a tick, and does not throw, if the copy fails', async () => {
+      const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      renderDetail('T-0002');
+      const button = screen.getByRole('button', { name: 'Copy ticket ID' });
+      const restingIcon = button.innerHTML;
+      await act(async () => {
+        fireEvent.click(button);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(writeText).toHaveBeenCalledWith('T-0002');
+      expect(button.innerHTML).toBe(restingIcon);
+    });
   });
 });

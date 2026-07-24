@@ -97,6 +97,13 @@ Every mutation triggers a re-index. A fresh agent session starts oriented: the d
 
 Download the installer for your platform from [lovelace.co](https://lovelace.co). macOS gets `.app` and `.dmg`, Windows `.msi` and `.exe`, Linux `.deb`, `.rpm` and `.AppImage`. The app auto-updates via the Tauri updater; the update check is the only network call the app ever makes. No telemetry.
 
+On macOS, Lovelace is also available via Homebrew:
+
+```sh
+brew tap lovelace-co/tap
+brew install --cask lovelace
+```
+
 ### Building from source
 
 Prerequisites:
