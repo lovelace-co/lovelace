@@ -5,7 +5,7 @@
  *
  * Usage:
  *   node scripts/release/latest-json.mjs --version 0.2.0 \
- *     --base-url https://github.com/lovelace-co/lovelace-monorepo/releases/download/v0.2.0 \
+ *     --base-url https://github.com/lovelace-co/lovelace/releases/download/v0.2.0 \
  *     --dir path/to/downloaded/artifacts \
  *     --notes "What changed, in one paragraph."
  *
