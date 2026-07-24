@@ -50,6 +50,13 @@ The complete on-disk format is specified in [SPEC.md](SPEC.md), written so a dev
 
 Download the installer for your platform from the Lovelace website. macOS produces `.app` and `.dmg`, Windows `.msi` and `.exe`, Linux `.deb`, `.rpm` and `.AppImage`. The app auto-updates via the Tauri updater; the update check is the only network call the app ever makes. No telemetry.
 
+On macOS, Lovelace is also available via Homebrew:
+
+```sh
+brew tap lovelace-co/tap
+brew install --cask lovelace
+```
+
 ### Building from source
 
 Prerequisites:

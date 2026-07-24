@@ -1,0 +1,134 @@
+name: homebrew-cask
+
+# Keeps the lovelace-co/homebrew-tap cask current with each published macOS
+# release, so `brew install --cask lovelace` always resolves to a real,
+# already-signed DMG. Reacts to artefacts a release already produced; it
+# never runs the test suite or builds the app itself.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to sync (e.g. v0.1.0), for backfills"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  sync-cask:
+    name: sync cask
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the release tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.tag || github.event.release.tag_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      # Asking the API for the release's own prerelease flag works the same
+      # way for both triggers (workflow_dispatch has no release payload to
+      # read), so a backfill and a real publish are guarded identically. This
+      # repo also ships a windows-test prerelease that must never reach the
+      # tap; the tag shape check below catches that one on its own, since it
+      # is not a v<semver> tag at all.
+      - name: Decide whether this release should reach the tap
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          if ! [[ "$TAG" =~ ^v[0-9] ]]; then
+            echo "skipping: tag \"$TAG\" does not match v[0-9]*" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "sync=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          IS_PRERELEASE=$(gh release view "$TAG" --repo lovelace-co/lovelace --json isPrerelease --jq .isPrerelease)
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            echo "skipping: $TAG is a prerelease" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "sync=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "sync=true" >> "$GITHUB_OUTPUT"
+
+      - name: Download the macOS installers
+        if: steps.guard.outputs.sync == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${TAG#v}"
+          mkdir -p dmgs
+          gh release download "$TAG" --repo lovelace-co/lovelace \
+            --pattern "Lovelace_${VERSION}_aarch64.dmg" \
+            --pattern "Lovelace_${VERSION}_x64.dmg" \
+            --dir dmgs
+
+      - name: Compute checksums
+        if: steps.guard.outputs.sync == 'true'
+        id: shas
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${TAG#v}"
+          ARM_SHA256=$(shasum -a 256 "dmgs/Lovelace_${VERSION}_aarch64.dmg" | cut -d' ' -f1)
+          X64_SHA256=$(shasum -a 256 "dmgs/Lovelace_${VERSION}_x64.dmg" | cut -d' ' -f1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "arm_sha256=$ARM_SHA256" >> "$GITHUB_OUTPUT"
+          echo "x64_sha256=$X64_SHA256" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.sync == 'true'
+        with:
+          node-version: 22
+
+      - name: Render the cask
+        if: steps.guard.outputs.sync == 'true'
+        run: |
+          node scripts/release/render-cask.mjs \
+            "${{ steps.shas.outputs.version }}" \
+            "${{ steps.shas.outputs.arm_sha256 }}" \
+            "${{ steps.shas.outputs.x64_sha256 }}" \
+            > cask.rb
+
+      # A push without this secret would fail deep inside a git command with
+      # a confusing auth error; naming the secret and its required
+      # permission here saves whoever configures the repo a debugging trip.
+      - name: Assert the tap token is configured
+        if: steps.guard.outputs.sync == 'true'
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN is empty. Configure a fine-grained PAT with contents:write on lovelace-co/homebrew-tap before this workflow can push the cask."
+            exit 1
+          fi
+
+      - name: Clone the tap
+        if: steps.guard.outputs.sync == 'true'
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/lovelace-co/homebrew-tap.git" tap
+
+      - name: Update the cask and push if it changed
+        if: steps.guard.outputs.sync == 'true'
+        run: |
+          mkdir -p tap/Casks
+          cp cask.rb tap/Casks/lovelace.rb
+          cd tap
+          git config user.name "lovelace release automation"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/lovelace.rb
+          if git diff --cached --quiet; then
+            echo "cask already current"
+          else
+            git commit -m "lovelace ${{ steps.shas.outputs.version }}"
+            git push
+          fi
