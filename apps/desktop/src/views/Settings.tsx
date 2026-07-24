@@ -7,7 +7,7 @@ import { GeneralSettings } from '../components/GeneralSettings';
 import { TeamSettings } from '../components/TeamSettings';
 import { IntegrationsSettings } from '../components/IntegrationsSettings';
 import { useSchemaDraft } from '../lib/useSchemaDraft';
-import type { ClaudeInstallStatus, InstallClaudeResult } from '../lib/host';
+import type { ClaudeInstallStatus, InstallClaudeResult, OpenCodeInstallStatus } from '../lib/host';
 import type { LinkResolver, OpenLink } from '../lib/links';
 import type { Actor, SchemaEdit, Snapshot } from '../lib/types';
 
@@ -22,6 +22,8 @@ interface SettingsProps {
   onSaveActors: (actors: Actor[]) => Promise<void>;
   onInstallClaude: (gitHook: boolean) => Promise<InstallClaudeResult>;
   onClaudeStatus: () => Promise<ClaudeInstallStatus>;
+  onInstallOpenCode: (gitHook: boolean) => Promise<InstallClaudeResult>;
+  onOpenCodeStatus: () => Promise<OpenCodeInstallStatus>;
   /** Reports whether any section has unsaved edits, so leaving Settings can prompt. */
   onDirtyChange: (dirty: boolean) => void;
   onOpenTicket: (id: string) => void;
@@ -44,7 +46,7 @@ const TABS: Array<{ key: Tab; label: string; hint?: string }> = [
   },
   { key: 'fields', label: 'Types' },
   { key: 'team', label: 'Team', hint: 'The human and agent identities work is attributed to.' },
-  { key: 'integrations', label: 'Integrations', hint: 'Wire this project up to Claude Code.' },
+  { key: 'integrations', label: 'Integrations', hint: 'Wire this project up to your coding agents.' },
 ];
 
 /**
@@ -63,6 +65,8 @@ export function Settings({
   onSaveActors,
   onInstallClaude,
   onClaudeStatus,
+  onInstallOpenCode,
+  onOpenCodeStatus,
   onDirtyChange,
   onOpenTicket,
   resolveLink,
@@ -139,7 +143,12 @@ export function Settings({
           <TeamSettings snapshot={snapshot} onSave={onSaveActors} onDirtyChange={setTeamDirty} />
         )}
         {tab === 'integrations' && (
-          <IntegrationsSettings onInstall={onInstallClaude} onClaudeStatus={onClaudeStatus} />
+          <IntegrationsSettings
+            onInstall={onInstallClaude}
+            onClaudeStatus={onClaudeStatus}
+            onInstallOpenCode={onInstallOpenCode}
+            onOpenCodeStatus={onOpenCodeStatus}
+          />
         )}
       </div>
     </>

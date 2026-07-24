@@ -52,6 +52,7 @@ import {
 import { join } from 'node:path';
 import { parseDocument } from 'yaml';
 import { detectClaudeAssets, installClaudeAssets } from './claude.js';
+import { detectOpenCodeAssets, installOpenCodeAssets } from './opencode.js';
 
 export interface HostRequest {
   op: string;
@@ -274,6 +275,19 @@ export async function handle(request: HostRequest): Promise<Json> {
     case 'install_claude': {
       const defaults = siblingCommands();
       const result = installClaudeAssets(root, {
+        mcpCommand: String(request.mcpCommand ?? defaults.mcp),
+        helperCommand: String(request.helperCommand ?? defaults.helper),
+        gitHook: request.gitHook === true,
+      });
+      return { ...result, ...snapshot(root) };
+    }
+    case 'detect_opencode': {
+      // Plain object for the Json return type; field names match OpenCodeInstallStatus.
+      return { ...detectOpenCodeAssets(root) };
+    }
+    case 'install_opencode': {
+      const defaults = siblingCommands();
+      const result = installOpenCodeAssets(root, {
         mcpCommand: String(request.mcpCommand ?? defaults.mcp),
         helperCommand: String(request.helperCommand ?? defaults.helper),
         gitHook: request.gitHook === true,

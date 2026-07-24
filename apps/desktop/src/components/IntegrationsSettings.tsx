@@ -1,55 +1,87 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { HoleCheck } from './HoleCheck';
 import { Toast } from './Toast';
-import type { ClaudeInstallStatus, InstallClaudeResult } from '../lib/host';
+import type { ClaudeInstallStatus, InstallClaudeResult, OpenCodeInstallStatus } from '../lib/host';
 
 interface IntegrationsSettingsProps {
   /** (Re)install the Claude Code assets; resolves to what was written and what needs doing by hand. */
   onInstall: (gitHook: boolean) => Promise<InstallClaudeResult>;
   /** Detect whether the Claude Code assets are already installed. */
   onClaudeStatus: () => Promise<ClaudeInstallStatus>;
+  /** (Re)install the OpenCode assets; resolves to what was written and what needs doing by hand. */
+  onInstallOpenCode: (gitHook: boolean) => Promise<InstallClaudeResult>;
+  /** Detect whether the OpenCode assets are already installed. */
+  onOpenCodeStatus: () => Promise<OpenCodeInstallStatus>;
 }
 
-function coreLabel(name: string): string {
-  if (name === 'mcp') return 'MCP server';
-  if (name === 'hooks') return 'Hooks';
-  if (name === 'commands') return 'Slash commands';
-  return name;
+/** The three core pieces every integration shares: an MCP entry, a launcher (hooks or plugin) and slash commands. */
+interface CoreInstallStatus {
+  installed: boolean;
+  mcp: boolean;
+  hooks: boolean;
+  commands: boolean;
 }
 
-function missingCorePieces(status: ClaudeInstallStatus): string[] {
-  const pieces: Array<keyof ClaudeInstallStatus> = ['mcp', 'hooks', 'commands'];
-  return pieces.filter((k) => !status[k]).map(coreLabel);
+const CORE_PIECES: Array<keyof CoreInstallStatus & ('mcp' | 'hooks' | 'commands')> = ['mcp', 'hooks', 'commands'];
+
+function missingCorePieces(status: CoreInstallStatus, labels: Record<'mcp' | 'hooks' | 'commands', string>): string[] {
+  return CORE_PIECES.filter((k) => !status[k]).map((k) => labels[k]);
 }
 
-function installSummary(status: ClaudeInstallStatus): string {
+function installSummary(productName: string, status: CoreInstallStatus, missing: string[]): string {
   if (status.installed) {
-    return 'Claude Code assets are installed in this project.';
+    return `${productName} assets are installed in this project.`;
   }
-  const missing = missingCorePieces(status);
-  if (missing.length < 3) {
-    return 'Claude Code assets are partially installed.';
+  if (missing.length < CORE_PIECES.length) {
+    return `${productName} assets are partially installed.`;
   }
-  return 'Claude Code assets are not installed in this project.';
+  return `${productName} assets are not installed in this project.`;
+}
+
+interface IntegrationCardProps<S extends CoreInstallStatus, R extends { written: string[]; manual: string[] }> {
+  /** The human-facing product name, e.g. "Claude Code" or "OpenCode". */
+  productName: string;
+  /** Used to keep aria-labels and test ids distinct between cards. */
+  cardId: string;
+  description: ReactNode;
+  pieceLabels: Record<'mcp' | 'hooks' | 'commands', string>;
+  installLabel: string;
+  reinstallLabel: string;
+  restartHint: string;
+  onInstall: (gitHook: boolean) => Promise<R>;
+  onStatus: () => Promise<S>;
 }
 
 /**
- * The Integrations settings section: shows whether the Claude Code assets are
- * installed, and installs or reinstalls them on request. Reinstalling is safe;
- * it regenerates the Lovelace-owned files and reports anything it could not do.
+ * One integration's install/status card: shows whether its assets are
+ * installed, and installs or reinstalls them on request. Reinstalling is
+ * safe; it regenerates the Lovelace-owned files and reports anything it
+ * could not do. Both the Claude Code and OpenCode cards render through this,
+ * each with their own git hook checkbox and busy/result state.
  */
-export function IntegrationsSettings({ onInstall, onClaudeStatus }: IntegrationsSettingsProps) {
+function IntegrationCard<S extends CoreInstallStatus, R extends { written: string[]; manual: string[] }>({
+  productName,
+  cardId,
+  description,
+  pieceLabels,
+  installLabel,
+  reinstallLabel,
+  restartHint,
+  onInstall,
+  onStatus,
+}: IntegrationCardProps<S, R>) {
   const [gitHook, setGitHook] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<InstallClaudeResult | null>(null);
+  const [result, setResult] = useState<R | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<ClaudeInstallStatus | null>(null);
+  const [status, setStatus] = useState<S | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setStatusLoading(true);
-    void onClaudeStatus().then(
+    void onStatus().then(
       (s) => {
         if (!cancelled) {
           setStatus(s);
@@ -63,7 +95,7 @@ export function IntegrationsSettings({ onInstall, onClaudeStatus }: Integrations
     return () => {
       cancelled = true;
     };
-  }, [onClaudeStatus]);
+  }, [onStatus]);
 
   const install = async () => {
     setBusy(true);
@@ -73,7 +105,7 @@ export function IntegrationsSettings({ onInstall, onClaudeStatus }: Integrations
       const r = await onInstall(gitHook);
       setResult(r);
       try {
-        setStatus(await onClaudeStatus());
+        setStatus(await onStatus());
       } catch {
         // silently ignore status refresh failure
       }
@@ -85,19 +117,17 @@ export function IntegrationsSettings({ onInstall, onClaudeStatus }: Integrations
   };
 
   const isInstalled = status?.installed ?? false;
-  const missing = status && !status.installed ? missingCorePieces(status) : [];
+  const missing = status && !status.installed ? missingCorePieces(status, pieceLabels) : [];
 
   return (
-    <div className="settings-section">
+    <div>
       {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
       <h2 className="section-heading section-heading--with-badge">
-        Claude Code
+        {productName}
         {status?.installed && <span className="badge-installed">installed</span>}
       </h2>
       <p className="subtle" style={{ maxWidth: '58ch', marginBottom: 18 }}>
-        Install or reinstall the CLAUDE.md section, the MCP server and the hooks so a Claude Code session
-        starts oriented and works tickets through Lovelace. Reinstalling regenerates the Lovelace-owned
-        files and leaves your own content alone.
+        {description}
       </p>
 
       <div style={{ marginBottom: 18 }}>
@@ -105,7 +135,9 @@ export function IntegrationsSettings({ onInstall, onClaudeStatus }: Integrations
           <p className="subtle">Checking...</p>
         ) : status !== null ? (
           <>
-            <p className="subtle" data-testid="claude-status-summary">{installSummary(status)}</p>
+            <p className="subtle" data-testid={`${cardId}-status-summary`}>
+              {installSummary(productName, status, missing)}
+            </p>
             {missing.length > 0 && (
               <p className="subtle" style={{ marginTop: 6 }}>
                 Missing: {missing.join(', ')}.
@@ -116,13 +148,17 @@ export function IntegrationsSettings({ onInstall, onClaudeStatus }: Integrations
       </div>
 
       <label className="wizard-check" style={{ marginBottom: 18 }}>
-        <HoleCheck aria-label="install git hook" checked={gitHook} onChange={(e) => setGitHook(e.target.checked)} />
+        <HoleCheck
+          aria-label={cardId === 'claude' ? 'install git hook' : `install ${cardId} git hook`}
+          checked={gitHook}
+          onChange={(e) => setGitHook(e.target.checked)}
+        />
         Also install the git hook that adds the active ticket ID to commit messages
       </label>
 
       <div>
         <button className="btn btn-primary" onClick={() => void install()} disabled={busy}>
-          {busy ? 'Installing...' : isInstalled ? 'Reinstall Claude Code assets' : 'Install Claude Code assets'}
+          {busy ? 'Installing...' : isInstalled ? reinstallLabel : installLabel}
         </button>
       </div>
 
@@ -143,10 +179,51 @@ export function IntegrationsSettings({ onInstall, onClaudeStatus }: Integrations
               </ul>
             </>
           ) : (
-            <p className="subtle">Everything installed. Restart any open Claude Code session to pick it up.</p>
+            <p className="subtle">{restartHint}</p>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The Integrations settings section: one card per coding agent Lovelace
+ * wires up to, each showing whether its assets are installed and installing
+ * or reinstalling them on request.
+ */
+export function IntegrationsSettings({
+  onInstall,
+  onClaudeStatus,
+  onInstallOpenCode,
+  onOpenCodeStatus,
+}: IntegrationsSettingsProps) {
+  return (
+    <div className="settings-section">
+      <IntegrationCard
+        productName="Claude Code"
+        cardId="claude"
+        description="Install or reinstall the CLAUDE.md section, the MCP server and the hooks so a Claude Code session starts oriented and works tickets through Lovelace. Reinstalling regenerates the Lovelace-owned files and leaves your own content alone."
+        pieceLabels={{ mcp: 'MCP server', hooks: 'Hooks', commands: 'Slash commands' }}
+        installLabel="Install Claude Code assets"
+        reinstallLabel="Reinstall Claude Code assets"
+        restartHint="Everything installed. Restart any open Claude Code session to pick it up."
+        onInstall={onInstall}
+        onStatus={onClaudeStatus}
+      />
+      <div style={{ marginTop: 'var(--sp-6)' }}>
+        <IntegrationCard
+          productName="OpenCode"
+          cardId="opencode"
+          description="Install or reinstall the AGENTS.md section, the MCP server and the launcher plugin so an OpenCode session starts oriented and works tickets through Lovelace. Reinstalling regenerates the Lovelace-owned files and leaves your own content alone."
+          pieceLabels={{ mcp: 'MCP server', hooks: 'Plugin', commands: 'Commands' }}
+          installLabel="Install OpenCode assets"
+          reinstallLabel="Reinstall OpenCode assets"
+          restartHint="Everything installed. Restart any open OpenCode session to pick it up."
+          onInstall={onInstallOpenCode}
+          onStatus={onOpenCodeStatus}
+        />
+      </div>
     </div>
   );
 }

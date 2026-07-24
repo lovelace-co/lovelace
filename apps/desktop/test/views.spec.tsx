@@ -235,7 +235,10 @@ describe('List view', () => {
 });
 
 describe('Settings view', () => {
-  function renderSettings(claudeStatus?: { installed: boolean; mcp?: boolean; hooks?: boolean; commands?: boolean }) {
+  function renderSettings(
+    claudeStatus?: { installed: boolean; mcp?: boolean; hooks?: boolean; commands?: boolean },
+    openCodeStatus?: { installed: boolean; mcp?: boolean; hooks?: boolean; commands?: boolean },
+  ) {
     const status = {
       installed: claudeStatus?.installed ?? false,
       agentsMd: false,
@@ -243,6 +246,15 @@ describe('Settings view', () => {
       mcp: claudeStatus?.mcp ?? claudeStatus?.installed ?? false,
       hooks: claudeStatus?.hooks ?? claudeStatus?.installed ?? false,
       commands: claudeStatus?.commands ?? claudeStatus?.installed ?? false,
+      gitHook: false,
+    };
+    const openCodeStatusValue = {
+      installed: openCodeStatus?.installed ?? false,
+      mcp: openCodeStatus?.mcp ?? openCodeStatus?.installed ?? false,
+      hooks: openCodeStatus?.hooks ?? openCodeStatus?.installed ?? false,
+      commands: openCodeStatus?.commands ?? openCodeStatus?.installed ?? false,
+      agentsMd: false,
+      lovelaceAgentsMd: false,
       gitHook: false,
     };
     const props = {
@@ -253,6 +265,8 @@ describe('Settings view', () => {
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
       onClaudeStatus: vi.fn().mockResolvedValue(status),
+      onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
+      onOpenCodeStatus: vi.fn().mockResolvedValue(openCodeStatusValue),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -463,6 +477,8 @@ describe('Settings view', () => {
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
+      onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
+      onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -559,7 +575,10 @@ describe('Settings view', () => {
     await waitFor(() =>
       expect(screen.getByText('Claude Code assets are partially installed.')).toBeTruthy(),
     );
-    expect(screen.getByText(/Missing:/)).toBeTruthy();
+    // Scoped to the exact missing list for this status: the OpenCode card
+    // beside it also renders a "Missing:" line, so a bare /Missing:/ match
+    // is ambiguous once both cards are on screen.
+    expect(screen.getByText('Missing: Hooks, Slash commands.')).toBeTruthy();
     expect(screen.getByText('Install Claude Code assets')).toBeTruthy();
   });
 
@@ -584,6 +603,57 @@ describe('Settings view', () => {
       expect(screen.getByText('Claude Code assets are installed in this project.')).toBeTruthy(),
     );
     expect(screen.getByText('Reinstall Claude Code assets')).toBeTruthy();
+  });
+
+  it('installs the OpenCode integration', async () => {
+    const props = renderSettings();
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() => expect(screen.getByText('Install OpenCode assets')).toBeTruthy());
+    fireEvent.click(screen.getByText('Install OpenCode assets'));
+    await waitFor(() => expect(props.onInstallOpenCode).toHaveBeenCalledWith(true));
+  });
+
+  it('shows "not installed" for OpenCode when no assets are present', async () => {
+    renderSettings(undefined, { installed: false });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() =>
+      expect(screen.getByText('OpenCode assets are not installed in this project.')).toBeTruthy(),
+    );
+    expect(screen.getByText('Install OpenCode assets')).toBeTruthy();
+  });
+
+  it('shows "partially installed" with missing pieces for OpenCode when some core assets are absent', async () => {
+    renderSettings(undefined, { installed: false, mcp: false, hooks: false, commands: true });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() =>
+      expect(screen.getByText('OpenCode assets are partially installed.')).toBeTruthy(),
+    );
+    expect(screen.getByText('Missing: MCP server, Plugin.')).toBeTruthy();
+    expect(screen.getByText('Install OpenCode assets')).toBeTruthy();
+  });
+
+  it('shows "installed" and the Reinstall button for OpenCode when all assets are present', async () => {
+    renderSettings(undefined, { installed: true });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() =>
+      expect(screen.getByText('OpenCode assets are installed in this project.')).toBeTruthy(),
+    );
+    expect(screen.getByText('Reinstall OpenCode assets')).toBeTruthy();
+  });
+
+  it('renders written and manual results after installing OpenCode', async () => {
+    const props = renderSettings();
+    props.onInstallOpenCode.mockResolvedValueOnce({
+      written: ['opencode.json', '.opencode/plugins/lovelace.js'],
+      manual: ['Add the instructions entry to opencode.json by hand.'],
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() => expect(screen.getByText('Install OpenCode assets')).toBeTruthy());
+    fireEvent.click(screen.getByText('Install OpenCode assets'));
+    await waitFor(() =>
+      expect(screen.getByText('opencode.json, .opencode/plugins/lovelace.js')).toBeTruthy(),
+    );
+    expect(screen.getByText('Add the instructions entry to opencode.json by hand.')).toBeTruthy();
   });
 
   it('reports its dirty state so navigation can be guarded', () => {
@@ -617,6 +687,8 @@ describe('Settings view', () => {
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
+      onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
+      onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -656,6 +728,8 @@ describe('Settings view', () => {
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
+      onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
+      onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -701,6 +775,8 @@ describe('Settings view', () => {
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
+      onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
+      onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -739,6 +815,8 @@ describe('Settings view', () => {
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
+      onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
+      onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -760,6 +838,8 @@ describe('Settings view', () => {
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
+      onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
+      onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -785,6 +865,8 @@ describe('Settings view', () => {
       onSaveActors: vi.fn().mockResolvedValue(undefined),
       onInstallClaude: vi.fn().mockResolvedValue({ written: ['CLAUDE.md'], manual: [] }),
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
+      onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
+      onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
