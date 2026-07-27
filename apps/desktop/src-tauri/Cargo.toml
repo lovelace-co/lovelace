@@ -1,6 +1,6 @@
 [package]
 name = "lovelace-desktop"
-version = "0.2.0"
+version = "0.3.0"
 description = "Lovelace: local-first project management for agent-heavy development"
 authors = ["Lovelace"]
 edition = "2021"
