@@ -4072,6 +4072,40 @@ input[type='checkbox'] {
   margin-top: 18px;
 }
 
+/* The Integrations tab (ADR-0010): a row per integration at rest, its panel
+   materialising on click. The row and panel both bleed into the gutter with
+   a negative margin equal to their own padding, so their surface extends
+   past the content column while the label keeps the shared left edge. */
+.integration-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--size-body);
+  color: var(--ink);
+  background: transparent;
+  border-radius: var(--radius-seat);
+  padding: var(--sp-3) var(--sp-4);
+  margin: 0 calc(var(--sp-4) * -1);
+  transition: background var(--dur-colour) var(--swift);
+}
+
+.integration-row:hover {
+  background: var(--raise);
+}
+
+.integration-row[aria-expanded='true'] {
+  background: var(--raise);
+}
+
+.integration-panel {
+  background: var(--raise);
+  border-radius: var(--radius-seat);
+  padding: var(--sp-4);
+  margin: 0 calc(var(--sp-4) * -1) var(--sp-4);
+}
+
 /* The status row's agent-role choice: None / Ready / In Progress / Complete,
    a radio group sharing the punchcard-hole language with the checkbox (a
    rimmed circle that punches in when selected) rather than a new species. */

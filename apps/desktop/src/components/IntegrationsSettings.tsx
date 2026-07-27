@@ -43,10 +43,10 @@ function installSummary(productName: string, status: CoreInstallStatus, missing:
   return `${productName} assets are not installed in this project.`;
 }
 
-interface IntegrationCardProps<S extends CoreInstallStatus, R extends { written: string[]; manual: string[] }> {
+interface IntegrationItemProps<S extends CoreInstallStatus, R extends { written: string[]; manual: string[] }> {
   /** The human-facing product name, e.g. "Claude Code" or "OpenCode". */
   productName: string;
-  /** Used to keep aria-labels and test ids distinct between cards. */
+  /** Used to keep aria-labels and test ids distinct between rows. */
   cardId: string;
   description: ReactNode;
   pieceLabels: Record<'mcp' | 'hooks' | 'commands', string>;
@@ -55,16 +55,22 @@ interface IntegrationCardProps<S extends CoreInstallStatus, R extends { written:
   restartHint: string;
   onInstall: (gitHook: boolean) => Promise<R>;
   onStatus: () => Promise<S>;
+  /** Whether this integration's panel is the one currently open. */
+  isOpen: boolean;
+  /** Opens this integration's panel, closing any other. */
+  onToggle: () => void;
 }
 
 /**
- * One integration's install/status card: shows whether its assets are
- * installed, and installs or reinstalls them on request. Reinstalling is
- * safe; it regenerates the Lovelace-owned files and reports anything it
- * could not do. Both the Claude Code and OpenCode cards render through this,
- * each with their own git hook checkbox and busy/result state.
+ * One integration's row and panel: the row names the product and shows its
+ * install state at a glance; the panel, which materialises on click, holds
+ * the description, status detail, git hook checkbox and install/reinstall
+ * control. Status loads on mount regardless of whether the panel is open, so
+ * every row reads correctly at rest. The component stays mounted whether or
+ * not its panel is open, so its git hook, busy and result state survive
+ * switching to another integration and back.
  */
-function IntegrationCard<S extends CoreInstallStatus, R extends { written: string[]; manual: string[] }>({
+function IntegrationItem<S extends CoreInstallStatus, R extends { written: string[]; manual: string[] }>({
   productName,
   cardId,
   description,
@@ -74,7 +80,9 @@ function IntegrationCard<S extends CoreInstallStatus, R extends { written: strin
   restartHint,
   onInstall,
   onStatus,
-}: IntegrationCardProps<S, R>) {
+  isOpen,
+  onToggle,
+}: IntegrationItemProps<S, R>) {
   const [gitHook, setGitHook] = useState(true);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<R | null>(null);
@@ -122,68 +130,82 @@ function IntegrationCard<S extends CoreInstallStatus, R extends { written: strin
 
   const isInstalled = status?.installed ?? false;
   const missing = status && !status.installed ? missingCorePieces(status, pieceLabels) : [];
+  const partiallyInstalled = missing.length > 0 && missing.length < CORE_PIECES.length;
 
   return (
     <div>
       {error && <Toast onDismiss={() => setError(null)}>{error}</Toast>}
-      <h2 className="section-heading section-heading--with-badge">
-        {productName}
-        {status?.installed && <span className="badge-installed">installed</span>}
-      </h2>
-      <p className="subtle" style={{ maxWidth: '58ch', marginBottom: 18 }}>
-        {description}
-      </p>
-
-      <div style={{ marginBottom: 18 }}>
+      <button type="button" className="integration-row" aria-expanded={isOpen} onClick={onToggle}>
+        <span>{productName}</span>
         {statusLoading ? (
-          <p className="subtle">Checking...</p>
-        ) : status !== null ? (
-          <>
-            <p className="subtle" data-testid={`${cardId}-status-summary`}>
-              {installSummary(productName, status, missing)}
-            </p>
-            {missing.length > 0 && (
-              <p className="subtle" style={{ marginTop: 6 }}>
-                Missing: {missing.join(', ')}.
-              </p>
-            )}
-          </>
-        ) : null}
-      </div>
+          <span className="subtle">Checking...</span>
+        ) : isInstalled ? (
+          <span className="badge-installed">installed</span>
+        ) : partiallyInstalled ? (
+          <span className="subtle">Partially installed</span>
+        ) : (
+          <span className="subtle">Not installed</span>
+        )}
+      </button>
 
-      <label className="wizard-check" style={{ marginBottom: 18 }}>
-        <HoleCheck
-          aria-label={cardId === 'claude' ? 'install git hook' : `install ${cardId} git hook`}
-          checked={gitHook}
-          onChange={(e) => setGitHook(e.target.checked)}
-        />
-        Also install the git hook that adds the active ticket ID to commit messages
-      </label>
+      {isOpen && (
+        <div className="integration-panel">
+          <p className="subtle" style={{ maxWidth: '58ch', marginBottom: 18 }}>
+            {description}
+          </p>
 
-      <div>
-        <button className="btn btn-primary" onClick={() => void install()} disabled={busy}>
-          {busy ? 'Installing...' : isInstalled ? reinstallLabel : installLabel}
-        </button>
-      </div>
+          <div style={{ marginBottom: 18 }}>
+            {statusLoading ? (
+              <p className="subtle">Checking...</p>
+            ) : status !== null ? (
+              <>
+                <p className="subtle" data-testid={`${cardId}-status-summary`}>
+                  {installSummary(productName, status, missing)}
+                </p>
+                {missing.length > 0 && (
+                  <p className="subtle" style={{ marginTop: 6 }}>
+                    Missing: {missing.join(', ')}.
+                  </p>
+                )}
+              </>
+            ) : null}
+          </div>
 
-      {result && (
-        <div className="settings-result" style={{ marginTop: 18 }}>
-          {result.written.length > 0 && (
-            <p className="subtle">
-              Wrote: <span className="mono">{result.written.join(', ')}</span>
-            </p>
-          )}
-          {result.manual.length > 0 ? (
-            <>
-              <p className="subtle">A few steps could not be done automatically:</p>
-              <ul className="subtle">
-                {result.manual.map((m, i) => (
-                  <li key={i}>{m}</li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            <p className="subtle">{restartHint}</p>
+          <label className="wizard-check" style={{ marginBottom: 18 }}>
+            <HoleCheck
+              aria-label={cardId === 'claude' ? 'install git hook' : `install ${cardId} git hook`}
+              checked={gitHook}
+              onChange={(e) => setGitHook(e.target.checked)}
+            />
+            Also install the git hook that adds the active ticket ID to commit messages
+          </label>
+
+          <div>
+            <button className="btn btn-primary" onClick={() => void install()} disabled={busy}>
+              {busy ? 'Installing...' : isInstalled ? reinstallLabel : installLabel}
+            </button>
+          </div>
+
+          {result && (
+            <div className="settings-result" style={{ marginTop: 18 }}>
+              {result.written.length > 0 && (
+                <p className="subtle">
+                  Wrote: <span className="mono">{result.written.join(', ')}</span>
+                </p>
+              )}
+              {result.manual.length > 0 ? (
+                <>
+                  <p className="subtle">A few steps could not be done automatically:</p>
+                  <ul className="subtle">
+                    {result.manual.map((m, i) => (
+                      <li key={i}>{m}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="subtle">{restartHint}</p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -192,9 +214,10 @@ function IntegrationCard<S extends CoreInstallStatus, R extends { written: strin
 }
 
 /**
- * The Integrations settings section: one card per coding agent Lovelace
- * wires up to, each showing whether its assets are installed and installing
- * or reinstalling them on request.
+ * The Integrations settings section: a row per coding agent Lovelace wires
+ * up to, read-first (ADR-0010). Each row names the integration and its
+ * install state at a glance; clicking a row materialises that integration's
+ * panel, with only one open at a time.
  */
 export function IntegrationsSettings({
   onInstall,
@@ -204,9 +227,12 @@ export function IntegrationsSettings({
   onInstallCodex,
   onCodexStatus,
 }: IntegrationsSettingsProps) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const toggle = (id: string) => setOpenId((cur) => (cur === id ? null : id));
+
   return (
     <div className="settings-section">
-      <IntegrationCard
+      <IntegrationItem
         productName="Claude Code"
         cardId="claude"
         description="Install or reinstall the CLAUDE.md section, the MCP server and the hooks so a Claude Code session starts oriented and works tickets through Lovelace. Reinstalling regenerates the Lovelace-owned files and leaves your own content alone."
@@ -216,33 +242,35 @@ export function IntegrationsSettings({
         restartHint="Everything installed. Restart any open Claude Code session to pick it up."
         onInstall={onInstall}
         onStatus={onClaudeStatus}
+        isOpen={openId === 'claude'}
+        onToggle={() => toggle('claude')}
       />
-      <div style={{ marginTop: 'var(--sp-6)' }}>
-        <IntegrationCard
-          productName="OpenCode"
-          cardId="opencode"
-          description="Install or reinstall the AGENTS.md section, the MCP server and the launcher plugin so an OpenCode session starts oriented and works tickets through Lovelace. Reinstalling regenerates the Lovelace-owned files and leaves your own content alone."
-          pieceLabels={{ mcp: 'MCP server', hooks: 'Plugin', commands: 'Commands' }}
-          installLabel="Install OpenCode assets"
-          reinstallLabel="Reinstall OpenCode assets"
-          restartHint="Everything installed. Restart any open OpenCode session to pick it up."
-          onInstall={onInstallOpenCode}
-          onStatus={onOpenCodeStatus}
-        />
-      </div>
-      <div style={{ marginTop: 'var(--sp-6)' }}>
-        <IntegrationCard
-          productName="Codex"
-          cardId="codex"
-          description="Install or reinstall the AGENTS.md section, the MCP server and the hooks so a Codex session starts oriented and works tickets through Lovelace. Reinstalling regenerates the Lovelace-owned files and leaves your own content alone."
-          pieceLabels={{ mcp: 'MCP server', hooks: 'Hooks', commands: 'Skills' }}
-          installLabel="Install Codex assets"
-          reinstallLabel="Reinstall Codex assets"
-          restartHint="Everything installed. In Codex, trust this project and review the Lovelace hooks with /hooks, then restart any open session."
-          onInstall={onInstallCodex}
-          onStatus={onCodexStatus}
-        />
-      </div>
+      <IntegrationItem
+        productName="OpenCode"
+        cardId="opencode"
+        description="Install or reinstall the AGENTS.md section, the MCP server and the launcher plugin so an OpenCode session starts oriented and works tickets through Lovelace. Reinstalling regenerates the Lovelace-owned files and leaves your own content alone."
+        pieceLabels={{ mcp: 'MCP server', hooks: 'Plugin', commands: 'Commands' }}
+        installLabel="Install OpenCode assets"
+        reinstallLabel="Reinstall OpenCode assets"
+        restartHint="Everything installed. Restart any open OpenCode session to pick it up."
+        onInstall={onInstallOpenCode}
+        onStatus={onOpenCodeStatus}
+        isOpen={openId === 'opencode'}
+        onToggle={() => toggle('opencode')}
+      />
+      <IntegrationItem
+        productName="Codex"
+        cardId="codex"
+        description="Install or reinstall the AGENTS.md section, the MCP server and the hooks so a Codex session starts oriented and works tickets through Lovelace. Reinstalling regenerates the Lovelace-owned files and leaves your own content alone."
+        pieceLabels={{ mcp: 'MCP server', hooks: 'Hooks', commands: 'Skills' }}
+        installLabel="Install Codex assets"
+        reinstallLabel="Reinstall Codex assets"
+        restartHint="Everything installed. In Codex, trust this project and review the Lovelace hooks with /hooks, then restart any open session."
+        onInstall={onInstallCodex}
+        onStatus={onCodexStatus}
+        isOpen={openId === 'codex'}
+        onToggle={() => toggle('codex')}
+      />
     </div>
   );
 }
