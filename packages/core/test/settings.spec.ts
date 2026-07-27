@@ -274,11 +274,34 @@ describe('beatPresence', () => {
     expect(readPresences(root)[0]?.ticket).toBe('T-0003');
   });
 
-  it('falls back to the singleton active ticket when this session never claimed one', () => {
+  it('never picks up the singleton active ticket when this session never claimed one', () => {
     const root = fixture();
     mkdirSync(join(root, '.lovelace/state'), { recursive: true });
     writeFileSync(join(root, '.lovelace/state/active_ticket'), 'T-0003\n');
     beatPresence(root, 'session-a');
-    expect(readPresences(root)[0]?.ticket).toBe('T-0003');
+    // No per-session marker and no existing entry: the singleton must never
+    // leak in, or a session that never claimed a ticket would light up with
+    // whichever ticket some other session or tool call last set.
+    expect(readPresences(root)[0]?.ticket).toBeNull();
+  });
+
+  it("preserves the entry's existing ticket when the per-session marker is absent", () => {
+    const root = fixture();
+    mkdirSync(join(root, '.lovelace/state/presence'), { recursive: true });
+    writeFileSync(
+      join(root, '.lovelace/state/presence/session-a.json'),
+      `${JSON.stringify({
+        ticket: 'T-0002',
+        actor: 'claude',
+        started_at: '2026-07-05T09:00:00Z',
+        beat_at: '2026-07-05T09:00:00Z',
+      })}\n`,
+    );
+    mkdirSync(join(root, '.lovelace/state'), { recursive: true });
+    writeFileSync(join(root, '.lovelace/state/active_ticket'), 'T-0003\n');
+    beatPresence(root, 'session-a');
+    // The singleton points elsewhere; with no per-session marker, the
+    // entry's own existing ticket carries forward instead of the singleton.
+    expect(readPresences(root)[0]?.ticket).toBe('T-0002');
   });
 });

@@ -1,10 +1,12 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Document, parseDocument } from 'yaml';
 import { loadProject } from './project.js';
 import { writeIndex } from './index-gen.js';
 import { MutationError } from './mutate.js';
 import type { MutationContext } from './mutate.js';
+import { writeFileAtomic } from './fs-atomic.js';
+import { withMutateLock } from './lock.js';
 
 /**
  * Manual board ordering. The board lets a human arrange cards within a
@@ -60,7 +62,7 @@ function writeBoardOrder(lovelaceDir: string, order: Record<string, string[]>): 
       (item.value as { flow?: boolean }).flow = true;
     }
   }
-  writeFileSync(orderPath(lovelaceDir), doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
+  writeFileAtomic(orderPath(lovelaceDir), doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
 }
 
 /**
@@ -103,7 +105,13 @@ export function pruneFromBoardOrder(lovelaceDir: string, ids: string[]): void {
  * Sets the exact card order for one status column. The given ids are the
  * full, ordered contents of that column; any of them are removed from other
  * columns (a card belongs to exactly one column, by its status). Unknown ids
- * are dropped. Reindexes unless skipped.
+ * are dropped. Reindexes unless skipped. Runs under the project mutation
+ * lock: unlocked, a concurrent deleteTicket's prune could race this call's
+ * own read-modify-write of board-order.yaml (resurrecting a deleted id), and
+ * a final writeIndex built from the project loaded at the top of this
+ * function could clobber a fresher index.json a concurrent mutation had
+ * already written. The reindex reloads the project after the order write
+ * rather than reusing that first snapshot, for the same reason.
  */
 export async function setColumnOrder(
   root: string,
@@ -111,18 +119,21 @@ export async function setColumnOrder(
   ids: string[],
   ctx: MutationContext = {},
 ): Promise<void> {
-  const project = loadProject(root);
-  if (!project.schema.statuses.some((s) => s.name === status)) {
-    throw new MutationError(`unknown status "${status}"`);
-  }
-  const known = new Set(project.tickets.map((t) => t.id));
-  const ordered = ids.filter((id) => known.has(id));
-  const order = readBoardOrder(project.dir);
-  const moved = new Set(ordered);
-  for (const other of Object.keys(order)) {
-    if (other !== status) order[other] = order[other]!.filter((id) => !moved.has(id));
-  }
-  order[status] = ordered;
-  writeBoardOrder(project.dir, order);
-  if (!ctx.skipReindex) writeIndex(project);
+  const lovelaceDir = join(root, '.lovelace');
+  return withMutateLock(lovelaceDir, async () => {
+    const project = loadProject(root);
+    if (!project.schema.statuses.some((s) => s.name === status)) {
+      throw new MutationError(`unknown status "${status}"`);
+    }
+    const known = new Set(project.tickets.map((t) => t.id));
+    const ordered = ids.filter((id) => known.has(id));
+    const order = readBoardOrder(project.dir);
+    const moved = new Set(ordered);
+    for (const other of Object.keys(order)) {
+      if (other !== status) order[other] = order[other]!.filter((id) => !moved.has(id));
+    }
+    order[status] = ordered;
+    writeBoardOrder(project.dir, order);
+    if (!ctx.skipReindex) writeIndex(loadProject(root));
+  });
 }

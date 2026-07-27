@@ -565,3 +565,38 @@ describe('host op: list_files', () => {
     expect(res.files).toEqual(['README.md', 'src/index.ts']);
   });
 });
+
+describe('host ops: codex integration', () => {
+  it('install_codex writes the Codex assets and returns a fresh snapshot', async () => {
+    const root = fixture();
+    const res = await handle({
+      op: 'install_codex',
+      root,
+      mcpCommand: '/opt/lovelace/bin/lovelace-mcp',
+      helperCommand: '/opt/lovelace/bin/lovelace-agent',
+    });
+    expect(res.manual).toEqual([]);
+    expect(existsSync(join(root, '.codex/config.toml'))).toBe(true);
+    expect(existsSync(join(root, '.codex/hooks.json'))).toBe(true);
+    expect(existsSync(join(root, '.agents/skills/ticket/SKILL.md'))).toBe(true);
+    // The op returns a fresh project snapshot alongside the install result.
+    expect(res.manifest).toBeDefined();
+  });
+
+  it('detect_codex reflects on-disk state before and after install_codex', async () => {
+    const root = fixture();
+    const before = await handle({ op: 'detect_codex', root });
+    expect(before.installed).toBe(false);
+    await handle({
+      op: 'install_codex',
+      root,
+      mcpCommand: '/opt/lovelace/bin/lovelace-mcp',
+      helperCommand: '/opt/lovelace/bin/lovelace-agent',
+    });
+    const after = await handle({ op: 'detect_codex', root });
+    expect(after.installed).toBe(true);
+    expect(after.mcp).toBe(true);
+    expect(after.hooks).toBe(true);
+    expect(after.commands).toBe(true);
+  });
+});

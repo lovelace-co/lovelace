@@ -66,6 +66,23 @@ export interface OpenCodeInstallStatus {
   gitHook: boolean;
 }
 
+export interface CodexInstallStatus {
+  /** True when all three core pieces are present: mcp, hooks, commands. */
+  installed: boolean;
+  /** `.codex/config.toml` exists with an `[mcp_servers.lovelace]` table. */
+  mcp: boolean;
+  /** `.codex/hooks.json` exists with Lovelace hook commands. */
+  hooks: boolean;
+  /** `.agents/skills/ticket/SKILL.md` exists. */
+  commands: boolean;
+  /** Root `AGENTS.md` contains the Lovelace section marker. */
+  agentsMd: boolean;
+  /** `.lovelace/AGENTS.md` contains the Lovelace section marker. */
+  lovelaceAgentsMd: boolean;
+  /** `.git/hooks/prepare-commit-msg` exists and references Lovelace. */
+  gitHook: boolean;
+}
+
 /** The result of reading a file for preview, dispatched on `kind`. */
 export interface SourceFile {
   kind: 'text' | 'image' | 'pdf' | 'binary' | 'missing';
@@ -91,6 +108,9 @@ export interface HostClient {
   installOpenCode(root: string, gitHook: boolean): Promise<InstallClaudeResult>;
   /** Detect whether the OpenCode integration assets are present in the project. */
   openCodeStatus(root: string): Promise<OpenCodeInstallStatus>;
+  installCodex(root: string, gitHook: boolean): Promise<InstallClaudeResult>;
+  /** Detect whether the Codex integration assets are present in the project. */
+  codexStatus(root: string): Promise<CodexInstallStatus>;
   snapshot(root: string): Promise<Snapshot>;
   /** The migration plan for a project declaring an older spec major (ADR-0011); a dry run, no files change. */
   migrationPlan(root: string): Promise<MigrationPlan>;
@@ -226,6 +246,16 @@ export class TauriHost implements HostClient {
 
   async openCodeStatus(root: string): Promise<OpenCodeInstallStatus> {
     return (await tauriRequest({ op: 'detect_opencode', root })) as OpenCodeInstallStatus;
+  }
+
+  async installCodex(root: string, gitHook: boolean): Promise<InstallClaudeResult> {
+    // The host process knows where its sibling sidecar binaries live and
+    // fills in the command paths itself.
+    return (await tauriRequest({ op: 'install_codex', root, gitHook })) as InstallClaudeResult;
+  }
+
+  async codexStatus(root: string): Promise<CodexInstallStatus> {
+    return (await tauriRequest({ op: 'detect_codex', root })) as CodexInstallStatus;
   }
 
   snapshot(root: string): Promise<Snapshot> {

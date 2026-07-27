@@ -10,6 +10,7 @@ import {
 import { HostError, type HostClient } from '../lib/host';
 import type { Snapshot } from '../lib/types';
 import { STILL, derivePresence, type LivePresence } from '../lib/presence';
+import { createChangeGate } from './change-gate';
 
 const HostContext = createContext<HostClient | null>(null);
 
@@ -66,7 +67,10 @@ export function useProject(root: string): ProjectState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ProjectLoadError | null>(null);
   const [externalChange, setExternalChange] = useState(false);
-  const mutating = useRef(false);
+  /** Gates watcher events against the app's own mutations so a change
+   *  landing mid-mutation is deferred and replayed once, not dropped. */
+  const gateRef = useRef<ReturnType<typeof createChangeGate> | null>(null);
+  if (!gateRef.current) gateRef.current = createChangeGate();
   /** The optimistic baseline: the last snapshot known to match the files. */
   const previous = useRef<Snapshot | null>(null);
 
@@ -97,9 +101,13 @@ export function useProject(root: string): ProjectState {
     let cancelled = false;
     void host
       .watch(root, (change) => {
-        if (mutating.current) return;
-        // Presence heartbeats refresh the snapshot but never raise the
-        // toast; only a non-presence path counts as an external change.
+        // An event during our own mutation is almost always that mutation's
+        // write echoing back, so it is deferred rather than dropped: the
+        // gate replays it once the mutation window closes, but never raises
+        // the toast for it (see the settle timeout in apply). Outside a
+        // mutation, presence heartbeats refresh the snapshot but never raise
+        // the toast; only a non-presence path counts as an external change.
+        if (!gateRef.current!.onEvent()) return;
         if (!change.presenceOnly) setExternalChange(true);
         void reload(true);
       })
@@ -132,7 +140,7 @@ export function useProject(root: string): ProjectState {
       mutation: (h: HostClient) => Promise<Snapshot>,
       optimistic?: (current: Snapshot) => Snapshot,
     ) => {
-      mutating.current = true;
+      gateRef.current!.beginMutation();
       const before = previous.current;
       if (optimistic && before) {
         const patched = optimistic(before);
@@ -152,12 +160,14 @@ export function useProject(root: string): ProjectState {
         throw e;
       } finally {
         // Let the watcher settle before treating events as external again.
+        // A deferred event only ever reloads, never raises the toast: it is
+        // almost always this mutation's own write echoing back.
         setTimeout(() => {
-          mutating.current = false;
+          if (gateRef.current!.endMutation()) void reload(true);
         }, 500);
       }
     },
-    [host],
+    [host, reload],
   );
 
   const presence: ProjectPresence = snapshot

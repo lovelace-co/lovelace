@@ -1,6 +1,7 @@
 import {
   HostError,
   type ClaudeInstallStatus,
+  type CodexInstallStatus,
   type HostClient,
   type OpenCodeInstallStatus,
   type SourceFile,
@@ -76,6 +77,24 @@ export class FakeHost implements HostClient {
 
   async openCodeStatus(root: string): Promise<OpenCodeInstallStatus> {
     this.record('openCodeStatus', [root]);
+    return {
+      installed: false,
+      mcp: false,
+      hooks: false,
+      commands: false,
+      agentsMd: false,
+      lovelaceAgentsMd: false,
+      gitHook: false,
+    };
+  }
+
+  async installCodex(root: string, gitHook: boolean): Promise<{ written: string[]; manual: string[] }> {
+    this.record('installCodex', [root, gitHook]);
+    return { written: ['.codex/config.toml'], manual: [] };
+  }
+
+  async codexStatus(root: string): Promise<CodexInstallStatus> {
+    this.record('codexStatus', [root]);
     return {
       installed: false,
       mcp: false,
@@ -243,7 +262,13 @@ export class FakeHost implements HostClient {
     return null;
   }
 
-  async watch(_root: string, _onChange: (change: { presenceOnly: boolean }) => void): Promise<() => void> {
-    return () => undefined;
+  /** Captured so tests can fire a watcher event without a real filesystem. */
+  watchHandler: ((change: { presenceOnly: boolean }) => void) | null = null;
+
+  async watch(_root: string, onChange: (change: { presenceOnly: boolean }) => void): Promise<() => void> {
+    this.watchHandler = onChange;
+    return () => {
+      this.watchHandler = null;
+    };
   }
 }

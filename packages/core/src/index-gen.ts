@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fieldsForType } from './fields.js';
 import { buildLinks } from './links.js';
+import { writeFileAtomic } from './fs-atomic.js';
 import type { Project } from './types.js';
 
 function sortedRecord(input: Record<string, unknown>): Record<string, unknown> {
@@ -110,10 +111,10 @@ export function writeIndex(project: Project): { indexPath: string; boardPath: st
   const indexContent = stringifyIndex(buildIndex(project));
   const boardContent = buildBoard(project);
   if (!existsSync(indexPath) || readFileSync(indexPath, 'utf8') !== indexContent) {
-    writeFileSync(indexPath, indexContent);
+    writeFileAtomic(indexPath, indexContent);
   }
   if (!existsSync(boardPath) || readFileSync(boardPath, 'utf8') !== boardContent) {
-    writeFileSync(boardPath, boardContent);
+    writeFileAtomic(boardPath, boardContent);
   }
   return { indexPath, boardPath };
 }

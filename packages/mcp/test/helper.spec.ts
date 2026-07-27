@@ -181,7 +181,7 @@ describe('presence marker commands', () => {
     expect(marker.beat_at).toBe(marker.started_at);
   });
 
-  it('presence-start falls back to the singleton active ticket when this session never claimed one', async () => {
+  it('presence-start never inherits the singleton active ticket when this session never claimed one', async () => {
     const { root, cleanup } = tempFixture();
     cleanups.push(cleanup);
     mkdirSync(join(root, '.lovelace/state'), { recursive: true });
@@ -190,7 +190,10 @@ describe('presence marker commands', () => {
     const started = await helper(root, ['presence-start'], JSON.stringify({ session_id: 'session-a' }));
     expect(started.code).toBe(0);
     const marker = JSON.parse(readFileSync(join(root, '.lovelace/state/presence/session-a.json'), 'utf8'));
-    expect(marker.ticket).toBe('T-0003');
+    // The singleton belongs to some other session or tool call; a fresh
+    // session that never claimed a ticket must start with ticket: null, not
+    // inherit whatever the singleton happens to point at.
+    expect(marker.ticket).toBeNull();
   });
 
   it('presence-start falls back to a shared "local" entry when the payload has no session_id', async () => {

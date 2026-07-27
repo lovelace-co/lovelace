@@ -238,6 +238,7 @@ describe('Settings view', () => {
   function renderSettings(
     claudeStatus?: { installed: boolean; mcp?: boolean; hooks?: boolean; commands?: boolean },
     openCodeStatus?: { installed: boolean; mcp?: boolean; hooks?: boolean; commands?: boolean },
+    codexStatus?: { installed: boolean; mcp?: boolean; hooks?: boolean; commands?: boolean },
   ) {
     const status = {
       installed: claudeStatus?.installed ?? false,
@@ -257,6 +258,15 @@ describe('Settings view', () => {
       lovelaceAgentsMd: false,
       gitHook: false,
     };
+    const codexStatusValue = {
+      installed: codexStatus?.installed ?? false,
+      mcp: codexStatus?.mcp ?? codexStatus?.installed ?? false,
+      hooks: codexStatus?.hooks ?? codexStatus?.installed ?? false,
+      commands: codexStatus?.commands ?? codexStatus?.installed ?? false,
+      agentsMd: false,
+      lovelaceAgentsMd: false,
+      gitHook: false,
+    };
     const props = {
       onSaveSchema: vi.fn().mockResolvedValue(undefined),
       onRenameProject: vi.fn().mockResolvedValue(undefined),
@@ -267,11 +277,20 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue(status),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue(openCodeStatusValue),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue(codexStatusValue),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
     render(<Settings snapshot={base} {...props} />);
     return props;
+  }
+
+  // Integration rows are read-first (ADR-0010): clicking a row by its
+  // accessible name materialises its panel. Anchored so a row's name never
+  // matches its own "Install ... assets" button once its panel is open.
+  function openIntegrationRow(name: string) {
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
   }
 
   it('opens on General with the editable name and every tab present, with no Automations tab', () => {
@@ -479,6 +498,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -529,6 +550,7 @@ describe('Settings view', () => {
   it('installs the Claude Code integration', async () => {
     const props = renderSettings();
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Claude Code');
     await waitFor(() => expect(screen.getByText('Install Claude Code assets')).toBeTruthy());
     fireEvent.click(screen.getByText('Install Claude Code assets'));
     await waitFor(() => expect(props.onInstallClaude).toHaveBeenCalledWith(true));
@@ -537,6 +559,7 @@ describe('Settings view', () => {
   it('shows "not installed" when no assets are present', async () => {
     renderSettings({ installed: false });
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Claude Code');
     await waitFor(() =>
       expect(screen.getByText('Claude Code assets are not installed in this project.')).toBeTruthy(),
     );
@@ -546,6 +569,7 @@ describe('Settings view', () => {
   it('shows "installed" and the Reinstall button when all assets are present', async () => {
     renderSettings({ installed: true });
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Claude Code');
     await waitFor(() =>
       expect(screen.getByText('Claude Code assets are installed in this project.')).toBeTruthy(),
     );
@@ -556,6 +580,7 @@ describe('Settings view', () => {
   it('hides the installed badge when not installed or partially installed', async () => {
     renderSettings({ installed: false });
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Claude Code');
     await waitFor(() =>
       expect(screen.getByText('Claude Code assets are not installed in this project.')).toBeTruthy(),
     );
@@ -563,6 +588,7 @@ describe('Settings view', () => {
 
     renderSettings({ installed: false, mcp: true, hooks: false, commands: false });
     fireEvent.click(screen.getAllByRole('tab', { name: 'Integrations' })[1]!);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Claude Code/ })[1]!);
     await waitFor(() =>
       expect(screen.getByText('Claude Code assets are partially installed.')).toBeTruthy(),
     );
@@ -572,6 +598,7 @@ describe('Settings view', () => {
   it('shows "partially installed" with missing pieces when some core assets are absent', async () => {
     renderSettings({ installed: false, mcp: true, hooks: false, commands: false });
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Claude Code');
     await waitFor(() =>
       expect(screen.getByText('Claude Code assets are partially installed.')).toBeTruthy(),
     );
@@ -597,6 +624,7 @@ describe('Settings view', () => {
     props.onClaudeStatus.mockResolvedValueOnce({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false })
       .mockResolvedValue(installedStatus);
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Claude Code');
     await waitFor(() => expect(screen.getByText('Install Claude Code assets')).toBeTruthy());
     fireEvent.click(screen.getByText('Install Claude Code assets'));
     await waitFor(() =>
@@ -608,6 +636,7 @@ describe('Settings view', () => {
   it('installs the OpenCode integration', async () => {
     const props = renderSettings();
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('OpenCode');
     await waitFor(() => expect(screen.getByText('Install OpenCode assets')).toBeTruthy());
     fireEvent.click(screen.getByText('Install OpenCode assets'));
     await waitFor(() => expect(props.onInstallOpenCode).toHaveBeenCalledWith(true));
@@ -616,6 +645,7 @@ describe('Settings view', () => {
   it('shows "not installed" for OpenCode when no assets are present', async () => {
     renderSettings(undefined, { installed: false });
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('OpenCode');
     await waitFor(() =>
       expect(screen.getByText('OpenCode assets are not installed in this project.')).toBeTruthy(),
     );
@@ -625,6 +655,7 @@ describe('Settings view', () => {
   it('shows "partially installed" with missing pieces for OpenCode when some core assets are absent', async () => {
     renderSettings(undefined, { installed: false, mcp: false, hooks: false, commands: true });
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('OpenCode');
     await waitFor(() =>
       expect(screen.getByText('OpenCode assets are partially installed.')).toBeTruthy(),
     );
@@ -635,6 +666,7 @@ describe('Settings view', () => {
   it('shows "installed" and the Reinstall button for OpenCode when all assets are present', async () => {
     renderSettings(undefined, { installed: true });
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('OpenCode');
     await waitFor(() =>
       expect(screen.getByText('OpenCode assets are installed in this project.')).toBeTruthy(),
     );
@@ -648,12 +680,157 @@ describe('Settings view', () => {
       manual: ['Add the instructions entry to opencode.json by hand.'],
     });
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('OpenCode');
     await waitFor(() => expect(screen.getByText('Install OpenCode assets')).toBeTruthy());
     fireEvent.click(screen.getByText('Install OpenCode assets'));
     await waitFor(() =>
       expect(screen.getByText('opencode.json, .opencode/plugins/lovelace.js')).toBeTruthy(),
     );
     expect(screen.getByText('Add the instructions entry to opencode.json by hand.')).toBeTruthy();
+  });
+
+  it('installs the Codex integration', async () => {
+    const props = renderSettings();
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Codex');
+    await waitFor(() => expect(screen.getByText('Install Codex assets')).toBeTruthy());
+    fireEvent.click(screen.getByText('Install Codex assets'));
+    await waitFor(() => expect(props.onInstallCodex).toHaveBeenCalledWith(true));
+  });
+
+  it('shows "not installed" for Codex when no assets are present', async () => {
+    renderSettings(undefined, undefined, { installed: false });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Codex');
+    await waitFor(() =>
+      expect(screen.getByTestId('codex-status-summary').textContent).toBe(
+        'Codex assets are not installed in this project.',
+      ),
+    );
+    expect(screen.getByText('Install Codex assets')).toBeTruthy();
+    expect(screen.queryByText('installed')).toBeNull();
+  });
+
+  it('shows "partially installed" with missing pieces for Codex when some core assets are absent', async () => {
+    renderSettings(undefined, undefined, { installed: false, mcp: false, hooks: false, commands: true });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Codex');
+    await waitFor(() =>
+      expect(screen.getByTestId('codex-status-summary').textContent).toBe(
+        'Codex assets are partially installed.',
+      ),
+    );
+    // Scoped to the exact missing list for this status: the Claude Code and
+    // OpenCode cards beside it also render a "Missing:" line, so a bare
+    // /Missing:/ match is ambiguous once all three cards are on screen.
+    expect(screen.getByText('Missing: MCP server, Hooks.')).toBeTruthy();
+    expect(screen.getByText('Install Codex assets')).toBeTruthy();
+  });
+
+  it('shows "installed" and the Reinstall button for Codex when all assets are present', async () => {
+    renderSettings(undefined, undefined, { installed: true });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Codex');
+    await waitFor(() =>
+      expect(screen.getByTestId('codex-status-summary').textContent).toBe(
+        'Codex assets are installed in this project.',
+      ),
+    );
+    expect(screen.getByText('Reinstall Codex assets')).toBeTruthy();
+    // The installed badge only appears on the fully installed row, not the
+    // (still not-installed) Claude Code and OpenCode rows beside it.
+    expect(screen.getAllByText('installed').length).toBe(1);
+  });
+
+  it('renders written and manual results after installing Codex', async () => {
+    const props = renderSettings();
+    props.onInstallCodex.mockResolvedValueOnce({
+      written: ['.codex/config.toml', '.codex/hooks.json'],
+      manual: ['.codex/config.toml already defines [mcp_servers.lovelace]; replace it by hand.'],
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Codex');
+    await waitFor(() => expect(screen.getByText('Install Codex assets')).toBeTruthy());
+    fireEvent.click(screen.getByText('Install Codex assets'));
+    await waitFor(() =>
+      expect(screen.getByText('.codex/config.toml, .codex/hooks.json')).toBeTruthy(),
+    );
+    expect(
+      screen.getByText('.codex/config.toml already defines [mcp_servers.lovelace]; replace it by hand.'),
+    ).toBeTruthy();
+  });
+
+  it('shows the trust-and-restart hint, naming /hooks, after a clean Codex install', async () => {
+    const props = renderSettings();
+    props.onInstallCodex.mockResolvedValueOnce({ written: ['.codex/config.toml'], manual: [] });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Codex');
+    await waitFor(() => expect(screen.getByText('Install Codex assets')).toBeTruthy());
+    fireEvent.click(screen.getByText('Install Codex assets'));
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'Everything installed. In Codex, trust this project and review the Lovelace hooks with /hooks, then restart any open session.',
+        ),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('at rest shows three rows and no install buttons or checkboxes', () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    for (const name of [/^Claude Code/, /^OpenCode/, /^Codex/]) {
+      expect(screen.getByRole('button', { name })).toBeTruthy();
+    }
+    expect(screen.queryByText(/Install .* assets/)).toBeNull();
+    expect(document.querySelectorAll('.hole-check').length).toBe(0);
+  });
+
+  it('opens one panel at a time, closing the previous one when another opens', async () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Claude Code');
+    await waitFor(() => expect(screen.getByText('Install Claude Code assets')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /^Claude Code/ }).getAttribute('aria-expanded')).toBe('true');
+
+    openIntegrationRow('OpenCode');
+    await waitFor(() => expect(screen.getByText('Install OpenCode assets')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /^OpenCode/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: /^Claude Code/ }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Install Claude Code assets')).toBeNull();
+  });
+
+  it('a row shows Not installed, Partially installed or the installed badge without opening its panel', async () => {
+    renderSettings(
+      { installed: false },
+      { installed: false, mcp: true, hooks: false, commands: false },
+      { installed: true },
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    const claudeRow = screen.getByRole('button', { name: /^Claude Code/ });
+    const openCodeRow = screen.getByRole('button', { name: /^OpenCode/ });
+    const codexRow = screen.getByRole('button', { name: /^Codex/ });
+    await waitFor(() => expect(within(claudeRow).getByText('Not installed')).toBeTruthy());
+    expect(within(openCodeRow).getByText('Partially installed')).toBeTruthy();
+    expect(within(codexRow).getByText('installed')).toBeTruthy();
+  });
+
+  it('the git hook checkbox keeps its state when its panel is closed and reopened', async () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    openIntegrationRow('Claude Code');
+    await waitFor(() => expect(screen.getByText('Install Claude Code assets')).toBeTruthy());
+    const checkbox = screen.getByLabelText('install git hook') as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+
+    // Closing and reopening the same row must not remount its state.
+    openIntegrationRow('Claude Code');
+    expect(screen.queryByText('Install Claude Code assets')).toBeNull();
+    openIntegrationRow('Claude Code');
+    await waitFor(() => expect(screen.getByText('Install Claude Code assets')).toBeTruthy());
+    expect((screen.getByLabelText('install git hook') as HTMLInputElement).checked).toBe(false);
   });
 
   it('reports its dirty state so navigation can be guarded', () => {
@@ -689,6 +866,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -730,6 +909,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -777,6 +958,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -817,6 +1000,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -840,6 +1025,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -867,6 +1054,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };

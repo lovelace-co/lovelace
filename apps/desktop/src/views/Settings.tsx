@@ -7,7 +7,7 @@ import { GeneralSettings } from '../components/GeneralSettings';
 import { TeamSettings } from '../components/TeamSettings';
 import { IntegrationsSettings } from '../components/IntegrationsSettings';
 import { useSchemaDraft } from '../lib/useSchemaDraft';
-import type { ClaudeInstallStatus, InstallClaudeResult, OpenCodeInstallStatus } from '../lib/host';
+import type { ClaudeInstallStatus, CodexInstallStatus, InstallClaudeResult, OpenCodeInstallStatus } from '../lib/host';
 import type { LinkResolver, OpenLink } from '../lib/links';
 import type { Actor, SchemaEdit, Snapshot } from '../lib/types';
 
@@ -24,6 +24,8 @@ interface SettingsProps {
   onClaudeStatus: () => Promise<ClaudeInstallStatus>;
   onInstallOpenCode: (gitHook: boolean) => Promise<InstallClaudeResult>;
   onOpenCodeStatus: () => Promise<OpenCodeInstallStatus>;
+  onInstallCodex: (gitHook: boolean) => Promise<InstallClaudeResult>;
+  onCodexStatus: () => Promise<CodexInstallStatus>;
   /** Reports whether any section has unsaved edits, so leaving Settings can prompt. */
   onDirtyChange: (dirty: boolean) => void;
   onOpenTicket: (id: string) => void;
@@ -67,6 +69,8 @@ export function Settings({
   onClaudeStatus,
   onInstallOpenCode,
   onOpenCodeStatus,
+  onInstallCodex,
+  onCodexStatus,
   onDirtyChange,
   onOpenTicket,
   resolveLink,
@@ -148,6 +152,8 @@ export function Settings({
             onClaudeStatus={onClaudeStatus}
             onInstallOpenCode={onInstallOpenCode}
             onOpenCodeStatus={onOpenCodeStatus}
+            onInstallCodex={onInstallCodex}
+            onCodexStatus={onCodexStatus}
           />
         )}
       </div>

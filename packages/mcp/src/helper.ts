@@ -215,7 +215,10 @@ async function trackActive(): Promise<number> {
 /**
  * The turn has begun processing: write this session's live marker. Quiet
  * on every failure path; presence is a display signal, never worth
- * blocking a turn.
+ * blocking a turn. Starts with this session's own claimed ticket, or null
+ * when it never claimed one; the singleton state/active_ticket belongs to
+ * whichever session or tool call last wrote it, so it is never inherited
+ * here, or a fresh session would light up with another session's ticket.
  */
 async function presenceStart(): Promise<number> {
   try {
@@ -224,7 +227,7 @@ async function presenceStart(): Promise<number> {
     const sessionId = payload?.session_id ?? 'local';
     const project = loadProject(r);
     const actor = project.actors.find((a) => a.kind === 'agent')?.id ?? null;
-    const ticket = readSessionActiveTicket(r, sessionId) ?? getActiveTicket(r);
+    const ticket = readSessionActiveTicket(r, sessionId);
     const now = `${new Date().toISOString().slice(0, 19)}Z`;
     writePresence(r, sessionId, { ticket, actor, started_at: now, beat_at: now });
   } catch {
