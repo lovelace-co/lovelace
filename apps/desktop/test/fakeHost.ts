@@ -262,7 +262,13 @@ export class FakeHost implements HostClient {
     return null;
   }
 
-  async watch(_root: string, _onChange: (change: { presenceOnly: boolean }) => void): Promise<() => void> {
-    return () => undefined;
+  /** Captured so tests can fire a watcher event without a real filesystem. */
+  watchHandler: ((change: { presenceOnly: boolean }) => void) | null = null;
+
+  async watch(_root: string, onChange: (change: { presenceOnly: boolean }) => void): Promise<() => void> {
+    this.watchHandler = onChange;
+    return () => {
+      this.watchHandler = null;
+    };
   }
 }

@@ -55,6 +55,8 @@ export type {
   SchemaRenames,
 } from './mutate.js';
 export { readBoardOrder, setColumnOrder, pruneFromBoardOrder } from './order.js';
+export { writeFileAtomic } from './fs-atomic.js';
+export { withMutateLock } from './lock.js';
 export { readGraphLayout, writeGraphLayout } from './graph-layout.js';
 export type { GraphLayout, NodePosition } from './graph-layout.js';
 export { search } from './search.js';

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { Document, parseDocument } from 'yaml';
 import { pruneFromBoardOrder, renameBoardOrderColumns } from './order.js';
@@ -9,6 +9,8 @@ import { parseFrontmatter } from './frontmatter.js';
 import { nextId } from './ids.js';
 import { loadProject } from './project.js';
 import { writeIndex } from './index-gen.js';
+import { writeFileAtomic } from './fs-atomic.js';
+import { withMutateLock } from './lock.js';
 import type {
   AgentPresence,
   Actor,
@@ -105,57 +107,60 @@ export async function createTicket(
   input: CreateTicketInput,
   ctx: MutationContext = {},
 ): Promise<Ticket> {
-  const project = loadProject(root);
-  const typeDef = project.schema.types.find((t) => t.name === input.type);
-  if (!typeDef) {
-    throw new MutationError(
-      `unknown ticket type "${input.type}"; defined types: ${project.schema.types.map((t) => t.name).join(', ')}`,
-    );
-  }
-  for (const key of Object.keys(input.fields)) {
-    if ((CORE_FIELDS as readonly string[]).includes(key)) {
-      throw new MutationError(`"${key}" is a locked core field and cannot be set directly`);
+  const lovelaceDir = join(root, '.lovelace');
+  return withMutateLock(lovelaceDir, async () => {
+    const project = loadProject(root);
+    const typeDef = project.schema.types.find((t) => t.name === input.type);
+    if (!typeDef) {
+      throw new MutationError(
+        `unknown ticket type "${input.type}"; defined types: ${project.schema.types.map((t) => t.name).join(', ')}`,
+      );
     }
-  }
-  rejectUnknownFields(project.schema, input.type, input.fields);
-  const fields = applyDefaults(project.schema, input.type, input.fields);
-  const issues = validateTicketFields(project.schema, input.type, fields, '(new ticket)').filter(
-    (i) => i.severity === 'error',
-  );
-  if (issues.length > 0) {
-    throw new MutationError(`invalid fields: ${issues.map((i) => i.message).join('; ')}`, issues);
-  }
+    for (const key of Object.keys(input.fields)) {
+      if ((CORE_FIELDS as readonly string[]).includes(key)) {
+        throw new MutationError(`"${key}" is a locked core field and cannot be set directly`);
+      }
+    }
+    rejectUnknownFields(project.schema, input.type, input.fields);
+    const fields = applyDefaults(project.schema, input.type, input.fields);
+    const issues = validateTicketFields(project.schema, input.type, fields, '(new ticket)').filter(
+      (i) => i.severity === 'error',
+    );
+    if (issues.length > 0) {
+      throw new MutationError(`invalid fields: ${issues.map((i) => i.message).join('; ')}`, issues);
+    }
 
-  if (input.status !== undefined && !project.schema.statuses.some((s) => s.name === input.status)) {
-    throw new MutationError(`unknown status "${input.status}"`);
-  }
-  const id = await nextId(project.dir, project.manifest, typeDef.id_prefix);
-  const stamp = isoNow(ctx);
-  const ordered: Array<[string, unknown]> = [
-    ['id', id],
-    ['type', input.type],
-    ['status', input.status ?? defaultStatus(project.schema)],
-    ['created', stamp],
-    ['updated', stamp],
-  ];
-  for (const def of fieldsForType(project.schema, input.type)) {
-    if (fields[def.name] !== undefined) ordered.push([def.name, fields[def.name]]);
-  }
-  // A body is optional; when absent (or blank), the file carries frontmatter
-  // only, with no dangling blank line after the closing fence.
-  const body = (input.body ?? '').trimEnd();
-  const content =
-    body === ''
-      ? `---\n${buildFrontmatterYaml(ordered)}---\n`
-      : `---\n${buildFrontmatterYaml(ordered)}---\n\n${body}\n`;
-  const ticketsDir = join(project.dir, project.manifest.paths.tickets);
-  mkdirSync(ticketsDir, { recursive: true });
-  const path = join(ticketsDir, `${id}.md`);
-  writeFileSync(path, content);
-  const after = reindex(root, ctx);
-  const ticket = after.tickets.find((t) => t.id === id);
-  if (!ticket) throw new MutationError(`ticket ${id} was written but could not be read back`);
-  return ticket;
+    if (input.status !== undefined && !project.schema.statuses.some((s) => s.name === input.status)) {
+      throw new MutationError(`unknown status "${input.status}"`);
+    }
+    const id = await nextId(project.dir, project.manifest, typeDef.id_prefix);
+    const stamp = isoNow(ctx);
+    const ordered: Array<[string, unknown]> = [
+      ['id', id],
+      ['type', input.type],
+      ['status', input.status ?? defaultStatus(project.schema)],
+      ['created', stamp],
+      ['updated', stamp],
+    ];
+    for (const def of fieldsForType(project.schema, input.type)) {
+      if (fields[def.name] !== undefined) ordered.push([def.name, fields[def.name]]);
+    }
+    // A body is optional; when absent (or blank), the file carries frontmatter
+    // only, with no dangling blank line after the closing fence.
+    const body = (input.body ?? '').trimEnd();
+    const content =
+      body === ''
+        ? `---\n${buildFrontmatterYaml(ordered)}---\n`
+        : `---\n${buildFrontmatterYaml(ordered)}---\n\n${body}\n`;
+    const ticketsDir = join(project.dir, project.manifest.paths.tickets);
+    mkdirSync(ticketsDir, { recursive: true });
+    const path = join(ticketsDir, `${id}.md`);
+    writeFileAtomic(path, content);
+    const after = reindex(root, ctx);
+    const ticket = after.tickets.find((t) => t.id === id);
+    if (!ticket) throw new MutationError(`ticket ${id} was written but could not be read back`);
+    return ticket;
+  });
 }
 
 export interface UpdateResult {
@@ -182,83 +187,86 @@ export async function updateTicket(
   input: UpdateTicketInput,
   ctx: MutationContext = {},
 ): Promise<UpdateResult> {
-  const project = loadProject(root);
-  const ticket = project.tickets.find((t) => t.id === id);
-  if (!ticket) {
-    throw new MutationError(`ticket "${id}" does not exist`);
-  }
-  const changes = input.fields ?? {};
-  // An update carrying nothing would still rewrite the file to stamp
-  // `updated`, so an empty call is rejected rather than producing churn.
-  if (Object.keys(changes).length === 0 && input.body === undefined) {
-    throw new MutationError('nothing to update: pass field changes or a body');
-  }
-  for (const key of Object.keys(changes)) {
-    if (key !== 'status' && (CORE_FIELDS as readonly string[]).includes(key)) {
-      throw new MutationError(`"${key}" is a locked core field and cannot be edited`);
+  const lovelaceDir = join(root, '.lovelace');
+  return withMutateLock(lovelaceDir, async () => {
+    const project = loadProject(root);
+    const ticket = project.tickets.find((t) => t.id === id);
+    if (!ticket) {
+      throw new MutationError(`ticket "${id}" does not exist`);
     }
-  }
-  // A hand-edited ticket can carry a type the schema no longer defines. Its
-  // fields cannot be checked against anything, so field edits are refused
-  // with the real cause named; a status move stays legal so the ticket can
-  // still be parked or closed.
-  if (project.schema.types.some((t) => t.name === ticket.type)) {
-    rejectUnknownFields(project.schema, ticket.type, changes, ['status']);
-  } else if (Object.keys(changes).some((k) => k !== 'status')) {
-    throw new MutationError(
-      `ticket "${id}" has unknown type "${ticket.type}"; correct the type in the file before editing fields`,
+    const changes = input.fields ?? {};
+    // An update carrying nothing would still rewrite the file to stamp
+    // `updated`, so an empty call is rejected rather than producing churn.
+    if (Object.keys(changes).length === 0 && input.body === undefined) {
+      throw new MutationError('nothing to update: pass field changes or a body');
+    }
+    for (const key of Object.keys(changes)) {
+      if (key !== 'status' && (CORE_FIELDS as readonly string[]).includes(key)) {
+        throw new MutationError(`"${key}" is a locked core field and cannot be edited`);
+      }
+    }
+    // A hand-edited ticket can carry a type the schema no longer defines. Its
+    // fields cannot be checked against anything, so field edits are refused
+    // with the real cause named; a status move stays legal so the ticket can
+    // still be parked or closed.
+    if (project.schema.types.some((t) => t.name === ticket.type)) {
+      rejectUnknownFields(project.schema, ticket.type, changes, ['status']);
+    } else if (Object.keys(changes).some((k) => k !== 'status')) {
+      throw new MutationError(
+        `ticket "${id}" has unknown type "${ticket.type}"; correct the type in the file before editing fields`,
+      );
+    }
+
+    // A non-string status would otherwise be dropped silently, reporting
+    // success for a move that never happened.
+    if ('status' in changes && typeof changes.status !== 'string') {
+      throw new MutationError('status must be a string naming a status defined in schema.yaml');
+    }
+    const to = typeof changes.status === 'string' ? changes.status : undefined;
+    if (to !== undefined && !project.schema.statuses.some((s) => s.name === to)) {
+      throw new MutationError(`unknown status "${to}"`);
+    }
+
+    const { status: _status, ...fieldChanges } = changes;
+    const merged = { ...ticket.fields, ...fieldChanges };
+    for (const [key, value] of Object.entries(fieldChanges)) {
+      if (value === null) delete merged[key];
+    }
+    const issues = validateTicketFields(project.schema, ticket.type, merged, ticket.path).filter(
+      (i) => i.severity === 'error',
     );
-  }
-
-  // A non-string status would otherwise be dropped silently, reporting
-  // success for a move that never happened.
-  if ('status' in changes && typeof changes.status !== 'string') {
-    throw new MutationError('status must be a string naming a status defined in schema.yaml');
-  }
-  const to = typeof changes.status === 'string' ? changes.status : undefined;
-  if (to !== undefined && !project.schema.statuses.some((s) => s.name === to)) {
-    throw new MutationError(`unknown status "${to}"`);
-  }
-
-  const { status: _status, ...fieldChanges } = changes;
-  const merged = { ...ticket.fields, ...fieldChanges };
-  for (const [key, value] of Object.entries(fieldChanges)) {
-    if (value === null) delete merged[key];
-  }
-  const issues = validateTicketFields(project.schema, ticket.type, merged, ticket.path).filter(
-    (i) => i.severity === 'error',
-  );
-  if (issues.length > 0) {
-    throw new MutationError(`invalid fields: ${issues.map((i) => i.message).join('; ')}`, issues);
-  }
-
-  const abs = join(root, ticket.path);
-  const text = readFileSync(abs, 'utf8');
-  const parsed = parseFrontmatter(text);
-  const doc = parseDocument(parsed.raw);
-  for (const [key, value] of Object.entries(fieldChanges)) {
-    if (value === null) {
-      doc.delete(key);
-    } else {
-      doc.set(key, value);
+    if (issues.length > 0) {
+      throw new MutationError(`invalid fields: ${issues.map((i) => i.message).join('; ')}`, issues);
     }
-  }
-  if (to !== undefined) doc.set('status', to);
-  doc.set('updated', isoNow(ctx));
-  const fm = doc.toString({ lineWidth: 0, flowCollectionPadding: false });
-  let newText: string;
-  if (input.body === undefined) {
-    newText = `---\n${fm}---\n${parsed.body}`;
-  } else {
-    const body = input.body.trimEnd();
-    newText = body === '' ? `---\n${fm}---\n` : `---\n${fm}---\n\n${body}\n`;
-  }
-  writeFileSync(abs, newText);
 
-  const after = reindex(root, ctx);
-  const updated = after.tickets.find((t) => t.id === id);
-  if (!updated) throw new MutationError(`ticket ${id} was updated but could not be read back`);
-  return { ticket: updated };
+    const abs = join(root, ticket.path);
+    const text = readFileSync(abs, 'utf8');
+    const parsed = parseFrontmatter(text);
+    const doc = parseDocument(parsed.raw);
+    for (const [key, value] of Object.entries(fieldChanges)) {
+      if (value === null) {
+        doc.delete(key);
+      } else {
+        doc.set(key, value);
+      }
+    }
+    if (to !== undefined) doc.set('status', to);
+    doc.set('updated', isoNow(ctx));
+    const fm = doc.toString({ lineWidth: 0, flowCollectionPadding: false });
+    let newText: string;
+    if (input.body === undefined) {
+      newText = `---\n${fm}---\n${parsed.body}`;
+    } else {
+      const body = input.body.trimEnd();
+      newText = body === '' ? `---\n${fm}---\n` : `---\n${fm}---\n\n${body}\n`;
+    }
+    writeFileAtomic(abs, newText);
+
+    const after = reindex(root, ctx);
+    const updated = after.tickets.find((t) => t.id === id);
+    if (!updated) throw new MutationError(`ticket ${id} was updated but could not be read back`);
+    return { ticket: updated };
+  });
 }
 
 export interface DeleteResult {
@@ -279,23 +287,26 @@ export async function deleteTicket(
   id: string,
   ctx: MutationContext = {},
 ): Promise<DeleteResult> {
-  const project = loadProject(root);
-  const ticket = project.tickets.find((t) => t.id === id);
-  if (!ticket) {
-    throw new MutationError(`ticket "${id}" does not exist`);
-  }
-  const commentCount = project.comments.filter((c) => c.ticket === id).length;
-  const sessions = project.sessions.filter((s) => s.ticket === id);
+  const lovelaceDir = join(root, '.lovelace');
+  return withMutateLock(lovelaceDir, async () => {
+    const project = loadProject(root);
+    const ticket = project.tickets.find((t) => t.id === id);
+    if (!ticket) {
+      throw new MutationError(`ticket "${id}" does not exist`);
+    }
+    const commentCount = project.comments.filter((c) => c.ticket === id).length;
+    const sessions = project.sessions.filter((s) => s.ticket === id);
 
-  rmSync(join(root, ticket.path), { force: true });
-  rmSync(join(project.dir, project.manifest.paths.comments, id), { recursive: true, force: true });
-  for (const session of sessions) {
-    rmSync(join(root, session.path), { force: true });
-  }
-  pruneFromBoardOrder(project.dir, [id]);
+    rmSync(join(root, ticket.path), { force: true });
+    rmSync(join(project.dir, project.manifest.paths.comments, id), { recursive: true, force: true });
+    for (const session of sessions) {
+      rmSync(join(root, session.path), { force: true });
+    }
+    pruneFromBoardOrder(project.dir, [id]);
 
-  reindex(root, ctx);
-  return { id, comments: commentCount, sessions: sessions.length };
+    reindex(root, ctx);
+    return { id, comments: commentCount, sessions: sessions.length };
+  });
 }
 
 /** A rename maps an old machine name to its new one, per schema section. */
@@ -355,133 +366,136 @@ export async function writeSchema(
   edit: SchemaEdit,
   ctx: MutationContext = {},
 ): Promise<void> {
-  const project = loadProject(root);
-  const current = project.schema;
-  const statusRenames = edit.renames?.statuses ?? {};
-  const typeRenames = edit.renames?.types ?? {};
-  const prioRenames = edit.renames?.priorities ?? {};
+  const lovelaceDir = join(root, '.lovelace');
+  return withMutateLock(lovelaceDir, async () => {
+    const project = loadProject(root);
+    const current = project.schema;
+    const statusRenames = edit.renames?.statuses ?? {};
+    const typeRenames = edit.renames?.types ?? {};
+    const prioRenames = edit.renames?.priorities ?? {};
 
-  // Assemble the candidate: a provided section replaces, an omitted one is
-  // kept. A field's refers_to can reference a renamed type, so it is
-  // remapped even when the caller sent the old names.
-  const statuses = edit.statuses ?? current.statuses;
-  const types = (edit.types ?? current.types).map((t) => ({
-    ...t,
-    fields: t.fields.map((f) => ({
-      ...f,
-      ...(f.refers_to ? { refers_to: f.refers_to.map((x) => remap(typeRenames, x)) } : {}),
-    })),
-  }));
-  const priorities = edit.priorities ?? current.priorities;
+    // Assemble the candidate: a provided section replaces, an omitted one is
+    // kept. A field's refers_to can reference a renamed type, so it is
+    // remapped even when the caller sent the old names.
+    const statuses = edit.statuses ?? current.statuses;
+    const types = (edit.types ?? current.types).map((t) => ({
+      ...t,
+      fields: t.fields.map((f) => ({
+        ...f,
+        ...(f.refers_to ? { refers_to: f.refers_to.map((x) => remap(typeRenames, x)) } : {}),
+      })),
+    }));
+    const priorities = edit.priorities ?? current.priorities;
 
-  const candidate: Schema = { types, statuses, priorities };
+    const candidate: Schema = { types, statuses, priorities };
 
-  // The enum fields whose values are the priorities list; a removed priority
-  // is "in use" if any ticket holds it in one of these.
-  const prioFields = new Set<string>();
-  for (const t of types) {
-    for (const f of t.fields) {
-      if (f.type === 'enum' && f.values_from === 'priorities') prioFields.add(f.name);
-    }
-  }
-
-  // Block removals that would strand existing tickets. A section member is
-  // gone if it is absent from the new list and was not renamed away.
-  const statusNames = new Set(statuses.map((s) => s.name));
-  for (const s of current.statuses) {
-    if (statusNames.has(s.name) || s.name in statusRenames) continue;
-    const n = project.tickets.filter((t) => t.status === s.name).length;
-    if (n > 0) {
-      throw new MutationError(
-        `cannot remove status "${s.name}": ${n} ticket${n === 1 ? '' : 's'} still use it; move them first`,
-      );
-    }
-  }
-  const typeNames = new Set(types.map((t) => t.name));
-  for (const t of current.types) {
-    if (typeNames.has(t.name) || t.name in typeRenames) continue;
-    const n = project.tickets.filter((tk) => tk.type === t.name).length;
-    if (n > 0) {
-      throw new MutationError(
-        `cannot remove type "${t.name}": ${n} ticket${n === 1 ? '' : 's'} still use it`,
-      );
-    }
-  }
-  const prioSet = new Set(priorities);
-  for (const p of current.priorities) {
-    if (prioSet.has(p) || p in prioRenames) continue;
-    const n = project.tickets.filter((t) => [...prioFields].some((pf) => t.fields[pf] === p)).length;
-    if (n > 0) {
-      throw new MutationError(
-        `cannot remove priority "${p}": ${n} ticket${n === 1 ? '' : 's'} still use it`,
-      );
-    }
-  }
-
-  // Structural validation: the same errors the validator would report.
-  const issues = validateSchema(candidate, '.lovelace/schema.yaml').filter(
-    (i) => i.severity === 'error',
-  );
-  if (issues.length > 0) {
-    throw new MutationError(issues.map((i) => i.message).join('; '), issues);
-  }
-
-  // Cascade renames into existing tickets: status, type and any priority value.
-  const renaming =
-    Object.keys(statusRenames).length +
-      Object.keys(typeRenames).length +
-      Object.keys(prioRenames).length >
-    0;
-  if (renaming) {
-    for (const ticket of project.tickets) {
-      const sets: Array<[string, string]> = [];
-      if (ticket.status in statusRenames) sets.push(['status', statusRenames[ticket.status]!]);
-      if (ticket.type in typeRenames) sets.push(['type', typeRenames[ticket.type]!]);
-      for (const pf of prioFields) {
-        const v = ticket.fields[pf];
-        if (typeof v === 'string' && v in prioRenames) sets.push([pf, prioRenames[v]!]);
+    // The enum fields whose values are the priorities list; a removed priority
+    // is "in use" if any ticket holds it in one of these.
+    const prioFields = new Set<string>();
+    for (const t of types) {
+      for (const f of t.fields) {
+        if (f.type === 'enum' && f.values_from === 'priorities') prioFields.add(f.name);
       }
-      if (sets.length === 0) continue;
-      const abs = join(root, ticket.path);
-      const parsed = parseFrontmatter(readFileSync(abs, 'utf8'));
-      const doc = parseDocument(parsed.raw);
-      for (const [key, value] of sets) doc.set(key, value);
-      doc.set('updated', isoNow(ctx));
-      writeFileSync(
-        abs,
-        `---\n${doc.toString({ lineWidth: 0, flowCollectionPadding: false })}---\n${parsed.body}`,
-      );
     }
-    renameBoardOrderColumns(project.dir, statusRenames);
-  }
 
-  // Patch each schema node in place so comments and untouched sections survive.
-  // Build real YAML nodes via createNode (not plain JS) so applySchemaFlow's
-  // isSeq/isMap guards fire and the scalar arrays keep their compact flow style;
-  // a plain doc.set stores JS values that reflow to block style on every save.
-  // Types and statuses are merged, not just compacted: a matched old item
-  // (by name, or through the renames map) carries its unknown keys forward
-  // so a save does not destroy a newer-minor or hand-authored construct
-  // (ADR-0011).
-  const oldTypeByName = new Map(current.types.map((t) => [t.name, t] as const));
-  const oldStatusByName = new Map(current.statuses.map((s) => [s.name, s] as const));
-  const abs = join(project.dir, 'schema.yaml');
-  const doc = parseDocument(readFileSync(abs, 'utf8'));
-  doc.set(
-    'types',
-    doc.createNode(candidate.types.map((t) => mergeType(t, matchOld(t.name, oldTypeByName, typeRenames)))),
-  );
-  doc.set(
-    'statuses',
-    doc.createNode(
-      candidate.statuses.map((s) => mergeStatus(s, matchOld(s.name, oldStatusByName, statusRenames))),
-    ),
-  );
-  doc.set('priorities', doc.createNode([...candidate.priorities]));
-  applySchemaFlow(doc);
-  writeFileSync(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
+    // Block removals that would strand existing tickets. A section member is
+    // gone if it is absent from the new list and was not renamed away.
+    const statusNames = new Set(statuses.map((s) => s.name));
+    for (const s of current.statuses) {
+      if (statusNames.has(s.name) || s.name in statusRenames) continue;
+      const n = project.tickets.filter((t) => t.status === s.name).length;
+      if (n > 0) {
+        throw new MutationError(
+          `cannot remove status "${s.name}": ${n} ticket${n === 1 ? '' : 's'} still use it; move them first`,
+        );
+      }
+    }
+    const typeNames = new Set(types.map((t) => t.name));
+    for (const t of current.types) {
+      if (typeNames.has(t.name) || t.name in typeRenames) continue;
+      const n = project.tickets.filter((tk) => tk.type === t.name).length;
+      if (n > 0) {
+        throw new MutationError(
+          `cannot remove type "${t.name}": ${n} ticket${n === 1 ? '' : 's'} still use it`,
+        );
+      }
+    }
+    const prioSet = new Set(priorities);
+    for (const p of current.priorities) {
+      if (prioSet.has(p) || p in prioRenames) continue;
+      const n = project.tickets.filter((t) => [...prioFields].some((pf) => t.fields[pf] === p)).length;
+      if (n > 0) {
+        throw new MutationError(
+          `cannot remove priority "${p}": ${n} ticket${n === 1 ? '' : 's'} still use it`,
+        );
+      }
+    }
 
-  if (!ctx.skipReindex) reindex(root, ctx);
+    // Structural validation: the same errors the validator would report.
+    const issues = validateSchema(candidate, '.lovelace/schema.yaml').filter(
+      (i) => i.severity === 'error',
+    );
+    if (issues.length > 0) {
+      throw new MutationError(issues.map((i) => i.message).join('; '), issues);
+    }
+
+    // Cascade renames into existing tickets: status, type and any priority value.
+    const renaming =
+      Object.keys(statusRenames).length +
+        Object.keys(typeRenames).length +
+        Object.keys(prioRenames).length >
+      0;
+    if (renaming) {
+      for (const ticket of project.tickets) {
+        const sets: Array<[string, string]> = [];
+        if (ticket.status in statusRenames) sets.push(['status', statusRenames[ticket.status]!]);
+        if (ticket.type in typeRenames) sets.push(['type', typeRenames[ticket.type]!]);
+        for (const pf of prioFields) {
+          const v = ticket.fields[pf];
+          if (typeof v === 'string' && v in prioRenames) sets.push([pf, prioRenames[v]!]);
+        }
+        if (sets.length === 0) continue;
+        const abs = join(root, ticket.path);
+        const parsed = parseFrontmatter(readFileSync(abs, 'utf8'));
+        const doc = parseDocument(parsed.raw);
+        for (const [key, value] of sets) doc.set(key, value);
+        doc.set('updated', isoNow(ctx));
+        writeFileAtomic(
+          abs,
+          `---\n${doc.toString({ lineWidth: 0, flowCollectionPadding: false })}---\n${parsed.body}`,
+        );
+      }
+      renameBoardOrderColumns(project.dir, statusRenames);
+    }
+
+    // Patch each schema node in place so comments and untouched sections survive.
+    // Build real YAML nodes via createNode (not plain JS) so applySchemaFlow's
+    // isSeq/isMap guards fire and the scalar arrays keep their compact flow style;
+    // a plain doc.set stores JS values that reflow to block style on every save.
+    // Types and statuses are merged, not just compacted: a matched old item
+    // (by name, or through the renames map) carries its unknown keys forward
+    // so a save does not destroy a newer-minor or hand-authored construct
+    // (ADR-0011).
+    const oldTypeByName = new Map(current.types.map((t) => [t.name, t] as const));
+    const oldStatusByName = new Map(current.statuses.map((s) => [s.name, s] as const));
+    const abs = join(project.dir, 'schema.yaml');
+    const doc = parseDocument(readFileSync(abs, 'utf8'));
+    doc.set(
+      'types',
+      doc.createNode(candidate.types.map((t) => mergeType(t, matchOld(t.name, oldTypeByName, typeRenames)))),
+    );
+    doc.set(
+      'statuses',
+      doc.createNode(
+        candidate.statuses.map((s) => mergeStatus(s, matchOld(s.name, oldStatusByName, statusRenames))),
+      ),
+    );
+    doc.set('priorities', doc.createNode([...candidate.priorities]));
+    applySchemaFlow(doc);
+    writeFileAtomic(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
+
+    if (!ctx.skipReindex) reindex(root, ctx);
+  });
 }
 
 /**
@@ -495,28 +509,31 @@ export async function writeManifest(
   changes: { name?: string; presence_timeout_minutes?: number | null },
   ctx: MutationContext = {},
 ): Promise<void> {
-  const project = loadProject(root);
-  const abs = join(project.dir, 'manifest.yaml');
-  const doc = parseDocument(readFileSync(abs, 'utf8'));
-  if (changes.name !== undefined) {
-    const name = String(changes.name).trim();
-    if (name === '') throw new MutationError('project name cannot be empty');
-    doc.set('name', name);
-  }
-  if (changes.presence_timeout_minutes !== undefined) {
-    // null clears the key back to the tooling default, keeping files clean.
-    if (changes.presence_timeout_minutes === null) {
-      doc.delete('presence_timeout_minutes');
-    } else {
-      const minutes = Number(changes.presence_timeout_minutes);
-      if (!Number.isInteger(minutes) || minutes <= 0) {
-        throw new MutationError('presence timeout must be a positive whole number of minutes');
-      }
-      doc.set('presence_timeout_minutes', minutes);
+  const lovelaceDir = join(root, '.lovelace');
+  return withMutateLock(lovelaceDir, async () => {
+    const project = loadProject(root);
+    const abs = join(project.dir, 'manifest.yaml');
+    const doc = parseDocument(readFileSync(abs, 'utf8'));
+    if (changes.name !== undefined) {
+      const name = String(changes.name).trim();
+      if (name === '') throw new MutationError('project name cannot be empty');
+      doc.set('name', name);
     }
-  }
-  writeFileSync(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
-  if (!ctx.skipReindex) reindex(root, ctx);
+    if (changes.presence_timeout_minutes !== undefined) {
+      // null clears the key back to the tooling default, keeping files clean.
+      if (changes.presence_timeout_minutes === null) {
+        doc.delete('presence_timeout_minutes');
+      } else {
+        const minutes = Number(changes.presence_timeout_minutes);
+        if (!Number.isInteger(minutes) || minutes <= 0) {
+          throw new MutationError('presence timeout must be a positive whole number of minutes');
+        }
+        doc.set('presence_timeout_minutes', minutes);
+      }
+    }
+    writeFileAtomic(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
+    if (!ctx.skipReindex) reindex(root, ctx);
+  });
 }
 
 /** Counts how many tickets, sessions and comments point at an actor id. */
@@ -542,50 +559,53 @@ export async function writeActors(
   actors: unknown,
   ctx: MutationContext = {},
 ): Promise<Actor[]> {
-  const project = loadProject(root);
-  if (!Array.isArray(actors)) throw new MutationError('actors must be a list');
+  const lovelaceDir = join(root, '.lovelace');
+  return withMutateLock(lovelaceDir, async () => {
+    const project = loadProject(root);
+    if (!Array.isArray(actors)) throw new MutationError('actors must be a list');
 
-  const next: Actor[] = [];
-  const ids = new Set<string>();
-  for (const raw of actors) {
-    const a = (raw ?? {}) as Partial<Actor>;
-    const id = typeof a.id === 'string' ? a.id.trim() : '';
-    const name = typeof a.name === 'string' ? a.name.trim() : '';
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
-      throw new MutationError(`actor id "${String(a.id ?? '')}" must be lowercase letters, digits and hyphens`);
+    const next: Actor[] = [];
+    const ids = new Set<string>();
+    for (const raw of actors) {
+      const a = (raw ?? {}) as Partial<Actor>;
+      const id = typeof a.id === 'string' ? a.id.trim() : '';
+      const name = typeof a.name === 'string' ? a.name.trim() : '';
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
+        throw new MutationError(`actor id "${String(a.id ?? '')}" must be lowercase letters, digits and hyphens`);
+      }
+      if (name === '') throw new MutationError(`actor "${id}" needs a name`);
+      if (a.kind !== 'human' && a.kind !== 'agent') {
+        throw new MutationError(`actor "${id}" kind must be human or agent`);
+      }
+      if (ids.has(id)) throw new MutationError(`duplicate actor id "${id}"`);
+      ids.add(id);
+      next.push({ id, name, kind: a.kind });
     }
-    if (name === '') throw new MutationError(`actor "${id}" needs a name`);
-    if (a.kind !== 'human' && a.kind !== 'agent') {
-      throw new MutationError(`actor "${id}" kind must be human or agent`);
+
+    if (next.filter((a) => a.kind === 'human').length !== 1) {
+      throw new MutationError('exactly one actor must have kind: human');
     }
-    if (ids.has(id)) throw new MutationError(`duplicate actor id "${id}"`);
-    ids.add(id);
-    next.push({ id, name, kind: a.kind });
-  }
 
-  if (next.filter((a) => a.kind === 'human').length !== 1) {
-    throw new MutationError('exactly one actor must have kind: human');
-  }
-
-  for (const a of project.actors) {
-    if (ids.has(a.id)) continue;
-    const refs = countActorRefs(project, a.id);
-    if (refs > 0) {
-      throw new MutationError(
-        `cannot remove actor "${a.id}": still referenced ${refs} time${refs === 1 ? '' : 's'} by tickets, sessions or comments; reassign them first`,
-      );
+    for (const a of project.actors) {
+      if (ids.has(a.id)) continue;
+      const refs = countActorRefs(project, a.id);
+      if (refs > 0) {
+        throw new MutationError(
+          `cannot remove actor "${a.id}": still referenced ${refs} time${refs === 1 ? '' : 's'} by tickets, sessions or comments; reassign them first`,
+        );
+      }
     }
-  }
 
-  const abs = join(project.dir, 'actors.yaml');
-  const doc = parseDocument(readFileSync(abs, 'utf8'));
-  doc.set(
-    'actors',
-    next.map((a) => ({ id: a.id, name: a.name, kind: a.kind })),
-  );
-  writeFileSync(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
-  if (!ctx.skipReindex) reindex(root, ctx);
-  return next;
+    const abs = join(project.dir, 'actors.yaml');
+    const doc = parseDocument(readFileSync(abs, 'utf8'));
+    doc.set(
+      'actors',
+      next.map((a) => ({ id: a.id, name: a.name, kind: a.kind })),
+    );
+    writeFileAtomic(abs, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
+    if (!ctx.skipReindex) reindex(root, ctx);
+    return next;
+  });
 }
 
 export interface LogSessionInput {
@@ -605,48 +625,51 @@ export async function logSession(
   input: LogSessionInput,
   ctx: MutationContext = {},
 ): Promise<{ id: string; path: string }> {
-  const project = loadProject(root);
-  if (!project.tickets.some((t) => t.id === input.ticket)) {
-    throw new MutationError(`ticket "${input.ticket}" does not exist`);
-  }
-  if (!project.actors.some((a) => a.id === input.actor)) {
-    throw new MutationError(`actor "${input.actor}" is not in actors.yaml`);
-  }
-  if (!(SESSION_OUTCOMES as readonly string[]).includes(input.outcome)) {
-    throw new MutationError(`outcome must be one of: ${SESSION_OUTCOMES.join(', ')}`);
-  }
-  const id = await nextId(project.dir, project.manifest, 'S');
-  const stamp = isoNow(ctx);
-  const ordered: Array<[string, unknown]> = [
-    ['id', id],
-    ['ticket', input.ticket],
-    ['actor', input.actor],
-    ['started', input.started ?? stamp],
-    ['ended', input.ended ?? stamp],
-    ['commits', input.commits ?? []],
-    ['outcome', input.outcome],
-  ];
-  const questions = (input.openQuestions ?? []).filter((q) => q.trim().length > 0);
-  const body = [
-    '## Approach',
-    '',
-    input.approach.trim(),
-    '',
-    '## What happened',
-    '',
-    (input.whatHappened ?? '').trim() || '(not recorded)',
-    '',
-    '## Open questions',
-    '',
-    questions.length > 0 ? questions.map((q) => `- ${q.trim()}`).join('\n') : '- None.',
-    '',
-  ].join('\n');
-  const sessionsDir = join(project.dir, project.manifest.paths.sessions);
-  mkdirSync(sessionsDir, { recursive: true });
-  const path = join(sessionsDir, `${id}.md`);
-  writeFileSync(path, `---\n${buildFrontmatterYaml(ordered)}---\n\n${body.trimEnd()}\n`);
-  reindex(root, ctx);
-  return { id, path };
+  const lovelaceDir = join(root, '.lovelace');
+  return withMutateLock(lovelaceDir, async () => {
+    const project = loadProject(root);
+    if (!project.tickets.some((t) => t.id === input.ticket)) {
+      throw new MutationError(`ticket "${input.ticket}" does not exist`);
+    }
+    if (!project.actors.some((a) => a.id === input.actor)) {
+      throw new MutationError(`actor "${input.actor}" is not in actors.yaml`);
+    }
+    if (!(SESSION_OUTCOMES as readonly string[]).includes(input.outcome)) {
+      throw new MutationError(`outcome must be one of: ${SESSION_OUTCOMES.join(', ')}`);
+    }
+    const id = await nextId(project.dir, project.manifest, 'S');
+    const stamp = isoNow(ctx);
+    const ordered: Array<[string, unknown]> = [
+      ['id', id],
+      ['ticket', input.ticket],
+      ['actor', input.actor],
+      ['started', input.started ?? stamp],
+      ['ended', input.ended ?? stamp],
+      ['commits', input.commits ?? []],
+      ['outcome', input.outcome],
+    ];
+    const questions = (input.openQuestions ?? []).filter((q) => q.trim().length > 0);
+    const body = [
+      '## Approach',
+      '',
+      input.approach.trim(),
+      '',
+      '## What happened',
+      '',
+      (input.whatHappened ?? '').trim() || '(not recorded)',
+      '',
+      '## Open questions',
+      '',
+      questions.length > 0 ? questions.map((q) => `- ${q.trim()}`).join('\n') : '- None.',
+      '',
+    ].join('\n');
+    const sessionsDir = join(project.dir, project.manifest.paths.sessions);
+    mkdirSync(sessionsDir, { recursive: true });
+    const path = join(sessionsDir, `${id}.md`);
+    writeFileAtomic(path, `---\n${buildFrontmatterYaml(ordered)}---\n\n${body.trimEnd()}\n`);
+    reindex(root, ctx);
+    return { id, path };
+  });
 }
 
 export interface AddCommentInput {
@@ -660,31 +683,34 @@ export async function addComment(
   input: AddCommentInput,
   ctx: MutationContext = {},
 ): Promise<{ path: string }> {
-  const project = loadProject(root);
-  if (!project.tickets.some((t) => t.id === input.ticket)) {
-    throw new MutationError(`ticket "${input.ticket}" does not exist`);
-  }
-  if (!project.actors.some((a) => a.id === input.actor)) {
-    throw new MutationError(`actor "${input.actor}" is not in actors.yaml`);
-  }
-  const stamp = isoNow(ctx);
-  const fileStamp = stamp.slice(0, 16).replace(/:/g, '');
-  const dir = join(project.dir, project.manifest.paths.comments, input.ticket);
-  mkdirSync(dir, { recursive: true });
-  let path = join(dir, `${fileStamp}-${input.actor}.md`);
-  let suffix = 1;
-  while (existsSync(path)) {
-    path = join(dir, `${fileStamp}-${input.actor}-${suffix}.md`);
-    suffix += 1;
-  }
-  const ordered: Array<[string, unknown]> = [
-    ['ticket', input.ticket],
-    ['actor', input.actor],
-    ['created', stamp],
-  ];
-  writeFileSync(path, `---\n${buildFrontmatterYaml(ordered)}---\n\n${input.body.trim()}\n`);
-  reindex(root, ctx);
-  return { path };
+  const lovelaceDir = join(root, '.lovelace');
+  return withMutateLock(lovelaceDir, async () => {
+    const project = loadProject(root);
+    if (!project.tickets.some((t) => t.id === input.ticket)) {
+      throw new MutationError(`ticket "${input.ticket}" does not exist`);
+    }
+    if (!project.actors.some((a) => a.id === input.actor)) {
+      throw new MutationError(`actor "${input.actor}" is not in actors.yaml`);
+    }
+    const stamp = isoNow(ctx);
+    const fileStamp = stamp.slice(0, 16).replace(/:/g, '');
+    const dir = join(project.dir, project.manifest.paths.comments, input.ticket);
+    mkdirSync(dir, { recursive: true });
+    let path = join(dir, `${fileStamp}-${input.actor}.md`);
+    let suffix = 1;
+    while (existsSync(path)) {
+      path = join(dir, `${fileStamp}-${input.actor}-${suffix}.md`);
+      suffix += 1;
+    }
+    const ordered: Array<[string, unknown]> = [
+      ['ticket', input.ticket],
+      ['actor', input.actor],
+      ['created', stamp],
+    ];
+    writeFileAtomic(path, `---\n${buildFrontmatterYaml(ordered)}---\n\n${input.body.trim()}\n`);
+    reindex(root, ctx);
+    return { path };
+  });
 }
 
 /** Writes the active ticket pointer in state/. */
@@ -694,13 +720,13 @@ export function setActiveTicket(root: string, id: string | null): void {
   mkdirSync(stateDir, { recursive: true });
   const file = join(stateDir, 'active_ticket');
   if (id === null) {
-    if (existsSync(file)) writeFileSync(file, '');
+    if (existsSync(file)) writeFileAtomic(file, '');
     return;
   }
   if (!project.tickets.some((t) => t.id === id)) {
     throw new MutationError(`ticket "${id}" does not exist`);
   }
-  writeFileSync(file, `${id}\n`);
+  writeFileAtomic(file, `${id}\n`);
 }
 
 // At least one alphanumeric, so the dot-only names "." and ".." can never
@@ -723,7 +749,7 @@ export function writeSessionActiveTicket(root: string, sessionId: string, id: st
     return;
   }
   mkdirSync(dir, { recursive: true });
-  writeFileSync(file, `${id}\n`);
+  writeFileAtomic(file, `${id}\n`);
 }
 
 /** The active-ticket pointer for one Claude Code session, or null when it never claimed one. */
@@ -789,7 +815,7 @@ export function writePresence(root: string, sessionId: string, presence: AgentPr
   const stateDir = join(project.dir, project.manifest.paths.state);
   const presenceDir = join(stateDir, 'presence');
   mkdirSync(presenceDir, { recursive: true });
-  writeFileSync(join(presenceDir, `${sessionId}.json`), `${JSON.stringify(presence, null, 2)}\n`);
+  writeFileAtomic(join(presenceDir, `${sessionId}.json`), `${JSON.stringify(presence, null, 2)}\n`);
   const legacy = join(stateDir, 'presence.json');
   if (existsSync(legacy)) rmSync(legacy);
   gcPresence(presenceDir, project.manifest.presence_timeout_minutes ?? DEFAULT_PRESENCE_TIMEOUT_MINUTES);
@@ -852,14 +878,16 @@ export function readPresences(root: string): AgentPresence[] {
 /**
  * The turn's heartbeat: called on every tool use, so it must stay far
  * lighter than loadProject (which parses every ticket). Resolves state/
- * from manifest.yaml alone, re-resolves the focus ticket from
- * state/active/<session-id> falling back to state/active_ticket (the same
- * plain reads and trim semantics as readSessionActiveTicket/
- * getActiveTicket), and writes the entry back with a fresh beat_at while
- * preserving started_at and actor. Creates a missing entry rather than
- * doing nothing, so a beat after the entry has been garbage-collected still
- * lights the ring on the next paint. Never runs garbage collection; that is
- * writePresence's job, once per turn.
+ * from manifest.yaml alone, and re-resolves the focus ticket from this
+ * session's own marker, state/active/<session-id>, when one exists. When it
+ * does not, the entry's own existing ticket is preserved rather than falling
+ * back to the singleton state/active_ticket: the singleton belongs to
+ * whichever session or tool call last wrote it, so picking it up here would
+ * light this session's ring with another session's ticket. Writes the entry
+ * back with a fresh beat_at while preserving started_at and actor. Creates a
+ * missing entry rather than doing nothing, so a beat after the entry has
+ * been garbage-collected still lights the ring on the next paint. Never
+ * runs garbage collection; that is writePresence's job, once per turn.
  */
 export function beatPresence(root: string, sessionId: string): void {
   if (!SESSION_ID_PATTERN.test(sessionId)) return;
@@ -873,12 +901,11 @@ export function beatPresence(root: string, sessionId: string): void {
     const value = readFileSync(file, 'utf8').trim();
     return value.length > 0 ? value : null;
   };
-  const ticket =
-    readTrimmed(join(stateDir, 'active', sessionId)) ?? readTrimmed(join(stateDir, 'active_ticket'));
 
   const presenceDir = join(stateDir, 'presence');
   const entryFile = join(presenceDir, `${sessionId}.json`);
   const existing = parsePresenceFile(entryFile);
+  const ticket = readTrimmed(join(stateDir, 'active', sessionId)) ?? existing?.ticket ?? null;
   const entry: AgentPresence = {
     ticket,
     actor: existing?.actor ?? null,
@@ -887,7 +914,7 @@ export function beatPresence(root: string, sessionId: string): void {
   };
 
   mkdirSync(presenceDir, { recursive: true });
-  writeFileSync(entryFile, `${JSON.stringify(entry, null, 2)}\n`);
+  writeFileAtomic(entryFile, `${JSON.stringify(entry, null, 2)}\n`);
 
   const legacy = join(stateDir, 'presence.json');
   if (existsSync(legacy)) rmSync(legacy);

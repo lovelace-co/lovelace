@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadProject } from './project.js';
+import { writeFileAtomic } from './fs-atomic.js';
 
 /**
  * Manual graph node positions. The documentation graph lets a human drag nodes
@@ -64,5 +65,5 @@ export function writeGraphLayout(root: string, layout: GraphLayout): void {
     const pos = layout[id];
     if (isPos(pos)) nodes[id] = { x: Math.round(pos.x), y: Math.round(pos.y) };
   }
-  writeFileSync(join(stateDir, LAYOUT_FILE), `${JSON.stringify({ version: 1, nodes }, null, 2)}\n`);
+  writeFileAtomic(join(stateDir, LAYOUT_FILE), `${JSON.stringify({ version: 1, nodes }, null, 2)}\n`);
 }

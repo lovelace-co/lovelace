@@ -33,6 +33,7 @@ import {
   writeManifest,
   writeActors,
   writeIndex,
+  writeFileAtomic,
   parseFrontmatter,
   FrontmatterError,
   MutationError,
@@ -41,7 +42,6 @@ import {
 import type { Schema, SchemaEdit } from '@lovelace/core';
 import {
   readFileSync,
-  writeFileSync,
   existsSync,
   mkdirSync,
   renameSync,
@@ -405,7 +405,7 @@ export async function handle(request: HostRequest): Promise<Json> {
       doc.set('updated', `${new Date().toISOString().slice(0, 19)}Z`);
       const body = request.body !== undefined ? String(request.body) : existing.body;
       const fm = doc.toString({ lineWidth: 0, flowCollectionPadding: false });
-      writeFileSync(abs, `---\n${fm}---\n${body.startsWith('\n') ? body : `\n${body}`}`);
+      writeFileAtomic(abs, `---\n${fm}---\n${body.startsWith('\n') ? body : `\n${body}`}`);
       return snapshot(root);
     }
     case 'write_ticket_body': {
@@ -430,7 +430,7 @@ export async function handle(request: HostRequest): Promise<Json> {
       const slug = documentSlug(name);
       const file = join(dirAbs, `${name}.md`);
       if (existsSync(file)) throw new Error(`${dirRel}/${name}.md already exists`);
-      writeFileSync(
+      writeFileAtomic(
         file,
         `---\nid: ${idScalar(slug)}\ntype: document\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
       );
@@ -459,7 +459,7 @@ export async function handle(request: HostRequest): Promise<Json> {
       mkdirSync(dirAbs, { recursive: true });
       // A folder needs at least one file to exist and be discoverable, so it gets
       // a starter index.md (its entry point). This is a default, not a requirement.
-      writeFileSync(
+      writeFileAtomic(
         join(dirAbs, 'index.md'),
         `---\nid: ${idScalar(slug)}\ntype: document\nsummary: ${summary}\nupdated: ${stamp}\n---\n\n# ${name}\n\n(to be written)\n`,
       );
@@ -537,7 +537,7 @@ export async function handle(request: HostRequest): Promise<Json> {
       const filename = rel.slice(rel.lastIndexOf('/') + 1).replace(/\.md$/, '');
       const slug = documentSlug(filename);
       const stamp = `${new Date().toISOString().slice(0, 19)}Z`;
-      writeFileSync(
+      writeFileAtomic(
         abs,
         `---\nid: ${idScalar(slug)}\ntype: document\nsummary: (to be written)\nupdated: ${stamp}\n---\n\n${original}`,
       );
