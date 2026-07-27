@@ -23,6 +23,7 @@ import {
   loadProject,
   setColumnOrder,
   readBoardOrder,
+  writeIndex,
   MutationError,
 } from '../src/index.js';
 import { tempFixture } from './helpers.js';
@@ -112,8 +113,16 @@ describe('index integrity under concurrent updateTicket', () => {
   it('index.json stays parseable and never drops a fixture ticket while two workers race', async () => {
     const root = fixture();
     const indexFile = join(root, '.lovelace/index/index.json');
-    const allIds = loadProject(root).tickets.map((t) => t.id).sort();
+    const project = loadProject(root);
+    const allIds = project.tickets.map((t) => t.id).sort();
     const RUN_MS = 2000;
+
+    // index.json is derived and gitignored, so the copied fixture carries
+    // either no index at all (a fresh clone) or whatever a previous local
+    // run happened to leave behind. Generate it from the fixture's own
+    // files first: the assertions below are about what the race does to a
+    // valid index, not about the state the fixture was copied in.
+    writeIndex(project);
 
     const a = spawnWorker('update-worker.mjs', [root, 'T-0001', 'title', String(RUN_MS)]);
     const b = spawnWorker('update-worker.mjs', [root, 'T-0002', 'title', String(RUN_MS)]);
