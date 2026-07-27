@@ -39,6 +39,11 @@ function fixture() {
   return f.root;
 }
 
+// Windows pays a retry on most contended writes (see the presence test), so
+// the stress cases there need room to finish honestly rather than a budget
+// that turns slowness into a failure.
+const WINDOWS_TIMEOUT_MS = process.platform === 'win32' ? 40_000 : 10_000;
+
 const DIST_INDEX = resolve(__dirname, '../dist/index.js');
 const WORKERS_DIR = join(__dirname, 'workers');
 
@@ -64,11 +69,20 @@ describe('presence atomicity under concurrent beats', () => {
     const sessionId = 'stress-session';
     const entry = join(root, '.lovelace/state/presence', `${sessionId}.json`);
     const WORKERS = 3;
-    const ITERS = 1500;
+    // Windows will not rename onto a file another handle holds open, and the
+    // reader below spins on this exact file, so most writes there retry
+    // before they land and each one costs far more than on POSIX. The
+    // assertions are about atomicity, not throughput, so Windows proves the
+    // same guarantee over fewer beats rather than over a longer wall clock.
+    const WINDOWS = process.platform === 'win32';
+    const ITERS = WINDOWS ? 400 : 1500;
 
     const children = Array.from({ length: WORKERS }, () =>
       spawnWorker('beat-worker.mjs', [root, sessionId, String(ITERS)]),
     );
+
+    const outs = children.map(() => '');
+    children.forEach((child, i) => child.stdout.on('data', (d) => (outs[i] += d)));
 
     let alive = children.length;
     for (const child of children) child.on('exit', () => alive--);
@@ -102,11 +116,20 @@ describe('presence atomicity under concurrent beats', () => {
       }
     }
 
+    // A worker that died on its first write would have ended the loop above
+    // early, leaving the reads below to pass on almost no evidence, so the
+    // writers have to account for every beat they were asked to make.
+    const tallies = outs.map((out) => JSON.parse(out) as { ok: number; errors: Record<string, number> });
+    for (const t of tallies) {
+      expect(t.errors).toEqual({});
+      expect(t.ok).toBe(ITERS);
+    }
+
     expect(tally.empty).toBe(0);
     expect(tally.torn).toBe(0);
     expect(tally.ok).toBeGreaterThan(0);
     expect(startedAts.size).toBe(1);
-  }, 10_000);
+  }, WINDOWS_TIMEOUT_MS);
 });
 
 describe('index integrity under concurrent updateTicket', () => {
@@ -163,7 +186,7 @@ describe('index integrity under concurrent updateTicket', () => {
     expect(tally.missing).toEqual({});
     expect(tallyA.ok).toBeGreaterThan(0);
     expect(tallyB.ok).toBeGreaterThan(0);
-  }, 10_000);
+  }, WINDOWS_TIMEOUT_MS);
 });
 
 describe('no lost updates under a concurrent status move', () => {
@@ -200,7 +223,7 @@ describe('no lost updates under a concurrent status move', () => {
 
     expect(moveOk).toBeGreaterThan(0);
     expect(lostUpdates).toBe(0);
-  }, 10_000);
+  }, WINDOWS_TIMEOUT_MS);
 });
 
 describe('withMutateLock', () => {

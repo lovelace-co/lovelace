@@ -14,7 +14,16 @@ let counter = 0;
 // mutation error. EBUSY and EACCES join EPERM because Windows reports the
 // same contention under all three depending on who holds the handle.
 const RENAME_RETRY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
-const RENAME_ATTEMPTS = 12;
+const RENAME_ATTEMPTS = 16;
+
+// A contending handle is usually gone within microseconds (a reader between
+// two reads), so the first few retries go straight back at it with no sleep
+// at all: sleeping first would pay milliseconds for a wait that did not
+// need to happen, and every project write pays it under a busy reader.
+// Only once the immediate retries have failed does this back off, on the
+// assumption the holder is doing something slower.
+const RENAME_SPINS = 4;
+const RENAME_BACKOFF_CAP_MS = 20;
 
 /**
  * Blocks this thread for `ms`. writeFileAtomic is synchronous and is called
@@ -28,10 +37,11 @@ function sleepSync(ms: number): void {
 
 /**
  * Renames `tmp` over `file`, retrying the transient Windows contention
- * failures described above with a short backoff (about 130 ms in total
- * across every attempt). Anything else, or a target still contended once
- * the attempts run out, throws as before, with the temp file cleaned up so
- * a failed write leaves no litter behind.
+ * failures described above: four immediate attempts, then a doubling
+ * backoff capped at 20 ms, for about 150 ms across all sixteen attempts.
+ * Anything else, or a target still contended once the attempts run out,
+ * throws as before, with the temp file cleaned up so a failed write leaves
+ * no litter behind.
  */
 function renameWithRetry(tmp: string, file: string): void {
   for (let attempt = 1; ; attempt += 1) {
@@ -48,7 +58,9 @@ function renameWithRetry(tmp: string, file: string): void {
         }
         throw e;
       }
-      sleepSync(Math.min(attempt * 2, 20));
+      if (attempt > RENAME_SPINS) {
+        sleepSync(Math.min(2 ** (attempt - RENAME_SPINS - 1), RENAME_BACKOFF_CAP_MS));
+      }
     }
   }
 }
