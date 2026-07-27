@@ -1,11 +1,12 @@
 /**
- * Integration-agnostic machinery shared by the Claude Code and OpenCode
- * installers: the Lovelace section markers, marker-delimited section
- * writing, the merge-preserving JSON read/edit helper (with its
- * malformed-JSON manual-step fallback), the shared `.lovelace/AGENTS.md`
- * instruction template and refresh, the Git `prepare-commit-msg` writer and
- * detector, and the `{ written, manual }` result shape both installers
- * return.
+ * Integration-agnostic machinery shared by the Claude Code, OpenCode and
+ * Codex installers: the Lovelace section markers (HTML-comment and
+ * TOML-comment), marker-delimited section writing, the merge-preserving
+ * JSON read/edit helper (with its malformed-JSON manual-step fallback), the
+ * shared `.lovelace/AGENTS.md` instruction template and refresh, the hook
+ * command quoting and stale-helper detection every hooks file shares, the
+ * Git `prepare-commit-msg` writer and detector, and the `{ written, manual }`
+ * result shape every installer returns.
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -18,6 +19,10 @@ export interface AssetResult {
 
 export const SECTION_START = '<!-- lovelace:start -->';
 export const SECTION_END = '<!-- lovelace:end -->';
+
+/** The TOML-comment equivalent of SECTION_START/SECTION_END, for files (like .codex/config.toml) that are never parsed, only marker-delimited. */
+export const TOML_SECTION_START = '# lovelace:start';
+export const TOML_SECTION_END = '# lovelace:end';
 
 /**
  * The Lovelace instruction file: every direction the agent needs, owned and
@@ -59,7 +64,9 @@ ${SECTION_END}
  * (for example a top-level heading) and pushes the bare `label`; refreshing
  * an existing section pushes `${label} (section refreshed)` only when the
  * section actually changed; appending to a file with no prior section
- * pushes `${label} (section appended)`.
+ * pushes `${label} (section appended)`. `markers` defaults to the HTML-comment
+ * pair; pass the TOML-comment pair for a file (like .codex/config.toml) that
+ * is never parsed, only marker-delimited.
  */
 export function writeMarkerSection(
   path: string,
@@ -67,6 +74,7 @@ export function writeMarkerSection(
   result: AssetResult,
   label: string,
   header = '',
+  markers: { start: string; end: string } = { start: SECTION_START, end: SECTION_END },
 ): void {
   if (!existsSync(path)) {
     writeFileSync(path, `${header}${section}`);
@@ -74,9 +82,9 @@ export function writeMarkerSection(
     return;
   }
   const existing = readFileSync(path, 'utf8');
-  if (existing.includes(SECTION_START)) {
+  if (existing.includes(markers.start)) {
     const updated = existing.replace(
-      new RegExp(`${SECTION_START}[\\s\\S]*?${SECTION_END}\\n?`),
+      new RegExp(`${markers.start}[\\s\\S]*?${markers.end}\\n?`),
       section,
     );
     if (updated !== existing) {
@@ -110,8 +118,44 @@ export function parseCommand(raw: string): { command: string; args: string[] } {
   return { command: raw, args: [] };
 }
 
+/** Quotes `value` with double quotes only when it contains a space, since bash needs the quoting only then. */
+export function quoteIfSpaced(value: string): string {
+  return value.includes(' ') ? `"${value}"` : value;
+}
+
 /**
- * Reads `path` as JSON (an empty object when absent), applies `merge` to
+ * Builds the hook command's leading binary/script portion: the bare path
+ * (quoted only if it has a space), or `node <script>` with the script path
+ * quoted only if it has a space. Unlike `.mcp.json`, hook commands run
+ * through bash, so quoting here (never in `.mcp.json`) is what lets a
+ * spaced Windows install path survive.
+ */
+export function hookCommandPrefix(rawCommand: string): string {
+  const { command, args } = parseCommand(rawCommand);
+  if (command === 'node') {
+    return `node ${quoteIfSpaced(args[0] ?? '')}`;
+  }
+  return quoteIfSpaced(command);
+}
+
+export const HOOK_SUBCOMMANDS = ['digest', 'session-check', 'guard', 'presence-start', 'presence-clear', 'presence-beat', 'track-active'];
+
+/**
+ * True when `command` looks like a Lovelace helper hook written in an
+ * older command format (for example the pre-fix Windows backslash path)
+ * that this install is about to replace, rather than a user-authored hook
+ * that happens to share a word with one.
+ */
+export function isStaleHelperCommand(command: string | undefined, expected: ReadonlySet<string>): boolean {
+  if (!command) return false;
+  const looksLikeHelper = command.includes('lovelace-agent') || command.includes('helper.js');
+  if (!looksLikeHelper) return false;
+  const matchesSubcommand = HOOK_SUBCOMMANDS.some((sub) => command.endsWith(` ${sub}`));
+  if (!matchesSubcommand) return false;
+  return !expected.has(command);
+}
+
+/** Reads `path` as JSON (an empty object when absent), applies `merge` to
  * fold in the Lovelace entry, and writes the pretty-printed result back,
  * always pushing `writtenLabel`. When the existing file fails to parse as
  * strict JSON, nothing is touched and `manualMessage` is pushed to
@@ -138,6 +182,9 @@ export function mergeJsonFile<T extends Record<string, unknown>>(
   writeFileSync(path, `${JSON.stringify(merged, null, 2)}\n`);
   result.written.push(writtenLabel);
 }
+
+/** Substrings that identify a Lovelace helper hook command in a flattened hooks blob, shared by every integration's detector. */
+export const KNOWN_HELPER_SUFFIXES = [' digest', 'session-check', ' guard', 'presence-start', 'presence-clear', 'presence-beat', 'track-active'];
 
 /** True when `path` exists and contains `marker` (the section start marker by default), resilient to an unreadable file. */
 export function containsMarker(path: string, marker: string = SECTION_START): boolean {

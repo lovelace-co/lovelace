@@ -9,6 +9,9 @@ import { join } from 'node:path';
 import {
   type AssetResult,
   detectGitHook,
+  hookCommandPrefix,
+  isStaleHelperCommand,
+  KNOWN_HELPER_SUFFIXES,
   mergeJsonFile,
   parseCommand,
   refreshLovelaceAgentsMd,
@@ -64,43 +67,6 @@ function writeMcpJson(root: string, options: ClaudeAssetOptions, result: ClaudeA
     '.mcp.json',
     `.mcp.json exists but is not valid JSON; add a "lovelace" entry yourself: ${JSON.stringify({ lovelace: entry })}`,
   );
-}
-
-/** Quotes `value` with double quotes only when it contains a space, since bash needs the quoting only then. */
-function quoteIfSpaced(value: string): string {
-  return value.includes(' ') ? `"${value}"` : value;
-}
-
-/**
- * Builds the hook command's leading binary/script portion: the bare path
- * (quoted only if it has a space), or `node <script>` with the script path
- * quoted only if it has a space. Unlike `.mcp.json`, hook commands run
- * through bash, so quoting here (never in `.mcp.json`) is what lets a
- * spaced Windows install path survive.
- */
-function hookCommandPrefix(rawCommand: string): string {
-  const { command, args } = parseCommand(rawCommand);
-  if (command === 'node') {
-    return `node ${quoteIfSpaced(args[0] ?? '')}`;
-  }
-  return quoteIfSpaced(command);
-}
-
-const HOOK_SUBCOMMANDS = ['digest', 'session-check', 'guard', 'presence-start', 'presence-clear', 'presence-beat', 'track-active'];
-
-/**
- * True when `command` looks like a Lovelace helper hook written in an
- * older command format (for example the pre-fix Windows backslash path)
- * that this install is about to replace, rather than a user-authored hook
- * that happens to share a word with one.
- */
-function isStaleHelperCommand(command: string | undefined, expected: ReadonlySet<string>): boolean {
-  if (!command) return false;
-  const looksLikeHelper = command.includes('lovelace-agent') || command.includes('helper.js');
-  if (!looksLikeHelper) return false;
-  const matchesSubcommand = HOOK_SUBCOMMANDS.some((sub) => command.endsWith(` ${sub}`));
-  if (!matchesSubcommand) return false;
-  return !expected.has(command);
 }
 
 function writeHooks(root: string, options: ClaudeAssetOptions, result: ClaudeAssetResult): void {
@@ -236,8 +202,6 @@ export interface ClaudeInstallStatus {
   /** `.git/hooks/prepare-commit-msg` exists and references Lovelace. */
   gitHook: boolean;
 }
-
-const KNOWN_HELPER_SUFFIXES = [' digest', 'session-check', ' guard', 'presence-start', 'presence-clear', 'presence-beat', 'track-active'];
 
 /**
  * Inspects on-disk assets to determine whether the Claude Code integration

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { HoleCheck } from './HoleCheck';
 import { Toast } from './Toast';
-import type { ClaudeInstallStatus, InstallClaudeResult, OpenCodeInstallStatus } from '../lib/host';
+import type { ClaudeInstallStatus, CodexInstallStatus, InstallClaudeResult, OpenCodeInstallStatus } from '../lib/host';
 
 interface IntegrationsSettingsProps {
   /** (Re)install the Claude Code assets; resolves to what was written and what needs doing by hand. */
@@ -13,6 +13,10 @@ interface IntegrationsSettingsProps {
   onInstallOpenCode: (gitHook: boolean) => Promise<InstallClaudeResult>;
   /** Detect whether the OpenCode assets are already installed. */
   onOpenCodeStatus: () => Promise<OpenCodeInstallStatus>;
+  /** (Re)install the Codex assets; resolves to what was written and what needs doing by hand. */
+  onInstallCodex: (gitHook: boolean) => Promise<InstallClaudeResult>;
+  /** Detect whether the Codex assets are already installed. */
+  onCodexStatus: () => Promise<CodexInstallStatus>;
 }
 
 /** The three core pieces every integration shares: an MCP entry, a launcher (hooks or plugin) and slash commands. */
@@ -197,6 +201,8 @@ export function IntegrationsSettings({
   onClaudeStatus,
   onInstallOpenCode,
   onOpenCodeStatus,
+  onInstallCodex,
+  onCodexStatus,
 }: IntegrationsSettingsProps) {
   return (
     <div className="settings-section">
@@ -222,6 +228,19 @@ export function IntegrationsSettings({
           restartHint="Everything installed. Restart any open OpenCode session to pick it up."
           onInstall={onInstallOpenCode}
           onStatus={onOpenCodeStatus}
+        />
+      </div>
+      <div style={{ marginTop: 'var(--sp-6)' }}>
+        <IntegrationCard
+          productName="Codex"
+          cardId="codex"
+          description="Install or reinstall the AGENTS.md section, the MCP server and the hooks so a Codex session starts oriented and works tickets through Lovelace. Reinstalling regenerates the Lovelace-owned files and leaves your own content alone."
+          pieceLabels={{ mcp: 'MCP server', hooks: 'Hooks', commands: 'Skills' }}
+          installLabel="Install Codex assets"
+          reinstallLabel="Reinstall Codex assets"
+          restartHint="Everything installed. In Codex, trust this project and review the Lovelace hooks with /hooks, then restart any open session."
+          onInstall={onInstallCodex}
+          onStatus={onCodexStatus}
         />
       </div>
     </div>

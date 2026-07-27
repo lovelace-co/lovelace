@@ -448,6 +448,8 @@ export function ProjectView({ root }: ProjectViewProps) {
             onClaudeStatus={() => host.claudeStatus(root)}
             onInstallOpenCode={(gitHook) => host.installOpenCode(root, gitHook)}
             onOpenCodeStatus={() => host.openCodeStatus(root)}
+            onInstallCodex={(gitHook) => host.installCodex(root, gitHook)}
+            onCodexStatus={() => host.codexStatus(root)}
             onOpenTicket={setOpenTicket}
             resolveLink={resolveLink}
             onOpenLink={openLink}

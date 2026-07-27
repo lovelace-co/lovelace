@@ -238,6 +238,7 @@ describe('Settings view', () => {
   function renderSettings(
     claudeStatus?: { installed: boolean; mcp?: boolean; hooks?: boolean; commands?: boolean },
     openCodeStatus?: { installed: boolean; mcp?: boolean; hooks?: boolean; commands?: boolean },
+    codexStatus?: { installed: boolean; mcp?: boolean; hooks?: boolean; commands?: boolean },
   ) {
     const status = {
       installed: claudeStatus?.installed ?? false,
@@ -257,6 +258,15 @@ describe('Settings view', () => {
       lovelaceAgentsMd: false,
       gitHook: false,
     };
+    const codexStatusValue = {
+      installed: codexStatus?.installed ?? false,
+      mcp: codexStatus?.mcp ?? codexStatus?.installed ?? false,
+      hooks: codexStatus?.hooks ?? codexStatus?.installed ?? false,
+      commands: codexStatus?.commands ?? codexStatus?.installed ?? false,
+      agentsMd: false,
+      lovelaceAgentsMd: false,
+      gitHook: false,
+    };
     const props = {
       onSaveSchema: vi.fn().mockResolvedValue(undefined),
       onRenameProject: vi.fn().mockResolvedValue(undefined),
@@ -267,6 +277,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue(status),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue(openCodeStatusValue),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue(codexStatusValue),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -479,6 +491,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -656,6 +670,87 @@ describe('Settings view', () => {
     expect(screen.getByText('Add the instructions entry to opencode.json by hand.')).toBeTruthy();
   });
 
+  it('installs the Codex integration', async () => {
+    const props = renderSettings();
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() => expect(screen.getByText('Install Codex assets')).toBeTruthy());
+    fireEvent.click(screen.getByText('Install Codex assets'));
+    await waitFor(() => expect(props.onInstallCodex).toHaveBeenCalledWith(true));
+  });
+
+  it('shows "not installed" for Codex when no assets are present', async () => {
+    renderSettings(undefined, undefined, { installed: false });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('codex-status-summary').textContent).toBe(
+        'Codex assets are not installed in this project.',
+      ),
+    );
+    expect(screen.getByText('Install Codex assets')).toBeTruthy();
+    expect(screen.queryByText('installed')).toBeNull();
+  });
+
+  it('shows "partially installed" with missing pieces for Codex when some core assets are absent', async () => {
+    renderSettings(undefined, undefined, { installed: false, mcp: false, hooks: false, commands: true });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('codex-status-summary').textContent).toBe(
+        'Codex assets are partially installed.',
+      ),
+    );
+    // Scoped to the exact missing list for this status: the Claude Code and
+    // OpenCode cards beside it also render a "Missing:" line, so a bare
+    // /Missing:/ match is ambiguous once all three cards are on screen.
+    expect(screen.getByText('Missing: MCP server, Hooks.')).toBeTruthy();
+    expect(screen.getByText('Install Codex assets')).toBeTruthy();
+  });
+
+  it('shows "installed" and the Reinstall button for Codex when all assets are present', async () => {
+    renderSettings(undefined, undefined, { installed: true });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('codex-status-summary').textContent).toBe(
+        'Codex assets are installed in this project.',
+      ),
+    );
+    expect(screen.getByText('Reinstall Codex assets')).toBeTruthy();
+    // The installed badge only appears on the fully installed card, not the
+    // (still not-installed) Claude Code and OpenCode cards beside it.
+    expect(screen.getAllByText('installed').length).toBe(1);
+  });
+
+  it('renders written and manual results after installing Codex', async () => {
+    const props = renderSettings();
+    props.onInstallCodex.mockResolvedValueOnce({
+      written: ['.codex/config.toml', '.codex/hooks.json'],
+      manual: ['.codex/config.toml already defines [mcp_servers.lovelace]; replace it by hand.'],
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() => expect(screen.getByText('Install Codex assets')).toBeTruthy());
+    fireEvent.click(screen.getByText('Install Codex assets'));
+    await waitFor(() =>
+      expect(screen.getByText('.codex/config.toml, .codex/hooks.json')).toBeTruthy(),
+    );
+    expect(
+      screen.getByText('.codex/config.toml already defines [mcp_servers.lovelace]; replace it by hand.'),
+    ).toBeTruthy();
+  });
+
+  it('shows the trust-and-restart hint, naming /hooks, after a clean Codex install', async () => {
+    const props = renderSettings();
+    props.onInstallCodex.mockResolvedValueOnce({ written: ['.codex/config.toml'], manual: [] });
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await waitFor(() => expect(screen.getByText('Install Codex assets')).toBeTruthy());
+    fireEvent.click(screen.getByText('Install Codex assets'));
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'Everything installed. In Codex, trust this project and review the Lovelace hooks with /hooks, then restart any open session.',
+        ),
+      ).toBeTruthy(),
+    );
+  });
+
   it('reports its dirty state so navigation can be guarded', () => {
     const props = renderSettings();
     fireEvent.click(screen.getByRole('tab', { name: 'Statuses' }));
@@ -689,6 +784,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -730,6 +827,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -777,6 +876,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -817,6 +918,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -840,6 +943,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
@@ -867,6 +972,8 @@ describe('Settings view', () => {
       onClaudeStatus: vi.fn().mockResolvedValue({ installed: false, agentsMd: false, claudeMd: false, mcp: false, hooks: false, commands: false, gitHook: false }),
       onInstallOpenCode: vi.fn().mockResolvedValue({ written: ['opencode.json'], manual: [] }),
       onOpenCodeStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
+      onInstallCodex: vi.fn().mockResolvedValue({ written: ['.codex/config.toml'], manual: [] }),
+      onCodexStatus: vi.fn().mockResolvedValue({ installed: false, mcp: false, hooks: false, commands: false, agentsMd: false, lovelaceAgentsMd: false, gitHook: false }),
       onDirtyChange: vi.fn(),
       onOpenTicket: vi.fn(),
     };
