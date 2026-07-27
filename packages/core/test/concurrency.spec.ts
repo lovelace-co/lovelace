@@ -154,10 +154,13 @@ describe('index integrity under concurrent updateTicket', () => {
     const tallyA = JSON.parse(outA) as { ok: number; errors: Record<string, number> };
     const tallyB = JSON.parse(outB) as { ok: number; errors: Record<string, number> };
 
-    expect(tally.tornIndex).toBe(0);
-    expect(tally.missing).toEqual({});
+    // The worker tallies come first on purpose: a mutation that failed
+    // outright explains a torn or short index, so seeing that error beats
+    // seeing only the symptom it caused.
     expect(tallyA.errors).toEqual({});
     expect(tallyB.errors).toEqual({});
+    expect(tally.tornIndex).toBe(0);
+    expect(tally.missing).toEqual({});
     expect(tallyA.ok).toBeGreaterThan(0);
     expect(tallyB.ok).toBeGreaterThan(0);
   }, 10_000);
@@ -426,7 +429,11 @@ describe('writeFileAtomic', () => {
     expect(readdirSync(dir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
   });
 
-  it('preserves the target file mode across a rewrite', () => {
+  // Windows models only the read-only bit, not POSIX permission bits: a
+  // chmod to 0o600 there leaves stat reporting 0o666, so this asserts a
+  // guarantee the platform does not make. The behaviour under test (mode
+  // carried across a rewrite) is a POSIX one.
+  it.skipIf(process.platform === 'win32')('preserves the target file mode across a rewrite', () => {
     const root = fixture();
     const dir = join(root, 'scratch');
     mkdirSync(dir, { recursive: true });
