@@ -74,13 +74,29 @@ fn emit_to_focused(app: &AppHandle, event: &str) {
     }
 }
 
+/// Builds a `Command` that stays invisible on Windows. The host (and node in
+/// development) is a console-subsystem executable, so a GUI parent spawning it
+/// without `CREATE_NO_WINDOW` gets a fresh console window flashing up on every
+/// call; same flag `cli.rs` already passes for its PowerShell invocations.
+fn quiet_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+    let mut cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 /// Resolves how to run the core host. A bundled sidecar binary sits next to
 /// the app executable in production; LOVELACE_HOST_JS points at the built
 /// host.js during development.
 fn host_command() -> Result<Command, String> {
     if let Ok(js) = std::env::var("LOVELACE_HOST_JS") {
         let node = std::env::var("LOVELACE_NODE").unwrap_or_else(|_| "node".into());
-        let mut cmd = Command::new(node);
+        let mut cmd = quiet_command(node);
         cmd.arg(js);
         return Ok(cmd);
     }
@@ -95,7 +111,7 @@ fn host_command() -> Result<Command, String> {
     ];
     for candidate in candidates {
         if candidate.exists() {
-            return Ok(Command::new(candidate));
+            return Ok(quiet_command(candidate));
         }
     }
     Err("lovelace-host binary not found next to the app, and LOVELACE_HOST_JS is not set".into())
